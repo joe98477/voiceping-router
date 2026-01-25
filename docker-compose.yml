@@ -17,6 +17,9 @@ services:
 
   redis:
     image: redis
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    volumes:
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
     logging:
       driver: "json-file"
       options:
