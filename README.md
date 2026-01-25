@@ -11,7 +11,7 @@ You may want to try first, you could try to connect the SDK to `wss://router-lit
 
 ## Requirements
 In order to run the server, you need to have at least:
-* Ubuntu 18.04
+* Ubuntu 24.04 LTS (or newer)
 * **NodeJS 8.16.0** (this needs to be exact, higher nodejs/npm will probably cause installation and run issue)
 * Redis
 * Docker (optional if you want run in docker)
@@ -64,21 +64,42 @@ Run test with npm
     $ npm test
 
 ### Manual Test
-To run properly, voiceping-router needs to run together with redis (by default on port 6379). So you need to run redis on OS port 6379. Easiest with docker: `docker run -p 6379:6379 -d redis`
+To run properly, voiceping-router needs to run together with redis (by default on port 6379). So you need to run redis on OS port 6379. Easiest with docker (using the repo's Redis config):
+
+    $ docker run -p 6379:6379 \
+      -v $(pwd)/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro \
+      --name voiceping-redis \
+      -d redis \
+      redis-server /usr/local/etc/redis/redis.conf
 
 In order to test whether this router server is running correctly. You need to use it from Android SDK. We also provide a simple web page for you to test: https://voiceping-router-test.netlify.app. Input any company name and user ID. Router URL input will be something like `ws://localhost:3000` or `ws://127.0.0.1:3000` depends on your own IP and port setting.
 
 ## Running in Docker
 
-The easiest way to run voiceping-server using a single command is by using docker-compose. Simply run the command below
+The easiest way to run voiceping-server using a single command is by using Docker Compose. Simply run the command below
 
-    $ docker-compose up -d
+    $ docker compose up -d
+
+The compose file will also start Redis using the repo's configuration file at `redis/redis.conf`, which disables persistence (VoicePing Router uses Redis as temporary storage) and sets an LRU eviction policy.
+
+If you need to customize Redis settings, edit `redis/redis.conf` and restart the compose stack.
 
 Same as above. When you access `http://<your-ip-or-hostname>` from your browser, you should see:
 
 ```
 Welcome to VoicePing Router 1.0.0
 ```
+
+### Ubuntu 24.04 LTS Docker smoke test
+On Ubuntu 24.04 LTS, you can do a quick smoke test of the Docker stack with:
+
+    $ docker compose up -d
+    $ docker compose ps
+    $ curl -s http://localhost:3000
+
+You should see `Welcome to VoicePing Router 1.0.0` in the response. If you need to stop the stack:
+
+    $ docker compose down
 
 ## Self-hosted VoicePing Router
 
