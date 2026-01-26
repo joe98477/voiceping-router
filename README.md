@@ -80,7 +80,7 @@ The easiest way to run voiceping-server using a single command is by using Docke
 
     $ docker compose up -d
 
-The compose file will also start Redis using the repo's configuration file at `redis/redis.conf`, which disables persistence (VoicePing Router uses Redis as temporary storage) and sets an LRU eviction policy.
+The compose file will also start Redis using the repo's configuration file at `redis/redis.conf`, which disables persistence (VoicePing Router uses Redis as temporary storage) and sets an LRU eviction policy. It also boots the control-plane API (port 4000), a Postgres instance for the control plane, and the dispatch web UI (port 8080).
 
 If you need to customize Redis settings, edit `redis/redis.conf` and restart the compose stack.
 
@@ -89,6 +89,8 @@ Same as above. When you access `http://<your-ip-or-hostname>` from your browser,
 ```
 Welcome to VoicePing Router 1.0.0
 ```
+
+For the dispatch console MVP, open `http://localhost:8080` and the control-plane API will answer on `http://localhost:4000`.
 
 ### Ubuntu 24.04 LTS Docker smoke test
 On Ubuntu 24.04 LTS, you can do a quick smoke test of the Docker stack with:

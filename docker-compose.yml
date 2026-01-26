@@ -15,6 +15,37 @@ services:
         max-size: "100m"
     restart: always
 
+  control-plane:
+    build:
+      context: ./control-plane
+    environment:
+      - PORT=4000
+      - DATABASE_URL=postgres://voiceping:voiceping@postgres:5432/voiceping
+    ports:
+      - 4000:4000
+    depends_on:
+      - postgres
+    logging:
+      driver: "json-file"
+      options:
+        max-file: "2"
+        max-size: "100m"
+    restart: always
+
+  web-ui:
+    build:
+      context: ./web-ui
+    ports:
+      - 8080:80
+    depends_on:
+      - control-plane
+    logging:
+      driver: "json-file"
+      options:
+        max-file: "2"
+        max-size: "100m"
+    restart: always
+
   redis:
     image: redis
     command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
@@ -26,3 +57,21 @@ services:
         max-file: "2"
         max-size: "100m"
     restart: always
+
+  postgres:
+    image: postgres:14-alpine
+    environment:
+      - POSTGRES_USER=voiceping
+      - POSTGRES_PASSWORD=voiceping
+      - POSTGRES_DB=voiceping
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    logging:
+      driver: "json-file"
+      options:
+        max-file: "2"
+        max-size: "100m"
+    restart: always
+
+volumes:
+  postgres-data:
