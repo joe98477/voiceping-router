@@ -1,5 +1,9 @@
 # AGENTS.md
 
+## Plan Mode
+- Make the plan extremely concise. Sacrifice grammer for the sake of concision.
+- At the end of each plan, give me a list of unresolved questions to answer, if any.
+
 ## Scope
 This file applies to the entire repository unless a more specific AGENTS.md is added in a subdirectory.
 
