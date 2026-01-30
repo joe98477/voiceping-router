@@ -1,3 +1,10 @@
+const nodeEnv = process.env.NODE_ENV || "production";
+const isProd = nodeEnv === "production";
+
+if (isProd && !process.env.ROUTER_JWT_SECRET && !process.env.SECRET_KEY) {
+  throw new Error("ROUTER_JWT_SECRET or SECRET_KEY must be set in production.");
+}
+
 const config = {
   app: {
     port: process.env.PORT || 3000
@@ -13,7 +20,7 @@ const config = {
   network: {
     name: process.env.NETWORK || "voiceping-lite"
   },
-  nodeEnv: process.env.NODE_ENV || "production",
+  nodeEnv,
   pingInterval: Number(process.env.PING_INTERVAL) || (2 * 60 * 1000),
   redis: {
     cleanGroupsAmount: Number(process.env.REDIS_CLEAN_GROUPS_AMOUNT) || 10000,

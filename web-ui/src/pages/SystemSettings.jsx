@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { apiGet, apiPatch } from "../api.js";
+import { apiGet, apiGetStatus, apiPatch } from "../api.js";
 
 const SystemSettings = ({ onLogout }) => {
   const [form, setForm] = useState({
@@ -13,6 +13,9 @@ const SystemSettings = ({ onLogout }) => {
   const [clearPass, setClearPass] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const [status, setStatus] = useState(null);
+  const [statusError, setStatusError] = useState("");
+  const [statusLoading, setStatusLoading] = useState(false);
 
   useEffect(() => {
     apiGet("/api/admin/settings")
@@ -26,6 +29,23 @@ const SystemSettings = ({ onLogout }) => {
         setSmtpPassSet(!!data.smtpPassSet);
       })
       .catch((err) => setError(err.message));
+  }, []);
+
+  const loadStatus = async () => {
+    setStatusLoading(true);
+    setStatusError("");
+    const result = await apiGetStatus("/api/admin/status");
+    if (result.data) {
+      setStatus(result.data);
+    }
+    if (!result.ok) {
+      setStatusError(result.error || "Unable to load status");
+    }
+    setStatusLoading(false);
+  };
+
+  useEffect(() => {
+    loadStatus();
   }, []);
 
   const updateField = (key, value) => {
@@ -143,6 +163,57 @@ const SystemSettings = ({ onLogout }) => {
               Save settings
             </button>
             {saved ? <div className="pill pill--active">Saved</div> : null}
+          </div>
+        </section>
+        <section className="panel">
+          <div className="panel__header">System status</div>
+          <div className="panel__body">
+            <div className="form__actions">
+              <button className="btn btn--secondary" type="button" onClick={loadStatus}>
+                {statusLoading ? "Refreshing..." : "Refresh status"}
+              </button>
+            </div>
+            {statusError ? <div className="alert">{statusError}</div> : null}
+            {status ? (
+              <div className="status-list status-list--compact">
+                <div className="status-row">
+                  <div className="status-row__label">Database</div>
+                  <div className="status-row__detail">
+                    {status.services?.database?.error || "OK"}
+                  </div>
+                  <div className={status.services?.database?.ok ? "pill pill--ok" : "pill pill--down"}>
+                    {status.services?.database?.ok ? "Up" : "Down"}
+                  </div>
+                </div>
+                <div className="status-row">
+                  <div className="status-row__label">Redis</div>
+                  <div className="status-row__detail">
+                    {status.services?.redis?.error || "OK"}
+                  </div>
+                  <div className={status.services?.redis?.ok ? "pill pill--ok" : "pill pill--down"}>
+                    {status.services?.redis?.ok ? "Up" : "Down"}
+                  </div>
+                </div>
+                <div className="status-row">
+                  <div className="status-row__label">Redis publisher</div>
+                  <div className="status-row__detail">
+                    {status.services?.redisPublisher?.error || "OK"}
+                  </div>
+                  <div className={status.services?.redisPublisher?.ok ? "pill pill--ok" : "pill pill--down"}>
+                    {status.services?.redisPublisher?.ok ? "Up" : "Down"}
+                  </div>
+                </div>
+                <div className="status-row">
+                  <div className="status-row__label">Router</div>
+                  <div className="status-row__detail">
+                    {status.services?.router?.error || `${status.services?.router?.latencyMs || 0}ms`}
+                  </div>
+                  <div className={status.services?.router?.ok ? "pill pill--ok" : "pill pill--down"}>
+                    {status.services?.router?.ok ? "Up" : "Down"}
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </div>
         </section>
       </div>

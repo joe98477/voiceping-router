@@ -49,3 +49,30 @@ export const apiPost = (path, body) =>
   apiFetch(path, { method: "POST", body: JSON.stringify(body || {}) });
 export const apiPatch = (path, body) =>
   apiFetch(path, { method: "PATCH", body: JSON.stringify(body || {}) });
+
+export const apiGetStatus = async (path) => {
+  let response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json"
+      }
+    });
+  } catch (err) {
+    return { ok: false, status: 0, data: null, error: "Unable to reach server" };
+  }
+  const status = response.status;
+  let data = null;
+  try {
+    data = await response.json();
+  } catch (err) {
+    data = null;
+  }
+  return {
+    ok: response.ok,
+    status,
+    data,
+    error: response.ok ? null : (data && data.error) || response.statusText || "Request failed"
+  };
+};

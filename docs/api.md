@@ -6,9 +6,11 @@
 - `GET /api/auth/me`
 - `POST /api/auth/forgot-password` { email }
 - `POST /api/auth/reset-password` { token, password }
+- `GET /api/ready`
 
 ## Admin
 - `POST /api/admin/users` { email, password, displayName?, globalRole? }
+- `GET /api/admin/status`
 
 ## Events / Teams / Channels
 - `POST /api/events` { name, requiresApproval?, limits? }

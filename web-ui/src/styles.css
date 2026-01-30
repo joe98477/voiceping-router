@@ -304,6 +304,14 @@ a {
   background: #f0f0f0;
 }
 
+.pill--ok {
+  background: #d5f1d3;
+}
+
+.pill--down {
+  background: #f7c2b6;
+}
+
 .pill--active {
   background: #d5f1d3;
 }
@@ -314,6 +322,37 @@ a {
 
 .pill--rejected {
   background: #f7c2b6;
+}
+
+.status-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.status-list--compact {
+  margin-top: 8px;
+}
+
+.status-row {
+  display: grid;
+  grid-template-columns: 1fr minmax(120px, 2fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #fffaf2;
+}
+
+.status-row__label {
+  font-weight: 600;
+}
+
+.status-row__detail {
+  color: var(--muted);
+  font-size: 0.85rem;
+  word-break: break-word;
 }
 
 .alert {

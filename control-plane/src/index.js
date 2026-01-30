@@ -6,6 +6,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const nodemailer = require("nodemailer");
 const crypto = require("crypto");
+const net = require("net");
 const { PrismaClient } = require("@prisma/client");
 const { createClient } = require("redis");
 const connectRedis = require("connect-redis");
@@ -16,7 +17,9 @@ const app = express();
 const port = Number(process.env.PORT || 4000);
 const prisma = new PrismaClient();
 
-const ROUTER_JWT_SECRET = process.env.ROUTER_JWT_SECRET || process.env.SECRET_KEY || "voiceping-router-secret";
+const isProd = process.env.NODE_ENV === "production";
+const ROUTER_JWT_SECRET =
+  process.env.ROUTER_JWT_SECRET || process.env.SECRET_KEY || (isProd ? null : "awesomevoiceping");
 const SESSION_SECRET = process.env.SESSION_SECRET || "voiceping-session-secret";
 const LEGACY_JOIN_ENABLED = process.env.LEGACY_JOIN_ENABLED === "true";
 
@@ -24,6 +27,9 @@ const REDIS_HOST = process.env.REDIS_HOST || "127.0.0.1";
 const REDIS_PORT = Number(process.env.REDIS_PORT || 6379);
 const REDIS_PASSWORD = process.env.REDIS_PASSWORD || undefined;
 const REDIS_URL = process.env.REDIS_URL || undefined;
+const ROUTER_HOST = process.env.ROUTER_HOST || "127.0.0.1";
+const ROUTER_PORT = Number(process.env.ROUTER_PORT || 3000);
+const ROUTER_STATUS_TIMEOUT_MS = Number(process.env.ROUTER_STATUS_TIMEOUT_MS || 500);
 
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
@@ -31,7 +37,6 @@ const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
 const SMTP_FROM = process.env.SMTP_FROM || "no-reply@voiceping.local";
 const SETTINGS_ID = 1;
-const isProd = process.env.NODE_ENV === "production";
 const trustProxy = process.env.TRUST_PROXY === "true";
 const sessionCookieSecure =
   process.env.SESSION_COOKIE_SECURE === "true" ||
@@ -56,8 +61,104 @@ const redisPublisher = createClient({
   password: REDIS_PASSWORD
 });
 
-redisClient.connect().catch(() => null);
-redisPublisher.connect().catch(() => null);
+if (isProd && !ROUTER_JWT_SECRET) {
+  throw new Error("ROUTER_JWT_SECRET or SECRET_KEY must be set in production.");
+}
+
+const readiness = {
+  database: { ok: false, error: null },
+  redis: { ok: false, error: null },
+  redisPublisher: { ok: false, error: null }
+};
+
+const setReadyState = (key, ok, error) => {
+  readiness[key].ok = ok;
+  readiness[key].error = error ? String(error.message || error) : null;
+};
+
+const isSystemReady = () =>
+  readiness.database.ok && readiness.redis.ok && readiness.redisPublisher.ok;
+
+const attachRedisEvents = (client, key) => {
+  client.on("ready", () => {
+    setReadyState(key, true, null);
+  });
+  client.on("end", () => {
+    setReadyState(key, false, "Redis connection closed");
+  });
+  client.on("error", (err) => {
+    setReadyState(key, false, err);
+    console.error(`[${key}] Redis error`, err);
+  });
+};
+
+attachRedisEvents(redisClient, "redis");
+attachRedisEvents(redisPublisher, "redisPublisher");
+
+const startRedis = async () => {
+  try {
+    await redisClient.connect();
+  } catch (err) {
+    setReadyState("redis", false, err);
+    console.error("Redis client failed to connect", err);
+  }
+  try {
+    await redisPublisher.connect();
+  } catch (err) {
+    setReadyState("redisPublisher", false, err);
+    console.error("Redis publisher failed to connect", err);
+  }
+};
+
+const startDatabase = async () => {
+  try {
+    await prisma.$connect();
+    setReadyState("database", true, null);
+  } catch (err) {
+    setReadyState("database", false, err);
+    console.error("Database connection failed", err);
+    setTimeout(startDatabase, 5000);
+  }
+};
+
+const checkRouterReachable = () =>
+  new Promise((resolve) => {
+    const started = Date.now();
+    const socket = net.createConnection({ host: ROUTER_HOST, port: ROUTER_PORT });
+    let settled = false;
+    const finish = (ok, error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      socket.destroy();
+      resolve({
+        ok,
+        host: ROUTER_HOST,
+        port: ROUTER_PORT,
+        latencyMs: Date.now() - started,
+        error: error ? String(error.message || error) : null
+      });
+    };
+    socket.setTimeout(ROUTER_STATUS_TIMEOUT_MS);
+    socket.on("connect", () => finish(true, null));
+    socket.on("timeout", () => finish(false, new Error("Timeout")));
+    socket.on("error", (err) => finish(false, err));
+  });
+
+const buildStatusPayload = async () => {
+  const router = await checkRouterReachable();
+  return {
+    ready: isSystemReady(),
+    services: {
+      database: { ok: readiness.database.ok, error: readiness.database.error },
+      redis: { ok: readiness.redis.ok, error: readiness.redis.error },
+      redisPublisher: { ok: readiness.redisPublisher.ok, error: readiness.redisPublisher.error },
+      router
+    },
+    timestamp: new Date().toISOString()
+  };
+};
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
@@ -65,6 +166,25 @@ app.use(cookieParser());
 if (trustProxy) {
   app.set("trust proxy", 1);
 }
+
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", service: "control-plane" });
+});
+
+app.get("/api/ready", async (req, res) => {
+  const payload = await buildStatusPayload();
+  res.status(payload.ready ? 200 : 503).json(payload);
+});
+
+app.use((req, res, next) => {
+  if (req.path === "/health" || req.path === "/api/ready") {
+    return next();
+  }
+  if (!isSystemReady()) {
+    return res.status(503).json({ error: "Service starting", ready: false });
+  }
+  return next();
+});
 
 app.use(
   session({
@@ -324,10 +444,6 @@ const recomputeUserMembership = async (userId, eventId) => {
   await publishMembershipUpdate(eventId, userId, channelIds);
 };
 
-app.get("/health", (req, res) => {
-  res.json({ status: "ok", service: "control-plane" });
-});
-
 app.post("/api/auth/login", async (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password) {
@@ -464,6 +580,11 @@ app.patch("/api/admin/settings", requireAuth, requireAdmin, requireProfileComple
     smtpFrom: settings.smtpFrom || "no-reply@voiceping.local",
     smtpPassSet: !!settings.smtpPassEncrypted
   });
+});
+
+app.get("/api/admin/status", requireAuth, requireAdmin, requireProfileComplete, async (req, res) => {
+  const payload = await buildStatusPayload();
+  res.json(payload);
 });
 
 app.post("/api/auth/forgot-password", async (req, res) => {
@@ -918,7 +1039,23 @@ app.post("/api/router/token", requireAuth, requireProfileComplete, async (req, r
   res.json({ token });
 });
 
-app.listen(port, async () => {
-  await bootstrapAdmin();
-  console.log(`Control plane API listening on port ${port}`);
-});
+const waitForDatabase = async () => {
+  while (!readiness.database.ok) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+};
+
+const startServer = () => {
+  startDatabase();
+  startRedis();
+  app.listen(port, () => {
+    console.log(`Control plane API listening on port ${port}`);
+  });
+  waitForDatabase()
+    .then(bootstrapAdmin)
+    .catch((err) => {
+      console.error("Bootstrap admin failed", err);
+    });
+};
+
+startServer();
