@@ -1,9 +1,10 @@
-FROM node:20-alpine
+FROM node:20-bullseye-slim
 
 WORKDIR /app
 
 COPY package.json ./
 COPY prisma ./prisma
+RUN apt-get update && apt-get install -y openssl
 RUN npm install --production
 RUN npx prisma generate
 
