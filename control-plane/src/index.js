@@ -10,6 +10,7 @@ const { PrismaClient } = require("@prisma/client");
 const { createClient } = require("redis");
 const connectRedis = require("connect-redis");
 const RedisStore = connectRedis.default || connectRedis;
+const commonPasswords = require("./passwords/common.json");
 
 const app = express();
 const port = Number(process.env.PORT || 4000);
@@ -203,7 +204,7 @@ const bootstrapAdmin = async () => {
   }
   const passwordHash = await bcrypt.hash(password, 12);
   await prisma.user.create({
-    data: { email, passwordHash, globalRole: "ADMIN" }
+    data: { email, passwordHash, globalRole: "ADMIN", mustChangePassword: true }
   });
 };
 
@@ -216,6 +217,16 @@ const requireAuth = async (req, res, next) => {
     return res.status(401).json({ error: "Unauthorized" });
   }
   req.user = user;
+  return next();
+};
+
+const requireProfileComplete = async (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  if (req.user.mustChangePassword || !req.user.displayName) {
+    return res.status(412).json({ error: "Profile setup required" });
+  }
   return next();
 };
 
@@ -247,6 +258,20 @@ const buildLimits = (limits) => ({
   ...DEFAULT_LIMITS,
   ...(limits || {})
 });
+
+const validatePasswordStrength = (password) => {
+  if (!password || typeof password !== "string") {
+    return { ok: false, error: "Password required" };
+  }
+  if (password.length < 12) {
+    return { ok: false, error: "Password must be at least 12 characters" };
+  }
+  const normalized = password.trim().toLowerCase();
+  if (commonPasswords.includes(normalized)) {
+    return { ok: false, error: "Password is too common" };
+  }
+  return { ok: true };
+};
 
 const audit = async (actorId, eventId, action, payload) => {
   await prisma.auditLog.create({
@@ -317,7 +342,17 @@ app.post("/api/auth/login", async (req, res) => {
     return res.status(401).json({ error: "Invalid credentials" });
   }
   req.session.userId = user.id;
-  return res.json({ id: user.id, email: user.email, displayName: user.displayName, globalRole: user.globalRole });
+  const updated = await prisma.user.update({
+    where: { id: user.id },
+    data: { lastLoginAt: new Date() }
+  });
+  return res.json({
+    id: updated.id,
+    email: updated.email,
+    displayName: updated.displayName,
+    globalRole: updated.globalRole,
+    mustChangePassword: updated.mustChangePassword
+  });
 });
 
 app.post("/api/auth/logout", requireAuth, (req, res) => {
@@ -327,10 +362,68 @@ app.post("/api/auth/logout", requireAuth, (req, res) => {
 });
 
 app.get("/api/auth/me", requireAuth, (req, res) => {
-  res.json({ id: req.user.id, email: req.user.email, displayName: req.user.displayName, globalRole: req.user.globalRole });
+  res.json({
+    id: req.user.id,
+    email: req.user.email,
+    displayName: req.user.displayName,
+    globalRole: req.user.globalRole,
+    mustChangePassword: req.user.mustChangePassword
+  });
 });
 
-app.get("/api/admin/settings", requireAuth, requireAdmin, async (req, res) => {
+app.post("/api/auth/first-run", requireAuth, async (req, res) => {
+  const { displayName, password } = req.body || {};
+  if (!req.user.mustChangePassword && req.user.displayName) {
+    return res.status(400).json({ error: "Profile already complete" });
+  }
+  if (!displayName || typeof displayName !== "string") {
+    return res.status(400).json({ error: "Display name required" });
+  }
+  const validation = validatePasswordStrength(password);
+  if (!validation.ok) {
+    return res.status(400).json({ error: validation.error });
+  }
+  const passwordHash = await bcrypt.hash(password, 12);
+  const updated = await prisma.user.update({
+    where: { id: req.user.id },
+    data: {
+      displayName: displayName.trim(),
+      passwordHash,
+      mustChangePassword: false,
+      passwordUpdatedAt: new Date()
+    }
+  });
+  res.json({
+    id: updated.id,
+    email: updated.email,
+    displayName: updated.displayName,
+    globalRole: updated.globalRole,
+    mustChangePassword: updated.mustChangePassword
+  });
+});
+
+app.post("/api/auth/change-password", requireAuth, requireProfileComplete, async (req, res) => {
+  const { currentPassword, newPassword } = req.body || {};
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: "Missing password" });
+  }
+  const valid = await bcrypt.compare(currentPassword, req.user.passwordHash);
+  if (!valid) {
+    return res.status(401).json({ error: "Invalid credentials" });
+  }
+  const validation = validatePasswordStrength(newPassword);
+  if (!validation.ok) {
+    return res.status(400).json({ error: validation.error });
+  }
+  const passwordHash = await bcrypt.hash(newPassword, 12);
+  await prisma.user.update({
+    where: { id: req.user.id },
+    data: { passwordHash, passwordUpdatedAt: new Date(), mustChangePassword: false }
+  });
+  res.json({ ok: true });
+});
+
+app.get("/api/admin/settings", requireAuth, requireAdmin, requireProfileComplete, async (req, res) => {
   const settings = await ensureSystemSettings();
   res.json({
     smtpHost: settings.smtpHost || "",
@@ -341,7 +434,7 @@ app.get("/api/admin/settings", requireAuth, requireAdmin, async (req, res) => {
   });
 });
 
-app.patch("/api/admin/settings", requireAuth, requireAdmin, async (req, res) => {
+app.patch("/api/admin/settings", requireAuth, requireAdmin, requireProfileComplete, async (req, res) => {
   await ensureSystemSettings();
   const { smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom } = req.body || {};
   const data = {};
@@ -397,20 +490,56 @@ app.post("/api/auth/reset-password", async (req, res) => {
   if (!token || !password) {
     return res.status(400).json({ error: "Missing data" });
   }
+  const validation = validatePasswordStrength(password);
+  if (!validation.ok) {
+    return res.status(400).json({ error: validation.error });
+  }
   const reset = await prisma.passwordReset.findUnique({ where: { token } });
   if (!reset || reset.usedAt || reset.expiresAt < new Date()) {
     return res.status(400).json({ error: "Invalid token" });
   }
   const passwordHash = await bcrypt.hash(password, 12);
-  await prisma.user.update({ where: { id: reset.userId }, data: { passwordHash } });
+  await prisma.user.update({
+    where: { id: reset.userId },
+    data: { passwordHash, mustChangePassword: false, passwordUpdatedAt: new Date() }
+  });
   await prisma.passwordReset.update({ where: { id: reset.id }, data: { usedAt: new Date() } });
   return res.json({ ok: true });
 });
 
-app.post("/api/admin/users", requireAuth, requireAdmin, async (req, res) => {
-  const { email, password, displayName, globalRole } = req.body || {};
+app.get("/api/admin/users", requireAuth, requireAdmin, requireProfileComplete, async (req, res) => {
+  const query = req.query.q;
+  const where = query
+    ? {
+        OR: [
+          { email: { contains: String(query), mode: "insensitive" } },
+          { displayName: { contains: String(query), mode: "insensitive" } }
+        ]
+      }
+    : undefined;
+  const users = await prisma.user.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      email: true,
+      displayName: true,
+      globalRole: true,
+      mustChangePassword: true,
+      lastLoginAt: true
+    }
+  });
+  res.json(users);
+});
+
+app.post("/api/admin/users", requireAuth, requireAdmin, requireProfileComplete, async (req, res) => {
+  const { email, password, displayName, globalRole, mustChangePassword } = req.body || {};
   if (!email || !password) {
     return res.status(400).json({ error: "Missing email/password" });
+  }
+  const validation = validatePasswordStrength(password);
+  if (!validation.ok) {
+    return res.status(400).json({ error: validation.error });
   }
   const passwordHash = await bcrypt.hash(password, 12);
   const user = await prisma.user.create({
@@ -418,14 +547,33 @@ app.post("/api/admin/users", requireAuth, requireAdmin, async (req, res) => {
       email,
       passwordHash,
       displayName: displayName || null,
-      globalRole: globalRole === "ADMIN" ? "ADMIN" : "NONE"
+      globalRole: globalRole === "ADMIN" ? "ADMIN" : "NONE",
+      mustChangePassword: mustChangePassword !== false
     }
   });
   await audit(req.user.id, null, "user_created", { userId: user.id });
   res.json({ id: user.id, email: user.email, globalRole: user.globalRole });
 });
 
-app.post("/api/events", requireAuth, requireAdmin, async (req, res) => {
+app.patch("/api/admin/users/:userId", requireAuth, requireAdmin, requireProfileComplete, async (req, res) => {
+  const { userId } = req.params;
+  const { displayName, globalRole, mustChangePassword } = req.body || {};
+  const data = {};
+  if (displayName !== undefined) {
+    data.displayName = displayName ? String(displayName).trim() : null;
+  }
+  if (globalRole !== undefined) {
+    data.globalRole = globalRole === "ADMIN" ? "ADMIN" : "NONE";
+  }
+  if (mustChangePassword !== undefined) {
+    data.mustChangePassword = !!mustChangePassword;
+  }
+  const user = await prisma.user.update({ where: { id: userId }, data });
+  await audit(req.user.id, null, "user_updated", { userId: user.id });
+  res.json({ id: user.id, email: user.email, displayName: user.displayName, globalRole: user.globalRole });
+});
+
+app.post("/api/events", requireAuth, requireAdmin, requireProfileComplete, async (req, res) => {
   const { name, requiresApproval, limits } = req.body || {};
   if (!name) {
     return res.status(400).json({ error: "Missing name" });
@@ -442,7 +590,7 @@ app.post("/api/events", requireAuth, requireAdmin, async (req, res) => {
   res.json(event);
 });
 
-app.patch("/api/events/:eventId", requireAuth, requireAdmin, async (req, res) => {
+app.patch("/api/events/:eventId", requireAuth, requireAdmin, requireProfileComplete, async (req, res) => {
   const { eventId } = req.params;
   const { name, requiresApproval, limits } = req.body || {};
   const event = await prisma.event.update({
@@ -457,7 +605,7 @@ app.patch("/api/events/:eventId", requireAuth, requireAdmin, async (req, res) =>
   res.json(event);
 });
 
-app.get("/api/events", requireAuth, async (req, res) => {
+app.get("/api/events", requireAuth, requireProfileComplete, async (req, res) => {
   if (req.user.globalRole === "ADMIN") {
     const events = await prisma.event.findMany({ orderBy: { createdAt: "desc" } });
     return res.json(events);
@@ -469,7 +617,7 @@ app.get("/api/events", requireAuth, async (req, res) => {
   return res.json(memberships.map((m) => m.event));
 });
 
-app.post("/api/events/:eventId/teams", requireAuth, requireDispatchOrAdmin, async (req, res) => {
+app.post("/api/events/:eventId/teams", requireAuth, requireProfileComplete, requireDispatchOrAdmin, async (req, res) => {
   const { eventId } = req.params;
   const { name } = req.body || {};
   if (!name) {
@@ -485,7 +633,7 @@ app.post("/api/events/:eventId/teams", requireAuth, requireDispatchOrAdmin, asyn
   res.json(team);
 });
 
-app.post("/api/teams/:teamId/channels", requireAuth, requireDispatchOrAdmin, async (req, res) => {
+app.post("/api/teams/:teamId/channels", requireAuth, requireProfileComplete, requireDispatchOrAdmin, async (req, res) => {
   const { teamId } = req.params;
   const { name } = req.body || {};
   if (!name) {
@@ -508,7 +656,7 @@ app.post("/api/teams/:teamId/channels", requireAuth, requireDispatchOrAdmin, asy
   res.json(channel);
 });
 
-app.post("/api/events/:eventId/channels", requireAuth, requireDispatchOrAdmin, async (req, res) => {
+app.post("/api/events/:eventId/channels", requireAuth, requireProfileComplete, requireDispatchOrAdmin, async (req, res) => {
   const { eventId } = req.params;
   const { name } = req.body || {};
   if (!name) {
@@ -526,7 +674,7 @@ app.post("/api/events/:eventId/channels", requireAuth, requireDispatchOrAdmin, a
   res.json(channel);
 });
 
-app.post("/api/events/:eventId/users", requireAuth, requireDispatchOrAdmin, async (req, res) => {
+app.post("/api/events/:eventId/users", requireAuth, requireProfileComplete, requireDispatchOrAdmin, async (req, res) => {
   const { eventId } = req.params;
   const { userId, role, teamIds, channelIds } = req.body || {};
   if (!userId || !role) {
@@ -583,7 +731,7 @@ app.post("/api/events/:eventId/users", requireAuth, requireDispatchOrAdmin, asyn
   res.json({ ok: true, status });
 });
 
-app.patch("/api/events/:eventId/users/:userId/approve", requireAuth, requireDispatchOrAdmin, async (req, res) => {
+app.patch("/api/events/:eventId/users/:userId/approve", requireAuth, requireProfileComplete, requireDispatchOrAdmin, async (req, res) => {
   const { eventId, userId } = req.params;
   await prisma.eventMembership.update({
     where: { userId_eventId: { userId, eventId } },
@@ -602,7 +750,7 @@ app.patch("/api/events/:eventId/users/:userId/approve", requireAuth, requireDisp
   res.json({ ok: true });
 });
 
-app.patch("/api/events/:eventId/users/:userId/channels", requireAuth, requireDispatchOrAdmin, async (req, res) => {
+app.patch("/api/events/:eventId/users/:userId/channels", requireAuth, requireProfileComplete, requireDispatchOrAdmin, async (req, res) => {
   const { eventId, userId } = req.params;
   const { channelIds } = req.body || {};
   if (!Array.isArray(channelIds)) {
@@ -627,7 +775,7 @@ app.patch("/api/events/:eventId/users/:userId/channels", requireAuth, requireDis
   res.json({ ok: true });
 });
 
-app.patch("/api/events/:eventId/users/:userId/teams", requireAuth, requireDispatchOrAdmin, async (req, res) => {
+app.patch("/api/events/:eventId/users/:userId/teams", requireAuth, requireProfileComplete, requireDispatchOrAdmin, async (req, res) => {
   const { eventId, userId } = req.params;
   const { teamIds } = req.body || {};
   if (!Array.isArray(teamIds)) {
@@ -649,7 +797,7 @@ app.patch("/api/events/:eventId/users/:userId/teams", requireAuth, requireDispat
   res.json({ ok: true });
 });
 
-app.post("/api/events/:eventId/invites", requireAuth, requireDispatchOrAdmin, async (req, res) => {
+app.post("/api/events/:eventId/invites", requireAuth, requireProfileComplete, requireDispatchOrAdmin, async (req, res) => {
   const { eventId } = req.params;
   const { teamId, channelIds, expiresInMinutes, maxUses, email } = req.body || {};
   const token = crypto.randomBytes(16).toString("hex");
@@ -673,7 +821,7 @@ app.post("/api/events/:eventId/invites", requireAuth, requireDispatchOrAdmin, as
   res.json({ token: invite.token, expiresAt: invite.expiresAt });
 });
 
-app.post("/api/invites/:token/join", requireAuth, async (req, res) => {
+app.post("/api/invites/:token/join", requireAuth, requireProfileComplete, async (req, res) => {
   const { token } = req.params;
   const invite = await prisma.invite.findUnique({ where: { token } });
   if (!invite || invite.expiresAt < new Date()) {
@@ -716,7 +864,7 @@ app.post("/api/invites/:token/join", requireAuth, async (req, res) => {
   res.json({ ok: true, status });
 });
 
-app.get("/api/events/:eventId/overview", requireAuth, requireDispatchOrAdmin, async (req, res) => {
+app.get("/api/events/:eventId/overview", requireAuth, requireProfileComplete, requireDispatchOrAdmin, async (req, res) => {
   const { eventId } = req.params;
   const event = await prisma.event.findUnique({ where: { id: eventId } });
   const teams = await prisma.team.findMany({ where: { eventId }, orderBy: { sortOrder: "asc" } });
@@ -741,7 +889,7 @@ app.get("/api/events/:eventId/overview", requireAuth, requireDispatchOrAdmin, as
   });
 });
 
-app.post("/api/router/token", requireAuth, async (req, res) => {
+app.post("/api/router/token", requireAuth, requireProfileComplete, async (req, res) => {
   const { eventId } = req.body || {};
   if (!eventId) {
     return res.status(400).json({ error: "Missing eventId" });

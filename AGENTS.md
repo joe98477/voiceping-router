@@ -16,6 +16,12 @@ This repository contains the VoicePing Router Node.js websocket server and its D
 - Update `README.md` only when user-facing setup steps change.
 - Use `npm run build` and `npm test` when practical before committing.
 
+## UI reliability
+- Clear stale error messages after successful reloads.
+- When data is `null` and an error exists, render an error state instead of a perpetual loading screen.
+- Clear errors on retry actions before re-fetching.
+- Routes that depend on profile setup should redirect away from `/first-run` once setup is complete.
+
 ## Code style
 - Follow existing TypeScript/TSLint conventions in `tslint.json` and `tsconfig.json`.
 - Avoid try/catch around imports.

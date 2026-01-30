@@ -3,14 +3,29 @@ const API_BASE =
   rawBase !== undefined ? rawBase : import.meta.env.MODE === "development" ? "http://localhost:4000" : "";
 
 export const apiFetch = async (path, options = {}) => {
-  const response = await fetch(`${API_BASE}${path}`, {
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {})
-    },
-    ...options
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  let response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers || {})
+      },
+      signal: controller.signal,
+      ...options
+    });
+  } catch (err) {
+    if (err && err.name === "AbortError") {
+      const timeoutErr = new Error("Request timed out");
+      timeoutErr.status = 408;
+      throw timeoutErr;
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
   if (!response.ok) {
     let error = "Request failed";
     try {
