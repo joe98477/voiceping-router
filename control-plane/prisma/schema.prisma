@@ -39,6 +39,8 @@ model User {
   events       EventMembership[]
   teams        TeamMembership[]
   channels     ChannelMembership[]
+  createdEvents Event[]           @relation("EventCreatedBy")
+  passwordResets PasswordReset[]  @relation("PasswordResetUser")
 }
 
 model Event {
@@ -49,7 +51,7 @@ model Event {
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
   createdById      String?
-  createdBy        User?              @relation(fields: [createdById], references: [id])
+  createdBy        User?              @relation("EventCreatedBy", fields: [createdById], references: [id])
   teams            Team[]
   channels         Channel[]
   memberships      EventMembership[]
@@ -155,7 +157,7 @@ model PasswordReset {
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation("PasswordResetUser", fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model SystemSettings {
