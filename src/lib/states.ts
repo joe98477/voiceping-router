@@ -82,6 +82,32 @@ export default class States {
     });
   }
 
+  public static removeUserFromGroup(
+    userId: numberOrString,
+    groupId: numberOrString,
+    callback?: (err: Error, succeed: boolean) => void
+  ) {
+    userId = userId + "";
+    groupId = groupId + "";
+    States.getUsersInsideGroup(groupId, function(err, userIds) {
+      if (userIds && userIds instanceof Array) {
+        userIds = userIds.filter((id) => id !== userId);
+      } else {
+        userIds = [];
+      }
+      States.setUsersInsideGroup(groupId, userIds);
+      States.getGroupsOfUser(userId, function(error, groupIds) {
+        if (groupIds && groupIds instanceof Array) {
+          groupIds = groupIds.filter((id) => id !== groupId);
+        } else {
+          groupIds = [];
+        }
+        States.setGroupsOfUser(userId, groupIds);
+        if (callback) { return callback(null, true); }
+      });
+    });
+  }
+
   public static setUsersInsideGroup(
     groupId: number|string, userIds: Array<number|string>,
     callback?: (err, succeed) => void) {

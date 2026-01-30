@@ -1,0 +1,159 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum GlobalRole {
+  ADMIN
+  NONE
+}
+
+enum EventRole {
+  DISPATCH
+  USER
+}
+
+enum MembershipStatus {
+  PENDING
+  ACTIVE
+  REJECTED
+}
+
+enum ChannelType {
+  TEAM
+  EVENT_ADMIN
+}
+
+model User {
+  id           String             @id @default(uuid())
+  email        String             @unique
+  passwordHash String
+  displayName  String?
+  globalRole   GlobalRole         @default(NONE)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  events       EventMembership[]
+  teams        TeamMembership[]
+  channels     ChannelMembership[]
+}
+
+model Event {
+  id               String             @id @default(uuid())
+  name             String
+  requiresApproval Boolean            @default(false)
+  limits           Json
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  createdById      String?
+  createdBy        User?              @relation(fields: [createdById], references: [id])
+  teams            Team[]
+  channels         Channel[]
+  memberships      EventMembership[]
+  invites          Invite[]
+}
+
+model Team {
+  id        String             @id @default(uuid())
+  eventId   String
+  name      String
+  sortOrder Int                @default(0)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  event     Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  channels  Channel[]
+  members   TeamMembership[]
+}
+
+model Channel {
+  id        String             @id @default(uuid())
+  eventId   String
+  teamId    String?
+  name      String
+  type      ChannelType
+  sortOrder Int                @default(0)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  event     Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  team      Team?              @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  members   ChannelMembership[]
+}
+
+model EventMembership {
+  id          String           @id @default(uuid())
+  userId      String
+  eventId     String
+  role        EventRole
+  status      MembershipStatus @default(PENDING)
+  approvedBy  String?
+  assignedBy  String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event       Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventId])
+}
+
+model TeamMembership {
+  id        String           @id @default(uuid())
+  userId    String
+  teamId    String
+  status    MembershipStatus @default(PENDING)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team      Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, teamId])
+}
+
+model ChannelMembership {
+  id        String           @id @default(uuid())
+  userId    String
+  channelId String
+  status    MembershipStatus @default(PENDING)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel   Channel          @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, channelId])
+}
+
+model Invite {
+  id              String   @id @default(uuid())
+  token           String   @unique
+  eventId         String
+  teamId          String?
+  defaultChannels Json
+  expiresAt       DateTime
+  maxUses         Int      @default(0)
+  usedCount       Int      @default(0)
+  createdById     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  event           Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  actorId   String?
+  eventId   String?
+  action    String
+  payload   Json
+  createdAt DateTime @default(now())
+}
+
+model PasswordReset {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

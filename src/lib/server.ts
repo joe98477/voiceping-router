@@ -4,6 +4,7 @@ import * as dbug from "debug";
 import * as _ from "lodash";
 import * as Q from "q";
 import * as WebSocket from "ws";
+import * as jwt from "jwt-simple";
 
 import ChannelType = require("./channeltype");
 import Client, { IClients } from "./client";
@@ -68,6 +69,24 @@ class Server implements IServer {
     }
 
     this.wss.on("connection", this.handleWssConnection.bind(this));
+
+    Redis.subscribeMembershipUpdates((payload) => {
+      if (!payload || payload.action !== "set_user_channels") { return; }
+      const userId = payload.userId;
+      const channelIds = payload.channelIds || [];
+      States.getGroupsOfUser(userId, (err, currentGroupIds) => {
+        const current = currentGroupIds || [];
+        const next = channelIds.map((id) => id + "");
+        current.forEach((groupId) => {
+          if (!next.includes(groupId)) {
+            States.removeUserFromGroup(userId, groupId);
+          }
+        });
+        next.forEach((groupId) => {
+          States.addUserToGroup(userId, groupId);
+        });
+      });
+    });
   }
 
   // IServer Implementation
@@ -89,8 +108,13 @@ class Server implements IServer {
 
   public sendMessageToGroup(this: Server, msg: IMessage) {
     logger.info(`sendMessageToGroup from: ${msg.fromId} to: ${msg.toId} messageType: ${msg.messageType}`);
-    packer.pack(msg, (err, packed) => {
-      this.sendDataFromUserToGroup(packed, msg.fromId, msg.toId);
+    Redis.getUsersInsideGroup(msg.toId, (err, userIds) => {
+      if (err || !userIds || !(userIds instanceof Array)) {
+        return States.getUsersInsideGroup(msg.toId, (err1, stateUserIds) => {
+          this.broadcastToGroupWithCheck(msg, stateUserIds || []);
+        });
+      }
+      return this.broadcastToGroupWithCheck(msg, userIds);
     });
   }
 
@@ -150,7 +174,19 @@ class Server implements IServer {
 
   private getUserFromToken(token) {
     const deferred = Q.defer();
-    deferred.resolve({ uid: token });
+    try {
+      const user = jwt.decode(token, config.auth.routerJwtSecret);
+      if (user && user.exp && Date.now() / 1000 > user.exp) {
+        throw new Error("Token expired");
+      }
+      deferred.resolve(user);
+    } catch (err) {
+      if (config.auth.legacyJoinEnabled) {
+        deferred.resolve({ uid: token, legacy: true });
+      } else {
+        deferred.reject(err);
+      }
+    }
     return deferred.promise;
   }
 
@@ -185,10 +221,22 @@ class Server implements IServer {
       .then((user) => {
         logger.info(`handleWssConnection after getUserFromToken. user: ${JSON.stringify(user)}`);
         const deviceId = connection.deviceId;
-        const userId = user.uid;
+        const userId = user.userId || user.uid;
         const key = connection.key;
 
         this.registerClient(ws, userId, key, deviceId, user);
+        if (user.channelIds && user.channelIds instanceof Array) {
+          user.channelIds.forEach((channelId) => {
+            States.addUserToGroup(userId, channelId);
+          });
+        }
+        Redis.getGroupsOfUser(userId, (err, groupIds) => {
+          if (groupIds && groupIds instanceof Array) {
+            groupIds.forEach((groupId) => {
+              States.addUserToGroup(userId, groupId);
+            });
+          }
+        });
       }).catch((err) => {
         logger.error(`handleWssConnection getUserFromToken ERR ${err}`);
       });
@@ -221,24 +269,39 @@ class Server implements IServer {
    * @private
    *
    */
-  private sendDataFromUserToGroup(
+  private sendDataToRecipients(
     this: Server,
-    data: Buffer, userId: numberOrString,
-    groupId: numberOrString, echo: boolean = false
+    data: Buffer,
+    senderId: numberOrString,
+    recipientIds: Array<numberOrString>,
+    echo: boolean = false
   ) {
-    States.getUsersInsideGroup(groupId, (err, userIds) => {
-      if (err) {
-        logger.error(`States.getUsersInsideGroup id ${userId} groupId ${groupId} ERR ${err}`);
-        return;
-      }
-      if (!userIds || !(userIds instanceof Array) || userIds.length <= 0) {
-        logger.info(`States.getUsersInsideGroup EMPTY id ${userId} groupId ${groupId}`);
-        return;
-      }
-      for (const recipientId of userIds) {
-        if (!echo && recipientId.toString() === userId.toString()) { continue; }
-        this.sendDataToUser(data, recipientId);
-      }
+    if (!recipientIds || !(recipientIds instanceof Array) || recipientIds.length <= 0) {
+      logger.info(`sendDataToRecipients EMPTY sender ${senderId}`);
+      return;
+    }
+    for (const recipientId of recipientIds) {
+      if (!echo && recipientId.toString() === senderId.toString()) { continue; }
+      this.sendDataToUser(data, recipientId);
+    }
+  }
+
+  private broadcastToGroupWithCheck(this: Server, msg: IMessage, userIds: Array<numberOrString>) {
+    const senderInGroup = userIds
+      ? userIds.map((u) => u.toString()).includes(msg.fromId.toString())
+      : false;
+    if (!senderInGroup) {
+      this.sendMessageToUser({
+        channelType: ChannelType.GROUP,
+        fromId: msg.fromId,
+        messageType: MessageType.UNAUTHORIZED_GROUP,
+        payload: "Unauthorized Group",
+        toId: msg.toId
+      });
+      return;
+    }
+    packer.pack(msg, (err, packed) => {
+      this.sendDataToRecipients(packed, msg.fromId, userIds);
     });
   }
 

@@ -1,66 +1,12 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>VoicePing Dispatch Console</title>
-    <link rel="stylesheet" href="styles.css" />
+    <title>VoicePing Dispatch</title>
   </head>
-  <body data-api-base="http://localhost:4000">
-    <div class="app">
-      <header class="topbar">
-        <div class="brand">
-          <span class="brand__title">VoicePing Dispatch</span>
-          <span class="brand__sub">Control Plane</span>
-        </div>
-        <div class="status">
-          <div class="status__item">
-            <span class="status__label">Active incidents</span>
-            <span class="status__value" id="summary-incidents">0</span>
-          </div>
-          <div class="status__item">
-            <span class="status__label">Online units</span>
-            <span class="status__value" id="summary-online">0</span>
-          </div>
-          <div class="status__item">
-            <span class="status__label">Channels</span>
-            <span class="status__value" id="summary-channels">0</span>
-          </div>
-        </div>
-        <div class="clock" id="clock">--:--:--</div>
-      </header>
-
-      <main class="layout">
-        <section class="panel panel--left">
-          <div class="panel__header">Talkgroups</div>
-          <div class="panel__body" id="channels"></div>
-        </section>
-
-        <section class="panel panel--center">
-          <div class="panel__header">Live Activity</div>
-          <div class="panel__body" id="activity"></div>
-        </section>
-
-        <section class="panel panel--right">
-          <div class="panel__header">Roster</div>
-          <div class="panel__body" id="roster"></div>
-        </section>
-      </main>
-
-      <footer class="ptt">
-        <div class="ptt__channel">
-          <span class="ptt__label">Active channel</span>
-          <span class="ptt__value" id="active-channel">Ops North</span>
-        </div>
-        <button class="ptt__button" type="button">Push To Talk</button>
-        <div class="ptt__controls">
-          <div class="ptt__control">Monitor: <strong>4</strong></div>
-          <div class="ptt__control">Emergency: <span class="badge badge--alert">Standby</span></div>
-          <div class="ptt__control">Supervisor override: <span class="badge">Ready</span></div>
-        </div>
-      </footer>
-    </div>
-
-    <script src="app.js"></script>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

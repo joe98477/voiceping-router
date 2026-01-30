@@ -9,8 +9,16 @@ const client = redis.createClient(config.redis.port, config.redis.host, {
   auth_pass: config.redis.password
 });
 
+const subscriber = redis.createClient(config.redis.port, config.redis.host, {
+  auth_pass: config.redis.password
+});
+
 client.on("error", function(err) {
   logger.error("Redis: client.on.error: ", err);
+});
+
+subscriber.on("error", function(err) {
+  logger.error("Redis: subscriber.on.error: ", err);
 });
 
 const CLEAN_INTERVAL = config.redis.cleanInterval;
@@ -364,6 +372,22 @@ class Redis {
     client.del(Keys.forUsersInsideGroup(groupId), (err, reply) => {
       if (err) { return callback(err, false); }
       return callback(null, true);
+    });
+  }
+
+  public static subscribeMembershipUpdates(
+    callback: (payload: { eventId: string, userId: string, channelIds: string[], action: string }) => void
+  ) {
+    subscriber.subscribe("vp:membership_updates");
+    subscriber.on("message", function(channel, message) {
+      if (channel !== "vp:membership_updates") { return; }
+      try {
+        const payload = JSON.parse(message);
+        return callback(payload);
+      } catch (err) {
+        logger.error(`Redis: subscribeMembershipUpdates parse error ${err}`);
+        return;
+      }
     });
   }
 

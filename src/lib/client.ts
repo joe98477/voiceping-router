@@ -383,10 +383,8 @@ export default class Client extends EventEmitter {
         this.handleStopMessage(msg);
         break;
       case MessageType.USER_ADD:
-        this.addToGroup(msg.toId);
         break;
       case MessageType.USER_REMOVE:
-        this.removeFromGroup(msg.toId);
         break;
       case MessageType.DELIVERED:
         break;

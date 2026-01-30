@@ -26,12 +26,20 @@ Server related:
 * `PORT` (int): The port number the server will listen to. Default: `3000`.
 * `USE_AUTHENTICATION` (boolean): The configuration whether you want to use JWT authentication or not. Default: `false`
 * `SECRET_KEY` (string): JWT secret key. This is required when `USE_AUTHENTICATION` is set true.
+* `ROUTER_JWT_SECRET` (string): JWT secret used by the control-plane to sign router tokens.
+* `LEGACY_JOIN_ENABLED` (boolean): Enable legacy company/user-id join (default false).
 
 Database related:
 
 * `REDIS_HOST` (string): Redis host. Default: `localhost`.
 * `REDIS_PORT` (string): Redis host. Default: `6379`.
 * `REDIS_PASSWORD` (string): Redis host. Default: `localhost`.
+
+Control-plane / web UI related:
+
+* `SESSION_SECRET` (string): Session cookie secret for the control-plane API.
+* `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`: SMTP settings (Office 365 compatible) for invites and password resets.
+* `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`: Optional bootstrap admin credentials on first start.
 
 ## Run the server ##
 
@@ -92,6 +100,14 @@ Welcome to VoicePing Router 1.0.0
 
 For the dispatch console MVP, open `http://localhost:8080` and the control-plane API will answer on `http://localhost:4000`.
 
+### Control-plane migrations
+The control-plane uses Prisma with Postgres. On startup in Docker it will run `prisma migrate deploy`. For local dev:
+
+    $ cd control-plane
+    $ npm install
+    $ npm run prisma:migrate
+    $ npm start
+
 ### Ubuntu 24.04 LTS Docker smoke test
 On Ubuntu 24.04 LTS, you can do a quick smoke test of the Docker stack with:
 
@@ -145,3 +161,6 @@ connection.on("open", () => {
 ```
 
 On VoicePing SDK demo apk, the token is simply concatenation of company name and user id. Something like: `${companyName}_${userId}`
+
+## Centralized event/team/user flow
+The control-plane now supports events, teams, channels, and role-based access. Legacy company/user-id join can be disabled with `LEGACY_JOIN_ENABLED=false`. Users should authenticate via the control-plane and request a router JWT (`/api/router/token`) for event access.

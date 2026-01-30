@@ -25,6 +25,10 @@ const config = {
     port: process.env.REDIS_PORT || 6379
   },
   secretKey: process.env.SECRET_KEY || "awesomevoiceping",
+  auth: {
+    routerJwtSecret: process.env.ROUTER_JWT_SECRET || process.env.SECRET_KEY || "awesomevoiceping",
+    legacyJoinEnabled: process.env.LEGACY_JOIN_ENABLED === "true"
+  },
   web: {
     serverUrl: process.env.WEB_SERVER_URL || "",
     socketSecret: process.env.WEB_SOCKET_SECRET || ""

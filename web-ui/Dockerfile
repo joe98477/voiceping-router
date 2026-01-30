@@ -1,6 +1,12 @@
-FROM nginx:alpine
+FROM node:20-alpine as build
+WORKDIR /app
+COPY package.json package.json
+COPY vite.config.js vite.config.js
+COPY index.html index.html
+COPY src src
+RUN npm install
+RUN npm run build
 
+FROM nginx:alpine
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY index.html /usr/share/nginx/html/index.html
-COPY styles.css /usr/share/nginx/html/styles.css
-COPY app.js /usr/share/nginx/html/app.js
+COPY --from=build /app/dist /usr/share/nginx/html
