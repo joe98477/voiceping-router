@@ -22,6 +22,8 @@ docker compose --env-file .env.test up -d --build
 - Control-plane API: http://localhost:4000
 - Dispatch UI: http://localhost:8080
 
+Note: The dispatch UI proxies `/api/*` to the control-plane service inside the Docker network, so the browser always calls the same origin. Leave `VITE_API_BASE` empty to use the proxy.
+
 4) Log in with the bootstrap admin credentials from `.env.test`:
 
 - Email: `BOOTSTRAP_ADMIN_EMAIL`
@@ -43,8 +45,10 @@ cp .env.example .env
 2) Update these values in `.env`:
 
 - `ROUTER_JWT_SECRET`, `SESSION_SECRET`, `SECRET_KEY`
-- `WEB_BASE_URL` and `VITE_API_BASE` (HTTPS URLs)
+- `WEB_BASE_URL` (HTTPS URL)
 - `SESSION_COOKIE_SECURE=true` and `TRUST_PROXY=true` when running behind TLS
+
+If you are serving the UI and API from the same domain, keep `VITE_API_BASE` empty and the UI will call `/api/*` via the built-in proxy. If you want the UI to call a different API host, set `VITE_API_BASE` to the full HTTPS URL.
 
 3) Start the stack:
 

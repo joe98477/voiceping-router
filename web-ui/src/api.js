@@ -1,4 +1,6 @@
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:4000";
+const rawBase = import.meta.env.VITE_API_BASE;
+const API_BASE =
+  rawBase !== undefined ? rawBase : import.meta.env.MODE === "development" ? "http://localhost:4000" : "";
 
 export const apiFetch = async (path, options = {}) => {
   const response = await fetch(`${API_BASE}${path}`, {
