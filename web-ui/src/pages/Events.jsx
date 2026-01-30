@@ -20,9 +20,16 @@ const Events = ({ user, onLogout }) => {
           <h2>Welcome, {user.displayName || user.email}</h2>
           <p>Select an event to manage or join.</p>
         </div>
-        <button className="btn" onClick={onLogout}>
-          Log out
-        </button>
+        <div className="topbar__actions">
+          {user.globalRole === "ADMIN" ? (
+            <Link className="btn btn--secondary" to="/admin/settings">
+              System Settings
+            </Link>
+          ) : null}
+          <button className="btn" onClick={onLogout}>
+            Log out
+          </button>
+        </div>
       </header>
       {error ? <div className="alert">{error}</div> : null}
       <div className="grid grid--events">

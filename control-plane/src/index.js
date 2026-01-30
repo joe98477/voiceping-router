@@ -29,6 +29,12 @@ const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
 const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
 const SMTP_FROM = process.env.SMTP_FROM || "no-reply@voiceping.local";
+const SETTINGS_ID = 1;
+const isProd = process.env.NODE_ENV === "production";
+const trustProxy = process.env.TRUST_PROXY === "true";
+const sessionCookieSecure =
+  process.env.SESSION_COOKIE_SECURE === "true" ||
+  (isProd && process.env.SESSION_COOKIE_SECURE !== "false");
 
 const DEFAULT_LIMITS = {
   maxUsers: 1000,
@@ -55,6 +61,9 @@ redisPublisher.connect().catch(() => null);
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
+if (trustProxy) {
+  app.set("trust proxy", 1);
+}
 
 app.use(
   session({
@@ -62,24 +71,124 @@ app.use(
     secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
-    cookie: { httpOnly: true, sameSite: "lax" }
+    cookie: { httpOnly: true, sameSite: "lax", secure: sessionCookieSecure }
   })
 );
 
-const transporter = SMTP_HOST
-  ? nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: SMTP_PORT,
-      secure: SMTP_PORT === 465,
-      auth: SMTP_USER ? { user: SMTP_USER, pass: SMTP_PASS } : undefined
-    })
-  : null;
+const SETTINGS_KEY = crypto.createHash("sha256").update(SESSION_SECRET).digest();
+
+const normalizeEmpty = (value) => {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (typeof value === "string" && value.trim() === "") {
+    return null;
+  }
+  return value;
+};
+
+const encryptSecret = (plain) => {
+  if (!plain) {
+    return null;
+  }
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", SETTINGS_KEY, iv);
+  const encrypted = Buffer.concat([cipher.update(String(plain), "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `${iv.toString("base64")}:${tag.toString("base64")}:${encrypted.toString("base64")}`;
+};
+
+const decryptSecret = (payload) => {
+  if (!payload) {
+    return null;
+  }
+  try {
+    const [ivB64, tagB64, dataB64] = payload.split(":");
+    if (!ivB64 || !tagB64 || !dataB64) {
+      return null;
+    }
+    const iv = Buffer.from(ivB64, "base64");
+    const tag = Buffer.from(tagB64, "base64");
+    const data = Buffer.from(dataB64, "base64");
+    const decipher = crypto.createDecipheriv("aes-256-gcm", SETTINGS_KEY, iv);
+    decipher.setAuthTag(tag);
+    const decrypted = Buffer.concat([decipher.update(data), decipher.final()]);
+    return decrypted.toString("utf8");
+  } catch (err) {
+    return null;
+  }
+};
+
+const buildTransporter = (config) => {
+  if (!config || !config.host) {
+    return null;
+  }
+  try {
+    return nodemailer.createTransport({
+      host: config.host,
+      port: config.port,
+      secure: config.port === 465,
+      auth: config.user ? { user: config.user, pass: config.pass || undefined } : undefined
+    });
+  } catch (err) {
+    return null;
+  }
+};
+
+const ensureSystemSettings = async () => {
+  const existing = await prisma.systemSettings.findUnique({ where: { id: SETTINGS_ID } });
+  if (existing) {
+    return existing;
+  }
+  return prisma.systemSettings.create({
+    data: {
+      id: SETTINGS_ID,
+      smtpHost: normalizeEmpty(SMTP_HOST),
+      smtpPort: Number(SMTP_PORT || 587),
+      smtpUser: normalizeEmpty(SMTP_USER),
+      smtpPassEncrypted: encryptSecret(normalizeEmpty(SMTP_PASS)),
+      smtpFrom: normalizeEmpty(SMTP_FROM || "no-reply@voiceping.local")
+    }
+  });
+};
+
+const resolveSmtpConfig = async () => {
+  const settings = await ensureSystemSettings();
+  return {
+    host: normalizeEmpty(settings.smtpHost),
+    port: Number(settings.smtpPort || 587),
+    user: normalizeEmpty(settings.smtpUser),
+    pass: decryptSecret(settings.smtpPassEncrypted),
+    from: normalizeEmpty(settings.smtpFrom) || "no-reply@voiceping.local"
+  };
+};
+
+let smtpTransporter = null;
+let smtpConfigCache = null;
+
+const getSmtpTransporter = async () => {
+  const config = await resolveSmtpConfig();
+  const current = smtpConfigCache;
+  const changed =
+    !current ||
+    current.host !== config.host ||
+    current.port !== config.port ||
+    current.user !== config.user ||
+    current.pass !== config.pass ||
+    current.from !== config.from;
+  if (changed) {
+    smtpTransporter = buildTransporter(config);
+    smtpConfigCache = config;
+  }
+  return { transporter: smtpTransporter, config };
+};
 
 const sendEmail = async (to, subject, text) => {
+  const { transporter, config } = await getSmtpTransporter();
   if (!transporter) {
     return { skipped: true };
   }
-  return transporter.sendMail({ from: SMTP_FROM, to, subject, text });
+  return transporter.sendMail({ from: config.from, to, subject, text });
 };
 
 const bootstrapAdmin = async () => {
@@ -219,6 +328,49 @@ app.post("/api/auth/logout", requireAuth, (req, res) => {
 
 app.get("/api/auth/me", requireAuth, (req, res) => {
   res.json({ id: req.user.id, email: req.user.email, displayName: req.user.displayName, globalRole: req.user.globalRole });
+});
+
+app.get("/api/admin/settings", requireAuth, requireAdmin, async (req, res) => {
+  const settings = await ensureSystemSettings();
+  res.json({
+    smtpHost: settings.smtpHost || "",
+    smtpPort: settings.smtpPort || 587,
+    smtpUser: settings.smtpUser || "",
+    smtpFrom: settings.smtpFrom || "no-reply@voiceping.local",
+    smtpPassSet: !!settings.smtpPassEncrypted
+  });
+});
+
+app.patch("/api/admin/settings", requireAuth, requireAdmin, async (req, res) => {
+  await ensureSystemSettings();
+  const { smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom } = req.body || {};
+  const data = {};
+  if (smtpHost !== undefined) {
+    data.smtpHost = normalizeEmpty(smtpHost);
+  }
+  if (smtpPort !== undefined) {
+    const port = Number(smtpPort);
+    data.smtpPort = Number.isNaN(port) ? null : port;
+  }
+  if (smtpUser !== undefined) {
+    data.smtpUser = normalizeEmpty(smtpUser);
+  }
+  if (smtpFrom !== undefined) {
+    data.smtpFrom = normalizeEmpty(smtpFrom);
+  }
+  if (smtpPass !== undefined) {
+    data.smtpPassEncrypted = smtpPass === "" ? null : encryptSecret(smtpPass);
+  }
+  const settings = await prisma.systemSettings.update({ where: { id: SETTINGS_ID }, data });
+  smtpConfigCache = null;
+  smtpTransporter = null;
+  res.json({
+    smtpHost: settings.smtpHost || "",
+    smtpPort: settings.smtpPort || 587,
+    smtpUser: settings.smtpUser || "",
+    smtpFrom: settings.smtpFrom || "no-reply@voiceping.local",
+    smtpPassSet: !!settings.smtpPassEncrypted
+  });
 });
 
 app.post("/api/auth/forgot-password", async (req, res) => {

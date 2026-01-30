@@ -124,6 +124,19 @@ a {
   color: var(--muted);
 }
 
+.form__help {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.form__checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
 .form--grid {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }

@@ -157,3 +157,14 @@ model PasswordReset {
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
+
+model SystemSettings {
+  id               Int      @id
+  smtpHost         String?
+  smtpPort         Int?
+  smtpUser         String?
+  smtpPassEncrypted String?
+  smtpFrom         String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}

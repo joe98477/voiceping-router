@@ -41,6 +41,8 @@ Control-plane / web UI related:
 * `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`: SMTP settings (Office 365 compatible) for invites and password resets.
 * `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`: Optional bootstrap admin credentials on first start.
 
+SMTP can also be managed in the dispatch web UI under **System Settings**. Env values are used as the initial defaults.
+
 ## Run the server ##
 
 ### Production
@@ -86,7 +88,15 @@ In order to test whether this router server is running correctly. You need to us
 
 The easiest way to run voiceping-server using a single command is by using Docker Compose. Simply run the command below
 
-    $ docker compose up -d
+    $ cp .env.example .env
+    $ docker compose up -d --build
+
+For a local test stack with safe defaults:
+
+    $ cp .env.test.example .env.test
+    $ docker compose --env-file .env.test up -d --build
+
+See `docs/deployment-compose.md` for a complete walkthrough.
 
 The compose file will also start Redis using the repo's configuration file at `redis/redis.conf`, which disables persistence (VoicePing Router uses Redis as temporary storage) and sets an LRU eviction policy. It also boots the control-plane API (port 4000), a Postgres instance for the control plane, and the dispatch web UI (port 8080).
 

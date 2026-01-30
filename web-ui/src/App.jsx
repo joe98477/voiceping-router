@@ -5,6 +5,7 @@ import Login from "./pages/Login.jsx";
 import Events from "./pages/Events.jsx";
 import Dispatch from "./pages/Dispatch.jsx";
 import Admin from "./pages/Admin.jsx";
+import SystemSettings from "./pages/SystemSettings.jsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
 
 const App = () => {
@@ -52,6 +53,16 @@ const App = () => {
       <Route
         path="/event/:eventId/admin"
         element={user ? <Admin user={user} onLogout={handleLogout} /> : <Navigate to="/login" replace />}
+      />
+      <Route
+        path="/admin/settings"
+        element={
+          user && user.globalRole === "ADMIN" ? (
+            <SystemSettings onLogout={handleLogout} />
+          ) : (
+            <Navigate to="/events" replace />
+          )
+        }
       />
       <Route path="*" element={<Navigate to={user ? "/events" : "/login"} replace />} />
     </Routes>

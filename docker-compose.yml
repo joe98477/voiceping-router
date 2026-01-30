@@ -4,10 +4,17 @@ services:
 
   vp-router:
     image: "smartwalkie/voiceping-router"
+    env_file:
+      - ${ENV_FILE:-.env}
     environment:
       - REDIS_HOST=redis
+      - ROUTER_JWT_SECRET=${ROUTER_JWT_SECRET}
+      - SECRET_KEY=${SECRET_KEY}
+      - LEGACY_JOIN_ENABLED=${LEGACY_JOIN_ENABLED}
     ports:
       - 3000:3000
+    depends_on:
+      - redis
     logging:
       driver: "json-file"
       options:
@@ -18,13 +25,26 @@ services:
   control-plane:
     build:
       context: ./control-plane
+    env_file:
+      - ${ENV_FILE:-.env}
     environment:
       - PORT=4000
-      - DATABASE_URL=postgres://voiceping:voiceping@postgres:5432/voiceping
+      - DATABASE_URL=${DATABASE_URL}
       - REDIS_HOST=redis
-      - ROUTER_JWT_SECRET=change-me
-      - SESSION_SECRET=change-me
-      - WEB_BASE_URL=http://localhost:8080
+      - ROUTER_JWT_SECRET=${ROUTER_JWT_SECRET}
+      - SESSION_SECRET=${SESSION_SECRET}
+      - WEB_BASE_URL=${WEB_BASE_URL}
+      - LEGACY_JOIN_ENABLED=${LEGACY_JOIN_ENABLED}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - SMTP_FROM=${SMTP_FROM}
+      - BOOTSTRAP_ADMIN_EMAIL=${BOOTSTRAP_ADMIN_EMAIL}
+      - BOOTSTRAP_ADMIN_PASSWORD=${BOOTSTRAP_ADMIN_PASSWORD}
+      - NODE_ENV=${NODE_ENV}
+      - SESSION_COOKIE_SECURE=${SESSION_COOKIE_SECURE}
+      - TRUST_PROXY=${TRUST_PROXY}
     ports:
       - 4000:4000
     depends_on:
@@ -40,6 +60,8 @@ services:
   web-ui:
     build:
       context: ./web-ui
+      args:
+        - VITE_API_BASE=${VITE_API_BASE}
     ports:
       - 8080:80
     depends_on:
@@ -66,9 +88,9 @@ services:
   postgres:
     image: postgres:14-alpine
     environment:
-      - POSTGRES_USER=voiceping
-      - POSTGRES_PASSWORD=voiceping
-      - POSTGRES_DB=voiceping
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     logging:

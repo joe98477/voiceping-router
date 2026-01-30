@@ -1,5 +1,7 @@
 FROM node:20-alpine as build
 WORKDIR /app
+ARG VITE_API_BASE
+ENV VITE_API_BASE=$VITE_API_BASE
 COPY package.json package.json
 COPY vite.config.js vite.config.js
 COPY index.html index.html
