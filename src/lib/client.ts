@@ -254,6 +254,7 @@ export default class Client extends EventEmitter {
         States.removeCurrentMessageOfUser(msg.fromId);
         if (msg.channelType === ChannelType.GROUP) {
           States.removeCurrentMessageOfGroup(msg.toId);
+          Redis.removeCurrentMessageOfGroup(msg.toId);
         }
         debug(`id ${this.id} Done removing current message from states`);
         States.getBusyStateOfGroup(msg.toId, (err1, busy) => {
@@ -405,6 +406,7 @@ export default class Client extends EventEmitter {
   private handleGroupAudioMessage(this: Client, msg: IMessage) {
     logger.info(`handleGroupAudioMessage id ${msg.fromId} to ${msg.toId} messageType ${msg.messageType}`);
     States.updateAudioTimeOfGroup(msg.toId);
+    Redis.updateAudioTimeOfGroup(msg.toId, Date.now());
     Recorder.resume(msg, (err, messageId, duration) => {
       if (err) { debug(`id: ${this.id} recorder.resume: err: ${err} messageId: ${messageId}` +
                        ` duration: ${duration}`); }
@@ -478,7 +480,17 @@ export default class Client extends EventEmitter {
         }
       });
     }).then((busy: boolean) => {
-      if (!busy) { States.setCurrentMessageOfGroup(msg.toId, msg); }
+      if (!busy) {
+        States.setCurrentMessageOfGroup(msg.toId, msg);
+        Redis.setCurrentMessageOfGroup(msg.toId, {
+          audioTime: Date.now(),
+          channelType: msg.channelType,
+          fromId: msg.fromId,
+          messageType: msg.messageType,
+          startTime: Date.now(),
+          toId: msg.toId
+        });
+      }
 
       let payload: string;
       let messageType: number;

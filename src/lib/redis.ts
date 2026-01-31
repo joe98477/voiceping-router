@@ -350,6 +350,50 @@ class Redis {
     });
   }
 
+  public static setCurrentMessageOfGroup(
+    groupId: numberOrString,
+    message: {
+      audioTime?: number;
+      channelType?: number;
+      fromId?: numberOrString;
+      messageType?: number;
+      startTime?: number;
+      toId?: numberOrString;
+    },
+    callback?: (err: Error, succeed: boolean) => void
+  ) {
+    const payload = {
+      audioTime: message.audioTime ? String(message.audioTime) : "",
+      channelType: message.channelType !== undefined ? String(message.channelType) : "",
+      fromId: message.fromId ? String(message.fromId) : "",
+      messageType: message.messageType !== undefined ? String(message.messageType) : "",
+      startTime: message.startTime ? String(message.startTime) : "",
+      toId: message.toId !== undefined ? String(message.toId) : ""
+    };
+    client.hmset(Keys.forCurrentMessageOfGroup(groupId), payload, function(err) {
+      if (callback) { return callback(err, !err); }
+    });
+  }
+
+  public static updateAudioTimeOfGroup(
+    groupId: numberOrString,
+    audioTime: number,
+    callback?: (err: Error, succeed: boolean) => void
+  ) {
+    client.hset(Keys.forCurrentMessageOfGroup(groupId), "audioTime", String(audioTime), function(err) {
+      if (callback) { return callback(err, !err); }
+    });
+  }
+
+  public static removeCurrentMessageOfGroup(
+    groupId: numberOrString,
+    callback?: (err: Error, succeed: boolean) => void
+  ) {
+    client.del(Keys.forCurrentMessageOfGroup(groupId), function(err) {
+      if (callback) { return callback(err, !err); }
+    });
+  }
+
   public static setBusyStateOfGroup(
     groupId: numberOrString, busyWithUserId: numberOrString,
     callback: (err: Error, busyWithUserId: numberOrString) => void) {
