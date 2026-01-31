@@ -312,9 +312,65 @@ a {
   display: grid;
 }
 
-.roster-item {
-  grid-template-columns: 1fr auto auto;
+.card-controls {
+  display: flex;
+  gap: 8px;
   align-items: center;
+  margin-top: 4px;
+}
+
+.card-control {
+  border: 1px solid var(--border);
+  background: white;
+  color: var(--ink);
+  border-radius: 10px;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.card-control svg {
+  width: 16px;
+  height: 16px;
+}
+
+.card-control--active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.card-control--transmit.card-control--active {
+  background: #e24b4b;
+  border-color: #e24b4b;
+}
+
+.card-control:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.roster-item {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.roster-item__actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.team-card__header,
+.channel-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .pill {
@@ -326,6 +382,8 @@ a {
   align-items: center;
   justify-content: center;
   background: #f0f0f0;
+  border: 1px solid transparent;
+  color: var(--ink);
 }
 
 .pill--ok {
@@ -346,6 +404,58 @@ a {
 
 .pill--rejected {
   background: #f7c2b6;
+}
+
+.pill--status-active {
+  background: #1f8c3a;
+  border-color: #176f2d;
+  color: #fff;
+}
+
+.pill--status-standby {
+  background: #ffe7b4;
+  border-color: #e2b35f;
+  color: #4a2d00;
+}
+
+.pill--status-offline {
+  background: #f6d7d7;
+  border-color: #d99a9a;
+  color: #5f2424;
+}
+
+.status-card {
+  border-width: 2px;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.status-card--active {
+  border-color: #1f8c3a;
+  background: #edf9f0;
+}
+
+.status-card--standby {
+  border-color: #e2b35f;
+  background: #fff6df;
+}
+
+.status-card--offline {
+  border-color: #d99a9a;
+  background: #fff0f0;
+}
+
+.status-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  margin: 0 0 18px;
+}
+
+.status-legend__text {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-right: 4px;
 }
 
 .status-list {
