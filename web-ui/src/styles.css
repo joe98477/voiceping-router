@@ -283,6 +283,46 @@ a {
   background: #fffaf2;
 }
 
+.card-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.card-control {
+  border: 1px solid var(--border);
+  background: white;
+  color: var(--ink);
+  border-radius: 10px;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.card-control svg {
+  width: 16px;
+  height: 16px;
+}
+
+.card-control--active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.card-control--transmit.card-control--active {
+  background: #e24b4b;
+  border-color: #e24b4b;
+}
+
+.card-control:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .roster-item {
   grid-template-columns: 1fr auto;
   align-items: center;
