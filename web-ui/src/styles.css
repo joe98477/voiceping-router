@@ -284,8 +284,24 @@ a {
 }
 
 .roster-item {
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: 1fr auto;
   align-items: center;
+}
+
+.roster-item__actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.team-card__header,
+.channel-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .roster-item__name {
@@ -302,6 +318,8 @@ a {
   border-radius: 999px;
   font-size: 0.75rem;
   background: #f0f0f0;
+  border: 1px solid transparent;
+  color: var(--ink);
 }
 
 .pill--ok {
@@ -322,6 +340,58 @@ a {
 
 .pill--rejected {
   background: #f7c2b6;
+}
+
+.pill--status-active {
+  background: #1f8c3a;
+  border-color: #176f2d;
+  color: #fff;
+}
+
+.pill--status-standby {
+  background: #ffe7b4;
+  border-color: #e2b35f;
+  color: #4a2d00;
+}
+
+.pill--status-offline {
+  background: #f6d7d7;
+  border-color: #d99a9a;
+  color: #5f2424;
+}
+
+.status-card {
+  border-width: 2px;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.status-card--active {
+  border-color: #1f8c3a;
+  background: #edf9f0;
+}
+
+.status-card--standby {
+  border-color: #e2b35f;
+  background: #fff6df;
+}
+
+.status-card--offline {
+  border-color: #d99a9a;
+  background: #fff0f0;
+}
+
+.status-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  margin: 0 0 18px;
+}
+
+.status-legend__text {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-right: 4px;
 }
 
 .status-list {
