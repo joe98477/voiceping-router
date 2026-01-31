@@ -95,7 +95,16 @@ const App = () => {
 
   return (
     <Routes>
-      <Route path="/login" element={<Login onLogin={refreshUser} />} />
+      <Route
+        path="/login"
+        element={
+          user ? (
+            <Navigate to={needsSetup ? "/first-run" : "/events"} replace />
+          ) : (
+            <Login onLogin={refreshUser} />
+          )
+        }
+      />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route
         path="/first-run"
