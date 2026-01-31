@@ -11,6 +11,19 @@
   --accent-2: #1e91d6;
   --shadow: rgba(13, 16, 20, 0.1);
   --border: rgba(17, 20, 24, 0.12);
+  --radius-pill: 999px;
+  --radius-info-card: 14px;
+  --info-card-padding: 12px;
+  --info-card-gap: 8px;
+  --info-card-bg: #fffaf2;
+  --info-card-meta-size: 0.8rem;
+  --pill-font-size: 0.75rem;
+  --pill-padding-x: 12px;
+  --pill-padding-y: 4px;
+  --pill-height: 24px;
+  --icon-btn-size: 40px;
+  --icon-btn-icon-size: 20px;
+  --stack-gap: 12px;
 }
 
 * {
@@ -209,16 +222,16 @@ a {
   background: white;
   color: var(--ink);
   border-radius: 12px;
-  width: 40px;
-  height: 40px;
+  width: var(--icon-btn-size);
+  height: var(--icon-btn-size);
   display: grid;
   place-items: center;
   cursor: pointer;
 }
 
 .icon-btn svg {
-  width: 20px;
-  height: 20px;
+  width: var(--icon-btn-icon-size);
+  height: var(--icon-btn-icon-size);
 }
 
 .icon-btn--small {
@@ -280,18 +293,183 @@ a {
 
 .panel__body {
   display: grid;
+  gap: var(--stack-gap);
+}
+
+.info-card {
+  padding: var(--info-card-padding);
+  border-radius: var(--radius-info-card);
+  border: 1px solid var(--border);
+  display: grid;
+  gap: var(--info-card-gap);
+  background: var(--info-card-bg);
+}
+
+.info-card__title {
+  font-weight: 600;
+}
+
+.info-card__meta {
+  font-size: var(--info-card-meta-size);
+  color: var(--muted);
+  display: flex;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .roster-item,
 .team-card,
 .channel-card {
-  padding: 12px;
+  display: grid;
+}
+
+.card-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.card-control {
+  border: 1px solid var(--border);
+  background: white;
+  color: var(--ink);
+  border-radius: 10px;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.card-control svg {
+  width: 16px;
+  height: 16px;
+}
+
+.card-control--active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.card-control--transmit.card-control--active {
+  background: #e24b4b;
+  border-color: #e24b4b;
+}
+
+.card-control:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.dispatch-card {
+  position: relative;
+}
+
+.dispatch-card__info {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+.dispatch-card__info-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: white;
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 0.75rem;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.dispatch-card__popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 220px;
+  max-width: 260px;
+  background: var(--surface);
   border-radius: 14px;
   border: 1px solid var(--border);
+  box-shadow: 0 16px 30px var(--shadow);
+  padding: 12px;
+  z-index: 10;
+  display: grid;
+  gap: 8px;
+  font-size: 0.85rem;
+}
+
+.dispatch-card__popover-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.dispatch-card__popover-list {
   display: grid;
   gap: 6px;
-  background: #fffaf2;
+  margin: 0;
+}
+
+.dispatch-card__popover-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 8px;
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+.dispatch-card__popover-row dt {
+  color: var(--muted);
+  margin: 0;
+}
+
+.dispatch-card__popover-row dd {
+  margin: 0;
+  text-align: right;
+  word-break: break-word;
+}
+
+.channel-card--with-icon {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 12px;
+}
+
+.channel-card__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+}
+
+.channel-card__icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.channel-card--active {
+  border-color: rgba(34, 160, 107, 0.4);
+  box-shadow: 0 10px 20px rgba(34, 160, 107, 0.12);
+}
+
+.channel-card__icon--active {
+  background: rgba(34, 160, 107, 0.16);
+  color: #15985d;
+  border-color: rgba(34, 160, 107, 0.4);
+}
+
+.channel-card__content {
+  display: grid;
+  gap: 6px;
 }
 
 .channel-card__header {
@@ -318,24 +496,37 @@ a {
 }
 
 .roster-item {
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: 1fr auto;
   align-items: center;
 }
 
-.roster-item__name {
-  font-weight: 600;
+.roster-item__actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
-.roster-item__meta {
-  font-size: 0.8rem;
-  color: var(--muted);
+.team-card__header,
+.channel-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .pill {
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 0.75rem;
+  padding: var(--pill-padding-y) var(--pill-padding-x);
+  border-radius: var(--radius-pill);
+  font-size: var(--pill-font-size);
+  min-height: var(--pill-height);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: #f0f0f0;
+  border: 1px solid transparent;
+  color: var(--ink);
 }
 
 .pill--ok {
@@ -358,10 +549,62 @@ a {
   background: #f7c2b6;
 }
 
+.pill--status-active {
+  background: #1f8c3a;
+  border-color: #176f2d;
+  color: #fff;
+}
+
+.pill--status-standby {
+  background: #ffe7b4;
+  border-color: #e2b35f;
+  color: #4a2d00;
+}
+
+.pill--status-offline {
+  background: #f6d7d7;
+  border-color: #d99a9a;
+  color: #5f2424;
+}
+
+.status-card {
+  border-width: 2px;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.status-card--active {
+  border-color: #1f8c3a;
+  background: #edf9f0;
+}
+
+.status-card--standby {
+  border-color: #e2b35f;
+  background: #fff6df;
+}
+
+.status-card--offline {
+  border-color: #d99a9a;
+  background: #fff0f0;
+}
+
+.status-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  margin: 0 0 18px;
+}
+
+.status-legend__text {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-right: 4px;
+}
+
 .status-list {
   display: grid;
-  gap: 10px;
-  margin-top: 12px;
+  gap: var(--stack-gap);
+  margin-top: var(--stack-gap);
 }
 
 .status-list--compact {
@@ -453,8 +696,8 @@ a {
 
 .list {
   display: grid;
-  gap: 10px;
-  margin-top: 12px;
+  gap: var(--stack-gap);
+  margin-top: var(--stack-gap);
 }
 
 .list__item {

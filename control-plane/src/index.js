@@ -30,6 +30,7 @@ const REDIS_URL = process.env.REDIS_URL || undefined;
 const ROUTER_HOST = process.env.ROUTER_HOST || "127.0.0.1";
 const ROUTER_PORT = Number(process.env.ROUTER_PORT || 3000);
 const ROUTER_STATUS_TIMEOUT_MS = Number(process.env.ROUTER_STATUS_TIMEOUT_MS || 500);
+const MAXIMUM_IDLE_DURATION = Number(process.env.MAXIMUM_IDLE_DURATION || 3000);
 
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
@@ -48,6 +49,35 @@ const DEFAULT_LIMITS = {
   maxChannels: 200,
   maxChannelsPerTeam: 50,
   maxDispatch: 20
+};
+
+const ACTIVE_TRAFFIC_WINDOW_MS = 60 * 1000;
+
+const parseMessageMeta = (messageId) => {
+  if (!messageId || typeof messageId !== "string") {
+    return null;
+  }
+  const parts = messageId.split("_");
+  if (parts.length < 5) {
+    return null;
+  }
+  const fromId = parts[3];
+  const timestampRaw = parts[4].split(".")[0];
+  const timestamp = Number(timestampRaw);
+  if (!fromId || Number.isNaN(timestamp)) {
+    return null;
+  }
+  return { fromId, timestamp };
+};
+
+const deriveStatus = (hasTraffic, hasConnection) => {
+  if (hasTraffic) {
+    return "ACTIVE";
+  }
+  if (hasConnection) {
+    return "STANDBY";
+  }
+  return "OFFLINE";
 };
 
 const redisClient = createClient({
@@ -995,16 +1025,100 @@ app.get("/api/events/:eventId/overview", requireAuth, requireProfileComplete, re
     select: { channelId: true }
   });
   const listenerChannelIds = listenerMemberships.map((entry) => entry.channelId);
+  const teamMemberCounts = await prisma.teamMembership.groupBy({
+    by: ["teamId"],
+    _count: { teamId: true },
+    where: { team: { eventId }, status: "ACTIVE" }
+  });
+  const channelMemberCounts = await prisma.channelMembership.groupBy({
+    by: ["channelId"],
+    _count: { channelId: true },
+    where: { channel: { eventId }, status: "ACTIVE" }
+  });
   const memberships = await prisma.eventMembership.findMany({
     where: { eventId },
     include: { user: true }
   });
+  const teamMemberships = await prisma.teamMembership.findMany({
+    where: { team: { eventId }, status: "ACTIVE" },
+    select: { teamId: true, userId: true }
+  });
+  const channelMemberships = await prisma.channelMembership.findMany({
+    where: { channel: { eventId }, status: "ACTIVE" },
+    select: { channelId: true, userId: true }
+  });
   const pending = memberships.filter((m) => m.status === "PENDING");
+  const now = Date.now();
+  const channelIds = channels.map((channel) => channel.id);
+  const latestMessages = await Promise.all(
+    channelIds.map((channelId) =>
+      redisClient
+        .lRange(`._g_${channelId}`, 0, 0)
+        .catch(() => [])
+    )
+  );
+  const channelLastActivity = new Map();
+  const userLastActivity = new Map();
+  latestMessages.forEach((messages, index) => {
+    const channelId = channelIds[index];
+    const messageId = Array.isArray(messages) ? messages[0] : null;
+    const meta = parseMessageMeta(messageId);
+    if (meta) {
+      channelLastActivity.set(channelId, meta.timestamp);
+      const previous = userLastActivity.get(meta.fromId);
+      if (!previous || meta.timestamp > previous) {
+        userLastActivity.set(meta.fromId, meta.timestamp);
+      }
+    }
+  });
+  const activeTeamMembers = teamMemberships.reduce((acc, entry) => {
+    if (!acc.has(entry.teamId)) {
+      acc.set(entry.teamId, new Set());
+    }
+    acc.get(entry.teamId).add(entry.userId);
+    return acc;
+  }, new Map());
+  const activeChannelMembers = channelMemberships.reduce((acc, entry) => {
+    if (!acc.has(entry.channelId)) {
+      acc.set(entry.channelId, new Set());
+    }
+    acc.get(entry.channelId).add(entry.userId);
+    return acc;
+  }, new Map());
+  const userStatuses = memberships.reduce((acc, membership) => {
+    const isActiveMember = membership.status === "ACTIVE";
+    const lastActiveAt = userLastActivity.get(membership.user.id);
+    const hasTraffic = isActiveMember && lastActiveAt && now - lastActiveAt <= ACTIVE_TRAFFIC_WINDOW_MS;
+    acc[membership.user.id] = deriveStatus(hasTraffic, isActiveMember);
+    return acc;
+  }, {});
+  const channelStatuses = channels.reduce((acc, channel) => {
+    const activeCount = activeChannelMembers.get(channel.id)?.size || 0;
+    const lastActiveAt = channelLastActivity.get(channel.id);
+    const hasTraffic = lastActiveAt && now - lastActiveAt <= ACTIVE_TRAFFIC_WINDOW_MS;
+    acc[channel.id] = deriveStatus(hasTraffic, activeCount > 0);
+    return acc;
+  }, {});
+  const teamStatuses = teams.reduce((acc, team) => {
+    const activeCount = activeTeamMembers.get(team.id)?.size || 0;
+    const teamChannels = channels.filter((channel) => channel.teamId === team.id);
+    const hasTraffic = teamChannels.some((channel) => channelStatuses[channel.id] === "ACTIVE");
+    acc[team.id] = deriveStatus(hasTraffic, activeCount > 0);
+    return acc;
+  }, {});
   res.json({
     event,
     teams,
     channels,
     listenerChannelIds,
+    teamMemberCounts: teamMemberCounts.reduce((acc, entry) => {
+      acc[entry.teamId] = entry._count.teamId;
+      return acc;
+    }, {}),
+    channelMemberCounts: channelMemberCounts.reduce((acc, entry) => {
+      acc[entry.channelId] = entry._count.channelId;
+      return acc;
+    }, {}),
     roster: memberships.map((m) => ({
       id: m.user.id,
       email: m.user.email,
@@ -1012,8 +1126,43 @@ app.get("/api/events/:eventId/overview", requireAuth, requireProfileComplete, re
       role: m.role,
       status: m.status
     })),
-    pendingCount: pending.length
+    pendingCount: pending.length,
+    statuses: {
+      users: userStatuses,
+      teams: teamStatuses,
+      channels: channelStatuses
+    }
   });
+});
+
+app.get("/api/events/:eventId/traffic", requireAuth, requireProfileComplete, requireDispatchOrAdmin, async (req, res) => {
+  const { eventId } = req.params;
+  const channels = await prisma.channel.findMany({
+    where: { eventId },
+    select: { id: true },
+    orderBy: { sortOrder: "asc" }
+  });
+  const now = Date.now();
+  const traffic = await Promise.all(
+    channels.map(async (channel) => {
+      const key = `g:${channel.id}:m`;
+      let data = {};
+      try {
+        data = await redisClient.hGetAll(key);
+      } catch (err) {
+        data = {};
+      }
+      const audioTime = data.audioTime ? Number(data.audioTime) : null;
+      const active = !!audioTime && now - audioTime < MAXIMUM_IDLE_DURATION;
+      return {
+        channelId: channel.id,
+        active,
+        audioTime,
+        fromId: data.fromId || null
+      };
+    })
+  );
+  res.json({ channels: traffic, evaluatedAt: now });
 });
 
 app.post("/api/router/token", requireAuth, requireProfileComplete, async (req, res) => {
