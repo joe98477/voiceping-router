@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from "react";
 import { apiPost } from "../api.js";
 
-const FirstRun = ({ onComplete }) => {
+const FirstRun = ({ onComplete, user }) => {
+  const [email, setEmail] = useState(() => user?.email || "");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -28,6 +29,10 @@ const FirstRun = ({ onComplete }) => {
       setError("Display name is required.");
       return;
     }
+    if (!email.trim()) {
+      setError("Email is required.");
+      return;
+    }
     if (password.length < 12) {
       setError("Password must be at least 12 characters.");
       return;
@@ -38,7 +43,7 @@ const FirstRun = ({ onComplete }) => {
     }
     setSaving(true);
     try {
-      await apiPost("/api/auth/first-run", { displayName: displayName.trim(), password });
+      await apiPost("/api/auth/first-run", { displayName: displayName.trim(), password, email: email.trim() });
       await onComplete();
     } catch (err) {
       setError(err.message);
@@ -52,9 +57,13 @@ const FirstRun = ({ onComplete }) => {
       <div className="card card--auth">
         <div className="badge">First time setup</div>
         <h2>Secure your admin account</h2>
-        <p>Set a display name and a strong password before continuing.</p>
+        <p>Set your email, display name, and a strong password before continuing.</p>
         {error ? <div className="alert">{error}</div> : null}
         <form className="form" onSubmit={submit}>
+          <label>
+            Email
+            <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required />
+          </label>
           <label>
             Display name
             <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />

@@ -375,7 +375,7 @@ const requireProfileComplete = async (req, res, next) => {
   if (!req.user) {
     return res.status(401).json({ error: "Unauthorized" });
   }
-  if (req.user.mustChangePassword || !req.user.displayName) {
+  if (req.user.mustChangePassword || !req.user.displayName || !req.user.email) {
     return res.status(412).json({ error: "Profile setup required" });
   }
   return next();
@@ -519,26 +519,40 @@ app.get("/api/auth/me", requireAuth, (req, res) => {
 });
 
 app.post("/api/auth/first-run", requireAuth, async (req, res) => {
-  const { displayName, password } = req.body || {};
-  if (!req.user.mustChangePassword && req.user.displayName) {
+  const { displayName, password, email } = req.body || {};
+  if (!req.user.mustChangePassword && req.user.displayName && req.user.email) {
     return res.status(400).json({ error: "Profile already complete" });
   }
   if (!displayName || typeof displayName !== "string") {
     return res.status(400).json({ error: "Display name required" });
+  }
+  const trimmedEmail = typeof email === "string" ? email.trim() : "";
+  if (!trimmedEmail && !req.user.email) {
+    return res.status(400).json({ error: "Email required" });
+  }
+  if (trimmedEmail) {
+    const existing = await prisma.user.findUnique({ where: { email: trimmedEmail } });
+    if (existing && existing.id !== req.user.id) {
+      return res.status(400).json({ error: "Email already in use" });
+    }
   }
   const validation = validatePasswordStrength(password);
   if (!validation.ok) {
     return res.status(400).json({ error: validation.error });
   }
   const passwordHash = await bcrypt.hash(password, 12);
+  const data = {
+    displayName: displayName.trim(),
+    passwordHash,
+    mustChangePassword: false,
+    passwordUpdatedAt: new Date()
+  };
+  if (trimmedEmail && trimmedEmail !== req.user.email) {
+    data.email = trimmedEmail;
+  }
   const updated = await prisma.user.update({
     where: { id: req.user.id },
-    data: {
-      displayName: displayName.trim(),
-      passwordHash,
-      mustChangePassword: false,
-      passwordUpdatedAt: new Date()
-    }
+    data
   });
   res.json({
     id: updated.id,

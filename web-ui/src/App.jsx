@@ -91,7 +91,7 @@ const App = () => {
     return <div className="screen screen--center">Loading...</div>;
   }
 
-  const needsSetup = user && (user.mustChangePassword || !user.displayName);
+  const needsSetup = user && (user.mustChangePassword || !user.displayName || !user.email);
 
   return (
     <Routes>
@@ -111,7 +111,7 @@ const App = () => {
         element={
           user ? (
             needsSetup ? (
-              <FirstRun onComplete={refreshUser} />
+              <FirstRun onComplete={refreshUser} user={user} />
             ) : (
               <Navigate to="/events" replace />
             )
