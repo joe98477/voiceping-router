@@ -99,7 +99,12 @@ const Dispatch = ({ user, onLogout }) => {
           <div className="panel__header">Roster</div>
           <div className="panel__body">
             {overview.roster.map((person) => (
-              <div key={person.id} className="roster-item dispatch-card">
+              <div
+                key={person.id}
+                className={`roster-item status-card dispatch-card status-card--${statusToKey(
+                  overview.statuses?.users?.[person.id]
+                )}`}
+              >
                 <InfoPopover
                   title={person.displayName || person.email}
                   details={[
@@ -112,13 +117,6 @@ const Dispatch = ({ user, onLogout }) => {
                     { label: "Errors", value: "None reported" }
                   ]}
                 />
-              <div key={person.id} className="roster-item info-card">
-              <div
-                key={person.id}
-                className={`roster-item status-card status-card--${statusToKey(
-                  overview.statuses?.users?.[person.id]
-                )}`}
-              >
                 <div>
                   <div className="info-card__title">{person.displayName || person.email}</div>
                   <div className="info-card__meta">{person.role}</div>
@@ -146,7 +144,12 @@ const Dispatch = ({ user, onLogout }) => {
           <div className="panel__header">Teams</div>
           <div className="panel__body">
             {overview.teams.map((team) => (
-              <div key={team.id} className="team-card dispatch-card">
+              <div
+                key={team.id}
+                className={`team-card status-card dispatch-card status-card--${statusToKey(
+                  overview.statuses?.teams?.[team.id]
+                )}`}
+              >
                 <InfoPopover
                   title={team.name}
                   details={[
@@ -165,16 +168,6 @@ const Dispatch = ({ user, onLogout }) => {
                     { label: "Errors", value: "None reported" }
                   ]}
                 />
-                <div className="team-card__title">{team.name}</div>
-              <div key={team.id} className="team-card info-card">
-                <div className="info-card__title">{team.name}</div>
-                <div className="info-card__meta">Team ID: {team.id}</div>
-              <div
-                key={team.id}
-                className={`team-card status-card status-card--${statusToKey(
-                  overview.statuses?.teams?.[team.id]
-                )}`}
-              >
                 <div className="team-card__header">
                   <div className="team-card__title">{team.name}</div>
                   <span
@@ -197,8 +190,31 @@ const Dispatch = ({ user, onLogout }) => {
               return (
                 <div
                   key={channel.id}
-                  className={`channel-card channel-card--with-icon ${isActive ? "channel-card--active" : ""}`}
+                  className={`channel-card status-card dispatch-card channel-card--with-icon ${
+                    isActive ? "channel-card--active" : ""
+                  } status-card--${statusToKey(overview.statuses?.channels?.[channel.id])}`}
                 >
+                  <InfoPopover
+                    title={channel.name}
+                    details={[
+                      { label: "Channel ID", value: channel.id },
+                      {
+                        label: "Users",
+                        value: overview.channelMemberCounts?.[channel.id] ?? 0
+                      },
+                      { label: "Type", value: channel.type === "EVENT_ADMIN" ? "Admin" : "Team" },
+                      {
+                        label: "Team",
+                        value: channel.teamId
+                          ? overview.teams.find((team) => team.id === channel.teamId)?.name || "Unknown"
+                          : "Event"
+                      },
+                      { label: "Connections", value: "No live telemetry" },
+                      { label: "Bandwidth", value: "Not available" },
+                      { label: "Latency", value: "Not available" },
+                      { label: "Errors", value: "None reported" }
+                    ]}
+                  />
                   <div
                     className={`channel-card__icon ${isActive ? "channel-card__icon--active" : ""}`}
                     aria-label={isActive ? "Channel active" : "Channel idle"}
@@ -211,56 +227,21 @@ const Dispatch = ({ user, onLogout }) => {
                     </svg>
                   </div>
                   <div className="channel-card__content">
-                    <div className="channel-card__title">{channel.name}</div>
+                    <div className="channel-card__header">
+                      <div className="channel-card__title">{channel.name}</div>
+                      <span
+                        className={`pill pill--status-${statusToKey(
+                          overview.statuses?.channels?.[channel.id]
+                        )}`}
+                      >
+                        {statusLabel(overview.statuses?.channels?.[channel.id])}
+                      </span>
+                    </div>
                     <div className="channel-card__meta">
                       <span>{channel.type === "EVENT_ADMIN" ? "Admin" : "Team"}</span>
                       <span>ID: {channel.id}</span>
                     </div>
                   </div>
-            {overview.channels.map((channel) => (
-              <div key={channel.id} className="channel-card dispatch-card">
-                <InfoPopover
-                  title={channel.name}
-                  details={[
-                    { label: "Channel ID", value: channel.id },
-                    {
-                      label: "Users",
-                      value: overview.channelMemberCounts?.[channel.id] ?? 0
-                    },
-                    { label: "Type", value: channel.type === "EVENT_ADMIN" ? "Admin" : "Team" },
-                    {
-                      label: "Team",
-                      value: channel.teamId
-                        ? overview.teams.find((team) => team.id === channel.teamId)?.name || "Unknown"
-                        : "Event"
-                    },
-                    { label: "Connections", value: "No live telemetry" },
-                    { label: "Bandwidth", value: "Not available" },
-                    { label: "Latency", value: "Not available" },
-                    { label: "Errors", value: "None reported" }
-                  ]}
-                />
-                <div className="channel-card__title">{channel.name}</div>
-              <div key={channel.id} className="channel-card info-card">
-                <div className="info-card__title">{channel.name}</div>
-                <div className="info-card__meta">
-              <div
-                key={channel.id}
-                className={`channel-card status-card status-card--${statusToKey(
-                  overview.statuses?.channels?.[channel.id]
-                )}`}
-              >
-                <div className="channel-card__header">
-                  <div className="channel-card__title">{channel.name}</div>
-                  <span
-                    className={`pill pill--status-${statusToKey(overview.statuses?.channels?.[channel.id])}`}
-                  >
-                    {statusLabel(overview.statuses?.channels?.[channel.id])}
-                  </span>
-                </div>
-                <div className="channel-card__meta">
-                  <span>{channel.type === "EVENT_ADMIN" ? "Admin" : "Team"}</span>
-                  <span>ID: {channel.id}</span>
                 </div>
               );
             })}
