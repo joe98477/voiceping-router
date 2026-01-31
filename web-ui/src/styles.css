@@ -283,6 +283,44 @@ a {
   background: #fffaf2;
 }
 
+.channel-card--with-icon {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 12px;
+}
+
+.channel-card__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+}
+
+.channel-card__icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.channel-card--active {
+  border-color: rgba(34, 160, 107, 0.4);
+  box-shadow: 0 10px 20px rgba(34, 160, 107, 0.12);
+}
+
+.channel-card__icon--active {
+  background: rgba(34, 160, 107, 0.16);
+  color: #15985d;
+  border-color: rgba(34, 160, 107, 0.4);
+}
+
+.channel-card__content {
+  display: grid;
+  gap: 6px;
+}
+
 .roster-item {
   grid-template-columns: 1fr auto auto;
   align-items: center;

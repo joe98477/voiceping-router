@@ -30,6 +30,7 @@ const REDIS_URL = process.env.REDIS_URL || undefined;
 const ROUTER_HOST = process.env.ROUTER_HOST || "127.0.0.1";
 const ROUTER_PORT = Number(process.env.ROUTER_PORT || 3000);
 const ROUTER_STATUS_TIMEOUT_MS = Number(process.env.ROUTER_STATUS_TIMEOUT_MS || 500);
+const MAXIMUM_IDLE_DURATION = Number(process.env.MAXIMUM_IDLE_DURATION || 3000);
 
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
@@ -1008,6 +1009,36 @@ app.get("/api/events/:eventId/overview", requireAuth, requireProfileComplete, re
     })),
     pendingCount: pending.length
   });
+});
+
+app.get("/api/events/:eventId/traffic", requireAuth, requireProfileComplete, requireDispatchOrAdmin, async (req, res) => {
+  const { eventId } = req.params;
+  const channels = await prisma.channel.findMany({
+    where: { eventId },
+    select: { id: true },
+    orderBy: { sortOrder: "asc" }
+  });
+  const now = Date.now();
+  const traffic = await Promise.all(
+    channels.map(async (channel) => {
+      const key = `g:${channel.id}:m`;
+      let data = {};
+      try {
+        data = await redisClient.hGetAll(key);
+      } catch (err) {
+        data = {};
+      }
+      const audioTime = data.audioTime ? Number(data.audioTime) : null;
+      const active = !!audioTime && now - audioTime < MAXIMUM_IDLE_DURATION;
+      return {
+        channelId: channel.id,
+        active,
+        audioTime,
+        fromId: data.fromId || null
+      };
+    })
+  );
+  res.json({ channels: traffic, evaluatedAt: now });
 });
 
 app.post("/api/router/token", requireAuth, requireProfileComplete, async (req, res) => {
