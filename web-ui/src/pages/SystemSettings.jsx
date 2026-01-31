@@ -1,7 +1,11 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { apiGet, apiGetStatus, apiPatch } from "../api.js";
+import Icon from "../components/Icon.jsx";
+import { mdiArrowLeft } from "../icons.js";
 
 const SystemSettings = ({ onLogout }) => {
+  const navigate = useNavigate();
   const [form, setForm] = useState({
     smtpHost: "",
     smtpPort: 587,
@@ -90,7 +94,17 @@ const SystemSettings = ({ onLogout }) => {
     <div className="screen">
       <header className="topbar">
         <div>
-          <div className="badge">System</div>
+          <div className="topbar__title">
+            <button
+              type="button"
+              className="icon-btn icon-btn--small topbar__back"
+              aria-label="Back to events"
+              onClick={() => navigate("/events")}
+            >
+              <Icon path={mdiArrowLeft} size={16} />
+            </button>
+            <div className="badge">System</div>
+          </div>
           <h2>Settings</h2>
           <p>SMTP configuration for invites and password resets.</p>
         </div>

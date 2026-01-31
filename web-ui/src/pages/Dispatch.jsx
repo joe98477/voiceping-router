@@ -2,7 +2,9 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { apiGet, apiPatch } from "../api.js";
 import InfoPopover from "../components/InfoPopover.jsx";
+import Icon from "../components/Icon.jsx";
 import { statusLabel, statusToKey } from "../utils/status.js";
+import { mdiRadioHandheld } from "../icons.js";
 
 const Dispatch = ({ user, onLogout }) => {
   const { eventId } = useParams();
@@ -76,7 +78,6 @@ const Dispatch = ({ user, onLogout }) => {
         <div>
           <div className="badge">Dispatch</div>
           <h2>{overview.event.name}</h2>
-          <p>Event ID: {eventId}</p>
         </div>
         <div className="topbar__actions">
           <span className="pill">Pending: {overview.pendingCount}</span>
@@ -176,7 +177,6 @@ const Dispatch = ({ user, onLogout }) => {
                     {statusLabel(overview.statuses?.teams?.[team.id])}
                   </span>
                 </div>
-                <div className="team-card__meta">Team ID: {team.id}</div>
               </div>
             ))}
           </div>
@@ -219,12 +219,7 @@ const Dispatch = ({ user, onLogout }) => {
                     className={`channel-card__icon ${isActive ? "channel-card__icon--active" : ""}`}
                     aria-label={isActive ? "Channel active" : "Channel idle"}
                   >
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path
-                        d="M4 10a8 8 0 0 1 16 0v4a4 4 0 0 1-4 4h-1a1 1 0 1 1 0-2h1a2 2 0 0 0 2-2v-4a6 6 0 0 0-12 0v4a2 2 0 0 0 2 2h1a1 1 0 1 1 0 2H8a4 4 0 0 1-4-4v-4Zm6-2a1 1 0 0 1 1 1v4a1 1 0 1 1-2 0V9a1 1 0 0 1 1-1Zm4 0a1 1 0 0 1 1 1v4a1 1 0 1 1-2 0V9a1 1 0 0 1 1-1Z"
-                        fill="currentColor"
-                      />
-                    </svg>
+                    <Icon path={mdiRadioHandheld} size={18} />
                   </div>
                   <div className="channel-card__content">
                     <div className="channel-card__header">
@@ -239,7 +234,6 @@ const Dispatch = ({ user, onLogout }) => {
                     </div>
                     <div className="channel-card__meta">
                       <span>{channel.type === "EVENT_ADMIN" ? "Admin" : "Team"}</span>
-                      <span>ID: {channel.id}</span>
                     </div>
                   </div>
                 </div>

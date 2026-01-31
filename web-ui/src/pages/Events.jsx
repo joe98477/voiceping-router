@@ -86,7 +86,6 @@ const Events = ({ user, onLogout }) => {
               <span className="pill">{event.requiresApproval ? "Approval Required" : "Open"}</span>
             </div>
             <div className="card__body">
-              <p>Event ID: {event.id}</p>
               <div className="card__actions">
                 <Link className="btn btn--secondary" to={`/event/${event.id}/dispatch`}>
                   Dispatch View

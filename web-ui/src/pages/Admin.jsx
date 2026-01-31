@@ -39,6 +39,7 @@ const Admin = ({ onLogout }) => {
           <div className="badge">Admin</div>
           <h2>{event.name}</h2>
           <p>Event settings & limits</p>
+          <p className="hint">Event ID: {eventId}</p>
         </div>
         <div className="topbar__actions">
           <button className="btn" onClick={onLogout}>

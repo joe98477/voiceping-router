@@ -37,6 +37,7 @@ model User {
   mustChangePassword Boolean      @default(false)
   passwordUpdatedAt DateTime?
   lastLoginAt DateTime?
+  disabledAt DateTime?
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
   events       EventMembership[]

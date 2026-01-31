@@ -71,6 +71,11 @@ const UsersSettings = ({ eventId, overview, onReload }) => {
   const submitAssign = async () => {
     setAssignError("");
     try {
+      const selectedUser = users.find((entry) => entry.id === assign.userId);
+      if (selectedUser && selectedUser.disabledAt) {
+        setAssignError("User is deactivated and cannot be assigned.");
+        return;
+      }
       await apiPost(`/api/events/${eventId}/users`, {
         userId: assign.userId,
         role: assign.role,
@@ -92,6 +97,19 @@ const UsersSettings = ({ eventId, overview, onReload }) => {
       setCreateError(err.message);
     }
   };
+
+  const toggleDisabled = async (userId, shouldDisable) => {
+    try {
+      await apiPatch(`/api/admin/users/${userId}`, { disabled: shouldDisable });
+      loadUsers();
+    } catch (err) {
+      setCreateError(err.message);
+    }
+  };
+
+  const activeUsers = users.filter((user) => !user.disabledAt);
+  const teamChannels = overview.channels.filter((channel) => channel.type === "TEAM");
+  const adminChannels = overview.channels.filter((channel) => channel.type === "EVENT_ADMIN");
 
   return (
     <div className="panel panel--compact">
@@ -148,7 +166,7 @@ const UsersSettings = ({ eventId, overview, onReload }) => {
                 onChange={(e) => setAssign((prev) => ({ ...prev, userId: e.target.value }))}
               >
                 <option value="">Select user</option>
-                {users.map((user) => (
+                {activeUsers.map((user) => (
                   <option key={user.id} value={user.id}>
                     {user.displayName || user.email}
                   </option>
@@ -182,16 +200,42 @@ const UsersSettings = ({ eventId, overview, onReload }) => {
             </div>
             <div>
               <div className="checkbox-grid__title">Channels</div>
-              {overview.channels.map((channel) => (
-                <label key={channel.id} className="checkbox-grid__item">
-                  <input
-                    type="checkbox"
-                    checked={assign.channelIds.includes(channel.id)}
-                    onChange={() => updateAssignList("channelIds", channel.id)}
-                  />
-                  {channel.name}
-                </label>
-              ))}
+              {overview.teams.map((team) => {
+                const channels = teamChannels.filter((channel) => channel.teamId === team.id);
+                if (channels.length === 0) {
+                  return null;
+                }
+                return (
+                  <div key={team.id} className="checkbox-grid__group">
+                    <div className="checkbox-grid__group-title">{team.name}</div>
+                    {channels.map((channel) => (
+                      <label key={channel.id} className="checkbox-grid__item">
+                        <input
+                          type="checkbox"
+                          checked={assign.channelIds.includes(channel.id)}
+                          onChange={() => updateAssignList("channelIds", channel.id)}
+                        />
+                        {channel.name}
+                      </label>
+                    ))}
+                  </div>
+                );
+              })}
+              {adminChannels.length > 0 ? (
+                <div className="checkbox-grid__group">
+                  <div className="checkbox-grid__group-title">Admin channels</div>
+                  {adminChannels.map((channel) => (
+                    <label key={channel.id} className="checkbox-grid__item">
+                      <input
+                        type="checkbox"
+                        checked={assign.channelIds.includes(channel.id)}
+                        onChange={() => updateAssignList("channelIds", channel.id)}
+                      />
+                      {channel.name}
+                    </label>
+                  ))}
+                </div>
+              ) : null}
             </div>
           </div>
           <button className="btn btn--secondary" type="button" onClick={submitAssign}>
@@ -205,15 +249,27 @@ const UsersSettings = ({ eventId, overview, onReload }) => {
               <div key={user.id} className="list__item list__item--split">
                 <div>
                   <div className="list__title">{user.displayName || user.email}</div>
-                  <div className="list__meta">{user.globalRole}</div>
+                  <div className="list__meta">
+                    {user.globalRole}
+                    {user.disabledAt ? " • Deactivated" : ""}
+                  </div>
                 </div>
-                <button
-                  className="btn btn--tiny"
-                  type="button"
-                  onClick={() => toggleMustChange(user.id, user.mustChangePassword)}
-                >
-                  {user.mustChangePassword ? "Reset required" : "Reset optional"}
-                </button>
+                <div className="form__actions">
+                  <button
+                    className="btn btn--tiny"
+                    type="button"
+                    onClick={() => toggleMustChange(user.id, user.mustChangePassword)}
+                  >
+                    {user.mustChangePassword ? "Reset required" : "Reset optional"}
+                  </button>
+                  <button
+                    className="btn btn--tiny"
+                    type="button"
+                    onClick={() => toggleDisabled(user.id, !user.disabledAt)}
+                  >
+                    {user.disabledAt ? "Reactivate" : "Deactivate"}
+                  </button>
+                </div>
               </div>
             ))}
           </div>

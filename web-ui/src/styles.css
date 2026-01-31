@@ -69,6 +69,18 @@ a {
   align-items: center;
 }
 
+.topbar__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.topbar__back {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+}
+
 .badge {
   display: inline-flex;
   padding: 6px 12px;
@@ -738,6 +750,17 @@ a {
   display: flex;
   gap: 8px;
   align-items: center;
+  margin-bottom: 6px;
+}
+
+.checkbox-grid__group {
+  margin-bottom: 12px;
+}
+
+.checkbox-grid__group-title {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--muted);
   margin-bottom: 6px;
 }
 

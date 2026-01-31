@@ -4,6 +4,7 @@ import { apiGet, apiGetStatus, apiPost } from "./api.js";
 import Login from "./pages/Login.jsx";
 import Events from "./pages/Events.jsx";
 import Console from "./pages/Console.jsx";
+import Admin from "./pages/Admin.jsx";
 import SystemSettings from "./pages/SystemSettings.jsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
 import FirstRun from "./pages/FirstRun.jsx";
@@ -155,7 +156,7 @@ const App = () => {
             needsSetup ? (
               <Navigate to="/first-run" replace />
             ) : (
-              <Console user={user} onLogout={handleLogout} />
+              <Admin onLogout={handleLogout} />
             )
           ) : (
             <Navigate to="/login" replace />

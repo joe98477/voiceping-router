@@ -1,4 +1,6 @@
 import React, { useEffect, useId, useRef, useState } from "react";
+import Icon from "./Icon.jsx";
+import { mdiInformationOutline } from "../icons.js";
 
 const InfoPopover = ({ title, details }) => {
   const [open, setOpen] = useState(false);
@@ -29,7 +31,7 @@ const InfoPopover = ({ title, details }) => {
         aria-controls={popoverId}
         onClick={() => setOpen((prev) => !prev)}
       >
-        i
+        <Icon path={mdiInformationOutline} size={14} />
       </button>
       {open ? (
         <div className="dispatch-card__popover" id={popoverId} role="dialog" aria-label={`${title} details`}>

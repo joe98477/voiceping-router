@@ -367,6 +367,12 @@ const requireAuth = async (req, res, next) => {
   if (!user) {
     return res.status(401).json({ error: "Unauthorized" });
   }
+  if (user.disabledAt) {
+    req.session.destroy(() => {
+      res.status(403).json({ error: "Account disabled" });
+    });
+    return;
+  }
   req.user = user;
   return next();
 };
@@ -483,6 +489,9 @@ app.post("/api/auth/login", async (req, res) => {
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) {
     return res.status(401).json({ error: "Invalid credentials" });
+  }
+  if (user.disabledAt) {
+    return res.status(403).json({ error: "Account disabled" });
   }
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) {
@@ -692,7 +701,8 @@ app.get("/api/admin/users", requireAuth, requireAdmin, requireProfileComplete, a
       displayName: true,
       globalRole: true,
       mustChangePassword: true,
-      lastLoginAt: true
+      lastLoginAt: true,
+      disabledAt: true
     }
   });
   res.json(users);
@@ -723,7 +733,7 @@ app.post("/api/admin/users", requireAuth, requireAdmin, requireProfileComplete, 
 
 app.patch("/api/admin/users/:userId", requireAuth, requireAdmin, requireProfileComplete, async (req, res) => {
   const { userId } = req.params;
-  const { displayName, globalRole, mustChangePassword } = req.body || {};
+  const { displayName, globalRole, mustChangePassword, disabled } = req.body || {};
   const data = {};
   if (displayName !== undefined) {
     data.displayName = displayName ? String(displayName).trim() : null;
@@ -733,6 +743,9 @@ app.patch("/api/admin/users/:userId", requireAuth, requireAdmin, requireProfileC
   }
   if (mustChangePassword !== undefined) {
     data.mustChangePassword = !!mustChangePassword;
+  }
+  if (disabled !== undefined) {
+    data.disabledAt = disabled ? new Date() : null;
   }
   const user = await prisma.user.update({ where: { id: userId }, data });
   await audit(req.user.id, null, "user_updated", { userId: user.id });
@@ -845,6 +858,10 @@ app.post("/api/events/:eventId/users", requireAuth, requireProfileComplete, requ
   const { userId, role, teamIds, channelIds } = req.body || {};
   if (!userId || !role) {
     return res.status(400).json({ error: "Missing userId/role" });
+  }
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user || user.disabledAt) {
+    return res.status(400).json({ error: "User not available for assignment" });
   }
   const event = await prisma.event.findUnique({ where: { id: eventId } });
   const membershipCount = await prisma.eventMembership.count({ where: { eventId } });

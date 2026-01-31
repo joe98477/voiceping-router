@@ -3,7 +3,9 @@ import { useNavigate, useParams } from "react-router-dom";
 import { apiGet, apiPatch } from "../api.js";
 import SettingsDrawer from "../components/SettingsDrawer.jsx";
 import InfoPopover from "../components/InfoPopover.jsx";
+import Icon from "../components/Icon.jsx";
 import { statusLabel, statusToKey } from "../utils/status.js";
+import { mdiCog, mdiHeadset, mdiSend, mdiVolumeHigh, mdiVolumeOff } from "../icons.js";
 
 const Console = ({ user, onLogout }) => {
   const { eventId } = useParams();
@@ -152,17 +154,11 @@ const Console = ({ user, onLogout }) => {
         <div>
           <div className="badge">Dispatch</div>
           <h2>{overview.event.name}</h2>
-          <p>Event ID: {eventId}</p>
         </div>
         <div className="topbar__actions">
           <span className="pill">Pending: {overview.pendingCount}</span>
           <button className="icon-btn" onClick={() => setSettingsOpen(true)} aria-label="Open settings">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path
-                d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm9 3.5a7.7 7.7 0 0 0-.1-1l2-1.5-2-3.5-2.4 1a7.4 7.4 0 0 0-1.7-1l-.4-2.6H9.6l-.4 2.6a7.4 7.4 0 0 0-1.7 1l-2.4-1-2 3.5 2 1.5a7.7 7.7 0 0 0 0 2l-2 1.5 2 3.5 2.4-1a7.4 7.4 0 0 0 1.7 1l.4 2.6h4.8l.4-2.6a7.4 7.4 0 0 0 1.7-1l2.4 1 2-3.5-2-1.5c.1-.3.1-.7.1-1Z"
-                fill="currentColor"
-              />
-            </svg>
+            <Icon path={mdiCog} />
           </button>
           <button className="btn" onClick={onLogout}>
             Log out
@@ -255,51 +251,40 @@ const Console = ({ user, onLogout }) => {
                       { label: "Errors", value: "None reported" }
                     ]}
                   />
-                  <div className="team-card__header">
-                    <div className="team-card__title">{team.name}</div>
+                <div className="team-card__header">
+                  <div className="team-card__title">{team.name}</div>
                     <span
                       className={`pill pill--status-${statusToKey(overview.statuses?.teams?.[team.id])}`}
                     >
                       {statusLabel(overview.statuses?.teams?.[team.id])}
                     </span>
-                  </div>
-                  <div className="team-card__meta">Team ID: {team.id}</div>
-                  <div className="card-controls">
-                    <button
-                      type="button"
-                      className={`card-control ${listeningTargets.has(`team:${team.id}`) ? "card-control--active" : ""}`}
-                      onClick={() => toggleListen(`team:${team.id}`)}
-                      aria-pressed={listeningTargets.has(`team:${team.id}`)}
-                      aria-label={`Listen to ${team.name}`}
-                      disabled={!controlsEnabled}
-                      title={controlsEnabled ? "Listen" : disabledReason}
-                    >
-                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path
-                          d="M12 3a7 7 0 0 0-7 7v4a4 4 0 0 0 4 4h1v2a2 2 0 0 0 4 0v-2h1a4 4 0 0 0 4-4v-4a7 7 0 0 0-7-7Zm3 11a2 2 0 0 1-2 2h-2v4a1 1 0 1 1-2 0v-4H9a2 2 0 0 1-2-2v-4a5 5 0 1 1 10 0v4Z"
-                          fill="currentColor"
-                        />
-                      </svg>
-                    </button>
-                    <button
-                      type="button"
-                      className={`card-control card-control--transmit ${transmittingTargets.has(`team:${team.id}`) ? "card-control--active" : ""}`}
-                      onClick={() => toggleTransmit(`team:${team.id}`)}
-                      aria-pressed={transmittingTargets.has(`team:${team.id}`)}
-                      aria-label={`Transmit to ${team.name}`}
-                      disabled={!controlsEnabled}
-                      title={controlsEnabled ? "Transmit" : disabledReason}
-                    >
-                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path
-                          d="M4 12a1 1 0 0 1 1-1h9.6l-3.3-3.3a1 1 0 1 1 1.4-1.4l5 5a1 1 0 0 1 0 1.4l-5 5a1 1 0 1 1-1.4-1.4l3.3-3.3H5a1 1 0 0 1-1-1Z"
-                          fill="currentColor"
-                        />
-                      </svg>
-                    </button>
-                  </div>
                 </div>
-              ))}
+                <div className="card-controls">
+                  <button
+                    type="button"
+                    className={`card-control ${listeningTargets.has(`team:${team.id}`) ? "card-control--active" : ""}`}
+                    onClick={() => toggleListen(`team:${team.id}`)}
+                    aria-pressed={listeningTargets.has(`team:${team.id}`)}
+                    aria-label={`Listen to ${team.name}`}
+                    disabled={!controlsEnabled}
+                    title={controlsEnabled ? "Listen" : disabledReason}
+                  >
+                    <Icon path={mdiHeadset} size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    className={`card-control card-control--transmit ${transmittingTargets.has(`team:${team.id}`) ? "card-control--active" : ""}`}
+                    onClick={() => toggleTransmit(`team:${team.id}`)}
+                    aria-pressed={transmittingTargets.has(`team:${team.id}`)}
+                    aria-label={`Transmit to ${team.name}`}
+                    disabled={!controlsEnabled}
+                    title={controlsEnabled ? "Transmit" : disabledReason}
+                  >
+                    <Icon path={mdiSend} size={16} />
+                  </button>
+                </div>
+              </div>
+            ))}
             </div>
           </section>
         ) : null}
@@ -356,21 +341,10 @@ const Console = ({ user, onLogout }) => {
                             : "Listen to channel"
                         }
                       >
-                        {listeningChannelIds.includes(channel.id) ? (
-                          <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path
-                              d="M3 10v4a1 1 0 0 0 1 1h3l4 4V5L7 9H4a1 1 0 0 0-1 1Zm11.5-3.5a1 1 0 0 0-1 1v9a1 1 0 1 0 2 0v-9a1 1 0 0 0-1-1Zm4-2a1 1 0 0 0-1 1v13a1 1 0 1 0 2 0v-13a1 1 0 0 0-1-1Z"
-                              fill="currentColor"
-                            />
-                          </svg>
-                        ) : (
-                          <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <path
-                              d="M3 10v4a1 1 0 0 0 1 1h3l4 4V5L7 9H4a1 1 0 0 0-1 1Zm9.2-2.2a1 1 0 0 1 1.4 0l6.8 6.8a1 1 0 0 1-1.4 1.4l-6.8-6.8a1 1 0 0 1 0-1.4Zm6.8 0a1 1 0 0 1 0 1.4l-6.8 6.8a1 1 0 1 1-1.4-1.4l6.8-6.8a1 1 0 0 1 1.4 0Z"
-                              fill="currentColor"
-                            />
-                          </svg>
-                        )}
+                        <Icon
+                          path={listeningChannelIds.includes(channel.id) ? mdiVolumeHigh : mdiVolumeOff}
+                          size={16}
+                        />
                       </button>
                     </div>
                     <span
@@ -381,7 +355,6 @@ const Console = ({ user, onLogout }) => {
                   </div>
                   <div className="channel-card__meta">
                     <span>{channel.type === "EVENT_ADMIN" ? "Admin" : "Team"}</span>
-                    <span>ID: {channel.id}</span>
                   </div>
                   <div className="card-controls">
                     <button
@@ -393,12 +366,7 @@ const Console = ({ user, onLogout }) => {
                       disabled={!controlsEnabled}
                       title={controlsEnabled ? "Listen" : disabledReason}
                     >
-                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path
-                          d="M12 3a7 7 0 0 0-7 7v4a4 4 0 0 0 4 4h1v2a2 2 0 0 0 4 0v-2h1a4 4 0 0 0 4-4v-4a7 7 0 0 0-7-7Zm3 11a2 2 0 0 1-2 2h-2v4a1 1 0 1 1-2 0v-4H9a2 2 0 0 1-2-2v-4a5 5 0 1 1 10 0v4Z"
-                          fill="currentColor"
-                        />
-                      </svg>
+                      <Icon path={mdiHeadset} size={16} />
                     </button>
                     <button
                       type="button"
@@ -409,12 +377,7 @@ const Console = ({ user, onLogout }) => {
                       disabled={!controlsEnabled}
                       title={controlsEnabled ? "Transmit" : disabledReason}
                     >
-                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path
-                          d="M4 12a1 1 0 0 1 1-1h9.6l-3.3-3.3a1 1 0 1 1 1.4-1.4l5 5a1 1 0 0 1 0 1.4l-5 5a1 1 0 1 1-1.4-1.4l3.3-3.3H5a1 1 0 0 1-1-1Z"
-                          fill="currentColor"
-                        />
-                      </svg>
+                      <Icon path={mdiSend} size={16} />
                     </button>
                   </div>
                 </div>
