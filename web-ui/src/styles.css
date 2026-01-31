@@ -333,6 +333,7 @@ a {
 .team-card,
 .channel-card {
   display: grid;
+  gap: 8px;
 }
 
 .card-controls {
@@ -380,9 +381,9 @@ a {
 }
 
 .dispatch-card__info {
-  position: absolute;
-  top: 10px;
-  right: 10px;
+  position: static;
+  display: inline-flex;
+  align-items: center;
 }
 
 .dispatch-card__info-btn {
@@ -397,6 +398,27 @@ a {
   display: grid;
   place-items: center;
   cursor: pointer;
+}
+
+.dispatch-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dispatch-card__title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dispatch-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .dispatch-card__popover {
@@ -751,6 +773,18 @@ a {
   gap: 8px;
   align-items: center;
   margin-bottom: 6px;
+}
+
+.checkbox-grid__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.checkbox-grid__label {
+  color: var(--ink);
 }
 
 .checkbox-grid__group {

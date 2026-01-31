@@ -186,37 +186,37 @@ const Console = ({ user, onLogout }) => {
                     overview.statuses?.users?.[person.id]
                   )}`}
                 >
-                  <InfoPopover
-                    title={person.displayName || person.email}
-                    details={[
-                      { label: "User ID", value: person.id },
-                      { label: "Role", value: person.role },
-                      { label: "Status", value: person.status },
-                      { label: "Connections", value: "No live telemetry" },
-                      { label: "Bandwidth", value: "Not available" },
-                      { label: "Latency", value: "Not available" },
-                      { label: "Errors", value: "None reported" }
-                    ]}
-                  />
-                  <div>
-                    <div className="info-card__title">{person.displayName || person.email}</div>
-                    <div className="info-card__meta">{person.role}</div>
-                  </div>
-                  <div className="roster-item__actions">
+                  <div className="dispatch-card__header">
+                    <div className="dispatch-card__title-row">
+                      <div className="info-card__title">{person.displayName || person.email}</div>
+                      <InfoPopover
+                        title={person.displayName || person.email}
+                        details={[
+                          { label: "User ID", value: person.id },
+                          { label: "Role", value: person.role },
+                          { label: "Status", value: person.status },
+                          { label: "Connections", value: "No live telemetry" },
+                          { label: "Bandwidth", value: "Not available" },
+                          { label: "Latency", value: "Not available" },
+                          { label: "Errors", value: "None reported" }
+                        ]}
+                      />
+                    </div>
                     <span
                       className={`pill pill--status-${statusToKey(overview.statuses?.users?.[person.id])}`}
                     >
                       {statusLabel(overview.statuses?.users?.[person.id])}
                     </span>
-                    {person.status === "PENDING" ? (
-                      <>
-                        <span className="pill pill--pending">Pending approval</span>
-                        <button className="btn btn--tiny" onClick={() => approveUser(person.id)}>
-                          Approve
-                        </button>
-                      </>
-                    ) : null}
                   </div>
+                  <div className="info-card__meta">{person.role}</div>
+                  {person.status === "PENDING" ? (
+                    <div className="dispatch-card__footer">
+                      <span className="pill pill--pending">Pending approval</span>
+                      <button className="btn btn--tiny" onClick={() => approveUser(person.id)}>
+                        Approve
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -233,58 +233,62 @@ const Console = ({ user, onLogout }) => {
                     overview.statuses?.teams?.[team.id]
                   )}`}
                 >
-                  <InfoPopover
-                    title={team.name}
-                    details={[
-                      { label: "Team ID", value: team.id },
-                      {
-                        label: "Users",
-                        value: overview.teamMemberCounts?.[team.id] ?? 0
-                      },
-                      {
-                        label: "Channels",
-                        value: overview.channels.filter((channel) => channel.teamId === team.id).length
-                      },
-                      { label: "Connections", value: "No live telemetry" },
-                      { label: "Bandwidth", value: "Not available" },
-                      { label: "Latency", value: "Not available" },
-                      { label: "Errors", value: "None reported" }
-                    ]}
-                  />
-                <div className="team-card__header">
-                  <div className="team-card__title">{team.name}</div>
+                  <div className="dispatch-card__header">
+                    <div className="dispatch-card__title-row">
+                      <div className="team-card__title">{team.name}</div>
+                      <InfoPopover
+                        title={team.name}
+                        details={[
+                          { label: "Team ID", value: team.id },
+                          {
+                            label: "Users",
+                            value: overview.teamMemberCounts?.[team.id] ?? 0
+                          },
+                          {
+                            label: "Channels",
+                            value: overview.channels.filter((channel) => channel.teamId === team.id).length
+                          },
+                          { label: "Connections", value: "No live telemetry" },
+                          { label: "Bandwidth", value: "Not available" },
+                          { label: "Latency", value: "Not available" },
+                          { label: "Errors", value: "None reported" }
+                        ]}
+                      />
+                    </div>
                     <span
                       className={`pill pill--status-${statusToKey(overview.statuses?.teams?.[team.id])}`}
                     >
                       {statusLabel(overview.statuses?.teams?.[team.id])}
                     </span>
+                  </div>
+                  <div className="dispatch-card__footer">
+                    <div className="card-controls">
+                      <button
+                        type="button"
+                        className={`card-control ${listeningTargets.has(`team:${team.id}`) ? "card-control--active" : ""}`}
+                        onClick={() => toggleListen(`team:${team.id}`)}
+                        aria-pressed={listeningTargets.has(`team:${team.id}`)}
+                        aria-label={`Listen to ${team.name}`}
+                        disabled={!controlsEnabled}
+                        title={controlsEnabled ? "Listen" : disabledReason}
+                      >
+                        <Icon path={mdiHeadset} size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        className={`card-control card-control--transmit ${transmittingTargets.has(`team:${team.id}`) ? "card-control--active" : ""}`}
+                        onClick={() => toggleTransmit(`team:${team.id}`)}
+                        aria-pressed={transmittingTargets.has(`team:${team.id}`)}
+                        aria-label={`Transmit to ${team.name}`}
+                        disabled={!controlsEnabled}
+                        title={controlsEnabled ? "Transmit" : disabledReason}
+                      >
+                        <Icon path={mdiSend} size={16} />
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <div className="card-controls">
-                  <button
-                    type="button"
-                    className={`card-control ${listeningTargets.has(`team:${team.id}`) ? "card-control--active" : ""}`}
-                    onClick={() => toggleListen(`team:${team.id}`)}
-                    aria-pressed={listeningTargets.has(`team:${team.id}`)}
-                    aria-label={`Listen to ${team.name}`}
-                    disabled={!controlsEnabled}
-                    title={controlsEnabled ? "Listen" : disabledReason}
-                  >
-                    <Icon path={mdiHeadset} size={16} />
-                  </button>
-                  <button
-                    type="button"
-                    className={`card-control card-control--transmit ${transmittingTargets.has(`team:${team.id}`) ? "card-control--active" : ""}`}
-                    onClick={() => toggleTransmit(`team:${team.id}`)}
-                    aria-pressed={transmittingTargets.has(`team:${team.id}`)}
-                    aria-label={`Transmit to ${team.name}`}
-                    disabled={!controlsEnabled}
-                    title={controlsEnabled ? "Transmit" : disabledReason}
-                  >
-                    <Icon path={mdiSend} size={16} />
-                  </button>
-                </div>
-              </div>
-            ))}
+              ))}
             </div>
           </section>
         ) : null}
@@ -299,53 +303,31 @@ const Console = ({ user, onLogout }) => {
                     overview.statuses?.channels?.[channel.id]
                   )}`}
                 >
-                  <InfoPopover
-                    title={channel.name}
-                    details={[
-                      { label: "Channel ID", value: channel.id },
-                      {
-                        label: "Users",
-                        value: overview.channelMemberCounts?.[channel.id] ?? 0
-                      },
-                      { label: "Type", value: channel.type === "EVENT_ADMIN" ? "Admin" : "Team" },
-                      {
-                        label: "Team",
-                        value: channel.teamId
-                          ? overview.teams.find((team) => team.id === channel.teamId)?.name || "Unknown"
-                          : "Event"
-                      },
-                      { label: "Connections", value: "No live telemetry" },
-                      { label: "Bandwidth", value: "Not available" },
-                      { label: "Latency", value: "Not available" },
-                      { label: "Errors", value: "None reported" }
-                    ]}
-                  />
-                  <div className="channel-card__header">
-                    <div>
+                  <div className="dispatch-card__header">
+                    <div className="dispatch-card__title-row">
                       <div className="channel-card__title">{channel.name}</div>
-                      <button
-                        type="button"
-                        className={`icon-btn icon-btn--small channel-card__toggle ${
-                          listeningChannelIds.includes(channel.id) ? "is-listening" : "is-muted"
-                        }`}
-                        onClick={() => toggleChannelListen(channel.id)}
-                        aria-pressed={listeningChannelIds.includes(channel.id)}
-                        aria-label={
-                          listeningChannelIds.includes(channel.id)
-                            ? `Mute ${channel.name}`
-                            : `Listen to ${channel.name}`
-                        }
-                        title={
-                          listeningChannelIds.includes(channel.id)
-                            ? "Mute channel"
-                            : "Listen to channel"
-                        }
-                      >
-                        <Icon
-                          path={listeningChannelIds.includes(channel.id) ? mdiVolumeHigh : mdiVolumeOff}
-                          size={16}
-                        />
-                      </button>
+                      <InfoPopover
+                        title={channel.name}
+                        details={[
+                          { label: "Channel ID", value: channel.id },
+                          {
+                            label: "Users",
+                            value: overview.channelMemberCounts?.[channel.id] ?? 0
+                          },
+                          { label: "Type", value: channel.type === "EVENT_ADMIN" ? "Admin" : "Team" },
+                          {
+                            label: "Team",
+                            value: channel.teamId
+                              ? overview.teams.find((team) => team.id === channel.teamId)?.name ||
+                                "Unknown"
+                              : "Event"
+                          },
+                          { label: "Connections", value: "No live telemetry" },
+                          { label: "Bandwidth", value: "Not available" },
+                          { label: "Latency", value: "Not available" },
+                          { label: "Errors", value: "None reported" }
+                        ]}
+                      />
                     </div>
                     <span
                       className={`pill pill--status-${statusToKey(overview.statuses?.channels?.[channel.id])}`}
@@ -356,29 +338,54 @@ const Console = ({ user, onLogout }) => {
                   <div className="channel-card__meta">
                     <span>{channel.type === "EVENT_ADMIN" ? "Admin" : "Team"}</span>
                   </div>
-                  <div className="card-controls">
+                  <div className="dispatch-card__footer">
                     <button
                       type="button"
-                      className={`card-control ${listeningTargets.has(`channel:${channel.id}`) ? "card-control--active" : ""}`}
-                      onClick={() => toggleListen(`channel:${channel.id}`)}
-                      aria-pressed={listeningTargets.has(`channel:${channel.id}`)}
-                      aria-label={`Listen to ${channel.name}`}
-                      disabled={!controlsEnabled}
-                      title={controlsEnabled ? "Listen" : disabledReason}
+                      className={`icon-btn icon-btn--small channel-card__toggle ${
+                        listeningChannelIds.includes(channel.id) ? "is-listening" : "is-muted"
+                      }`}
+                      onClick={() => toggleChannelListen(channel.id)}
+                      aria-pressed={listeningChannelIds.includes(channel.id)}
+                      aria-label={
+                        listeningChannelIds.includes(channel.id)
+                          ? `Mute ${channel.name}`
+                          : `Listen to ${channel.name}`
+                      }
+                      title={
+                        listeningChannelIds.includes(channel.id) ? "Mute channel" : "Listen to channel"
+                      }
                     >
-                      <Icon path={mdiHeadset} size={16} />
+                      <Icon
+                        path={listeningChannelIds.includes(channel.id) ? mdiVolumeHigh : mdiVolumeOff}
+                        size={16}
+                      />
                     </button>
-                    <button
-                      type="button"
-                      className={`card-control card-control--transmit ${transmittingTargets.has(`channel:${channel.id}`) ? "card-control--active" : ""}`}
-                      onClick={() => toggleTransmit(`channel:${channel.id}`)}
-                      aria-pressed={transmittingTargets.has(`channel:${channel.id}`)}
-                      aria-label={`Transmit to ${channel.name}`}
-                      disabled={!controlsEnabled}
-                      title={controlsEnabled ? "Transmit" : disabledReason}
-                    >
-                      <Icon path={mdiSend} size={16} />
-                    </button>
+                    <div className="card-controls">
+                      <button
+                        type="button"
+                        className={`card-control ${listeningTargets.has(`channel:${channel.id}`) ? "card-control--active" : ""}`}
+                        onClick={() => toggleListen(`channel:${channel.id}`)}
+                        aria-pressed={listeningTargets.has(`channel:${channel.id}`)}
+                        aria-label={`Listen to ${channel.name}`}
+                        disabled={!controlsEnabled}
+                        title={controlsEnabled ? "Listen" : disabledReason}
+                      >
+                        <Icon path={mdiHeadset} size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        className={`card-control card-control--transmit ${
+                          transmittingTargets.has(`channel:${channel.id}`) ? "card-control--active" : ""
+                        }`}
+                        onClick={() => toggleTransmit(`channel:${channel.id}`)}
+                        aria-pressed={transmittingTargets.has(`channel:${channel.id}`)}
+                        aria-label={`Transmit to ${channel.name}`}
+                        disabled={!controlsEnabled}
+                        title={controlsEnabled ? "Transmit" : disabledReason}
+                      >
+                        <Icon path={mdiSend} size={16} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}

@@ -188,14 +188,15 @@ const UsersSettings = ({ eventId, overview, onReload }) => {
             <div>
               <div className="checkbox-grid__title">Teams</div>
               {overview.teams.map((team) => (
-                <label key={team.id} className="checkbox-grid__item">
+                <div key={team.id} className="checkbox-grid__row">
+                  <span className="checkbox-grid__label">{team.name}</span>
                   <input
                     type="checkbox"
                     checked={assign.teamIds.includes(team.id)}
                     onChange={() => updateAssignList("teamIds", team.id)}
+                    aria-label={`Assign ${team.name}`}
                   />
-                  {team.name}
-                </label>
+                </div>
               ))}
             </div>
             <div>
@@ -209,14 +210,15 @@ const UsersSettings = ({ eventId, overview, onReload }) => {
                   <div key={team.id} className="checkbox-grid__group">
                     <div className="checkbox-grid__group-title">{team.name}</div>
                     {channels.map((channel) => (
-                      <label key={channel.id} className="checkbox-grid__item">
+                      <div key={channel.id} className="checkbox-grid__row">
+                        <span className="checkbox-grid__label">{channel.name}</span>
                         <input
                           type="checkbox"
                           checked={assign.channelIds.includes(channel.id)}
                           onChange={() => updateAssignList("channelIds", channel.id)}
+                          aria-label={`Assign ${channel.name}`}
                         />
-                        {channel.name}
-                      </label>
+                      </div>
                     ))}
                   </div>
                 );
@@ -225,14 +227,15 @@ const UsersSettings = ({ eventId, overview, onReload }) => {
                 <div className="checkbox-grid__group">
                   <div className="checkbox-grid__group-title">Admin channels</div>
                   {adminChannels.map((channel) => (
-                    <label key={channel.id} className="checkbox-grid__item">
+                    <div key={channel.id} className="checkbox-grid__row">
+                      <span className="checkbox-grid__label">{channel.name}</span>
                       <input
                         type="checkbox"
                         checked={assign.channelIds.includes(channel.id)}
                         onChange={() => updateAssignList("channelIds", channel.id)}
+                        aria-label={`Assign ${channel.name}`}
                       />
-                      {channel.name}
-                    </label>
+                    </div>
                   ))}
                 </div>
               ) : null}
