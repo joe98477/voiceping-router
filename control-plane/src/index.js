@@ -52,6 +52,7 @@ const DEFAULT_LIMITS = {
 };
 
 const ACTIVE_TRAFFIC_WINDOW_MS = 60 * 1000;
+const ACTIVITY_SAMPLE_SIZE = Number(process.env.ACTIVITY_SAMPLE_SIZE || 50);
 
 const parseMessageMeta = (messageId) => {
   if (!messageId || typeof messageId !== "string") {
@@ -1053,7 +1054,7 @@ app.get("/api/events/:eventId/overview", requireAuth, requireProfileComplete, re
   const latestMessages = await Promise.all(
     channelIds.map((channelId) =>
       redisClient
-        .lRange(`._g_${channelId}`, 0, 0)
+        .lRange(`._g_${channelId}`, 0, ACTIVITY_SAMPLE_SIZE - 1)
         .catch(() => [])
     )
   );
@@ -1061,15 +1062,23 @@ app.get("/api/events/:eventId/overview", requireAuth, requireProfileComplete, re
   const userLastActivity = new Map();
   latestMessages.forEach((messages, index) => {
     const channelId = channelIds[index];
-    const messageId = Array.isArray(messages) ? messages[0] : null;
-    const meta = parseMessageMeta(messageId);
-    if (meta) {
-      channelLastActivity.set(channelId, meta.timestamp);
-      const previous = userLastActivity.get(meta.fromId);
-      if (!previous || meta.timestamp > previous) {
+    if (!Array.isArray(messages)) {
+      return;
+    }
+    messages.forEach((messageId) => {
+      const meta = parseMessageMeta(messageId);
+      if (!meta) {
+        return;
+      }
+      const previousChannel = channelLastActivity.get(channelId);
+      if (!previousChannel || meta.timestamp > previousChannel) {
+        channelLastActivity.set(channelId, meta.timestamp);
+      }
+      const previousUser = userLastActivity.get(meta.fromId);
+      if (!previousUser || meta.timestamp > previousUser) {
         userLastActivity.set(meta.fromId, meta.timestamp);
       }
-    }
+    });
   });
   const activeTeamMembers = teamMemberships.reduce((acc, entry) => {
     if (!acc.has(entry.teamId)) {

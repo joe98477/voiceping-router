@@ -234,6 +234,7 @@ export default class Client extends EventEmitter {
 
   private handleStopMessage(this: Client, msg: IMessage) {
     logger.info(`handleStopMessage id ${msg.fromId} to ${msg.toId} messageType ${msg.messageType}`);
+    const stopReceivedAt = Date.now();
 
     Recorder.stop(msg, (err, messageId, duration) => {
       setTimeout(() => {
@@ -253,8 +254,41 @@ export default class Client extends EventEmitter {
 
         States.removeCurrentMessageOfUser(msg.fromId);
         if (msg.channelType === ChannelType.GROUP) {
-          States.removeCurrentMessageOfGroup(msg.toId);
-          Redis.removeCurrentMessageOfGroup(msg.toId);
+          States.getCurrentMessageOfGroup(msg.toId, (stateErr, currentMessage) => {
+            if (stateErr) {
+              debug(`id ${this.id} Failed to read current group state for ${msg.toId}: ${stateErr.message}`);
+            }
+            const currentFromId = currentMessage && currentMessage.fromId ? currentMessage.fromId.toString() : null;
+            const currentStartTime = currentMessage && currentMessage.startTime ? currentMessage.startTime : null;
+            const shouldRemove =
+              !currentFromId ||
+              (currentFromId === msg.fromId.toString() &&
+                (!currentStartTime || currentStartTime <= stopReceivedAt));
+            if (shouldRemove) {
+              States.removeCurrentMessageOfGroup(msg.toId);
+            } else {
+              debug(`id ${this.id} Skip removing current group state for ${msg.toId}` +
+                    ` startTime ${currentStartTime} stopReceivedAt ${stopReceivedAt}`);
+            }
+          });
+          Redis.getCurrentMessageOfGroup(msg.toId, (redisErr, currentMessage) => {
+            if (redisErr) {
+              debug(`id ${this.id} Failed to read current group redis for ${msg.toId}: ${redisErr.message}`);
+            }
+            const currentFromId = currentMessage && currentMessage.fromId ? currentMessage.fromId.toString() : null;
+            const currentStartTime = currentMessage && currentMessage.startTime ?
+              Number(currentMessage.startTime) : null;
+            const shouldRemove =
+              !currentFromId ||
+              (currentFromId === msg.fromId.toString() &&
+                (!currentStartTime || currentStartTime <= stopReceivedAt));
+            if (shouldRemove) {
+              Redis.removeCurrentMessageOfGroup(msg.toId);
+            } else {
+              debug(`id ${this.id} Skip removing current group redis for ${msg.toId}` +
+                    ` startTime ${currentStartTime} stopReceivedAt ${stopReceivedAt}`);
+            }
+          });
         }
         debug(`id ${this.id} Done removing current message from states`);
         States.getBusyStateOfGroup(msg.toId, (err1, busy) => {
