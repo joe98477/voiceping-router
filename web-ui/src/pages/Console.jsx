@@ -181,59 +181,62 @@ const Console = ({ user, onLogout }) => {
       <div className={`grid grid--console ${viewSettings.density === "dense" ? "grid--dense" : ""}`}>
         {viewSettings.showRoster ? (
           <section className="panel panel--roster">
-          <div className="panel__header">Roster</div>
-          <div className="panel__body">
-            {overview.roster.map((person) => (
-              <div key={person.id} className="roster-item dispatch-card">
-                <InfoPopover
-                  title={person.displayName || person.email}
-                  details={[
-                    { label: "User ID", value: person.id },
-                    { label: "Role", value: person.role },
-                    { label: "Status", value: person.status },
-                    { label: "Connections", value: "No live telemetry" },
-                    { label: "Bandwidth", value: "Not available" },
-                    { label: "Latency", value: "Not available" },
-                    { label: "Errors", value: "None reported" }
-                  ]}
-                />
-              <div key={person.id} className="roster-item info-card">
-              <div
-                key={person.id}
-                className={`roster-item status-card status-card--${statusToKey(
-                  overview.statuses?.users?.[person.id]
-                )}`}
-              >
-                <div>
-                  <div className="info-card__title">{person.displayName || person.email}</div>
-                  <div className="info-card__meta">{person.role}</div>
+            <div className="panel__header">Roster</div>
+            <div className="panel__body">
+              {overview.roster.map((person) => (
+                <div
+                  key={person.id}
+                  className={`roster-item status-card dispatch-card status-card--${statusToKey(
+                    overview.statuses?.users?.[person.id]
+                  )}`}
+                >
+                  <InfoPopover
+                    title={person.displayName || person.email}
+                    details={[
+                      { label: "User ID", value: person.id },
+                      { label: "Role", value: person.role },
+                      { label: "Status", value: person.status },
+                      { label: "Connections", value: "No live telemetry" },
+                      { label: "Bandwidth", value: "Not available" },
+                      { label: "Latency", value: "Not available" },
+                      { label: "Errors", value: "None reported" }
+                    ]}
+                  />
+                  <div>
+                    <div className="info-card__title">{person.displayName || person.email}</div>
+                    <div className="info-card__meta">{person.role}</div>
+                  </div>
+                  <div className="roster-item__actions">
+                    <span
+                      className={`pill pill--status-${statusToKey(overview.statuses?.users?.[person.id])}`}
+                    >
+                      {statusLabel(overview.statuses?.users?.[person.id])}
+                    </span>
+                    {person.status === "PENDING" ? (
+                      <>
+                        <span className="pill pill--pending">Pending approval</span>
+                        <button className="btn btn--tiny" onClick={() => approveUser(person.id)}>
+                          Approve
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
                 </div>
-                <div className="roster-item__actions">
-                  <span
-                    className={`pill pill--status-${statusToKey(overview.statuses?.users?.[person.id])}`}
-                  >
-                    {statusLabel(overview.statuses?.users?.[person.id])}
-                  </span>
-                  {person.status === "PENDING" ? (
-                    <>
-                      <span className="pill pill--pending">Pending approval</span>
-                      <button className="btn btn--tiny" onClick={() => approveUser(person.id)}>
-                        Approve
-                      </button>
-                    </>
-                  ) : null}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
+              ))}
+            </div>
+          </section>
         ) : null}
         {viewSettings.showTeams ? (
           <section className="panel panel--teams">
             <div className="panel__header">Teams</div>
             <div className="panel__body">
               {overview.teams.map((team) => (
-                <div key={team.id} className="team-card dispatch-card">
+                <div
+                  key={team.id}
+                  className={`team-card status-card dispatch-card status-card--${statusToKey(
+                    overview.statuses?.teams?.[team.id]
+                  )}`}
+                >
                   <InfoPopover
                     title={team.name}
                     details={[
@@ -252,16 +255,6 @@ const Console = ({ user, onLogout }) => {
                       { label: "Errors", value: "None reported" }
                     ]}
                   />
-                  <div className="team-card__title">{team.name}</div>
-                <div key={team.id} className="team-card info-card">
-                  <div className="info-card__title">{team.name}</div>
-                  <div className="info-card__meta">Team ID: {team.id}</div>
-                <div
-                  key={team.id}
-                  className={`team-card status-card status-card--${statusToKey(
-                    overview.statuses?.teams?.[team.id]
-                  )}`}
-                >
                   <div className="team-card__header">
                     <div className="team-card__title">{team.name}</div>
                     <span
@@ -315,44 +308,12 @@ const Console = ({ user, onLogout }) => {
             <div className="panel__header">Channels</div>
             <div className="panel__body">
               {overview.channels.map((channel) => (
-                <div key={channel.id} className="channel-card">
-                  <div className="channel-card__header">
-                    <div className="channel-card__title">{channel.name}</div>
-                    <button
-                      type="button"
-                      className={`icon-btn icon-btn--small channel-card__toggle ${
-                        listeningChannelIds.includes(channel.id) ? "is-listening" : "is-muted"
-                      }`}
-                      onClick={() => toggleChannelListen(channel.id)}
-                      aria-pressed={listeningChannelIds.includes(channel.id)}
-                      aria-label={
-                        listeningChannelIds.includes(channel.id)
-                          ? `Mute ${channel.name}`
-                          : `Listen to ${channel.name}`
-                      }
-                      title={
-                        listeningChannelIds.includes(channel.id)
-                          ? "Mute channel"
-                          : "Listen to channel"
-                      }
-                    >
-                      {listeningChannelIds.includes(channel.id) ? (
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                          <path
-                            d="M3 10v4a1 1 0 0 0 1 1h3l4 4V5L7 9H4a1 1 0 0 0-1 1Zm11.5-3.5a1 1 0 0 0-1 1v9a1 1 0 1 0 2 0v-9a1 1 0 0 0-1-1Zm4-2a1 1 0 0 0-1 1v13a1 1 0 1 0 2 0v-13a1 1 0 0 0-1-1Z"
-                            fill="currentColor"
-                          />
-                        </svg>
-                      ) : (
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                          <path
-                            d="M3 10v4a1 1 0 0 0 1 1h3l4 4V5L7 9H4a1 1 0 0 0-1 1Zm9.2-2.2a1 1 0 0 1 1.4 0l6.8 6.8a1 1 0 0 1-1.4 1.4l-6.8-6.8a1 1 0 0 1 0-1.4Zm6.8 0a1 1 0 0 1 0 1.4l-6.8 6.8a1 1 0 1 1-1.4-1.4l6.8-6.8a1 1 0 0 1 1.4 0Z"
-                            fill="currentColor"
-                          />
-                        </svg>
-                      )}
-                    </button>
-                <div key={channel.id} className="channel-card dispatch-card">
+                <div
+                  key={channel.id}
+                  className={`channel-card status-card dispatch-card status-card--${statusToKey(
+                    overview.statuses?.channels?.[channel.id]
+                  )}`}
+                >
                   <InfoPopover
                     title={channel.name}
                     details={[
@@ -374,18 +335,44 @@ const Console = ({ user, onLogout }) => {
                       { label: "Errors", value: "None reported" }
                     ]}
                   />
-                  <div className="channel-card__title">{channel.name}</div>
-                <div key={channel.id} className="channel-card info-card">
-                  <div className="info-card__title">{channel.name}</div>
-                  <div className="info-card__meta">
-                <div
-                  key={channel.id}
-                  className={`channel-card status-card status-card--${statusToKey(
-                    overview.statuses?.channels?.[channel.id]
-                  )}`}
-                >
                   <div className="channel-card__header">
-                    <div className="channel-card__title">{channel.name}</div>
+                    <div>
+                      <div className="channel-card__title">{channel.name}</div>
+                      <button
+                        type="button"
+                        className={`icon-btn icon-btn--small channel-card__toggle ${
+                          listeningChannelIds.includes(channel.id) ? "is-listening" : "is-muted"
+                        }`}
+                        onClick={() => toggleChannelListen(channel.id)}
+                        aria-pressed={listeningChannelIds.includes(channel.id)}
+                        aria-label={
+                          listeningChannelIds.includes(channel.id)
+                            ? `Mute ${channel.name}`
+                            : `Listen to ${channel.name}`
+                        }
+                        title={
+                          listeningChannelIds.includes(channel.id)
+                            ? "Mute channel"
+                            : "Listen to channel"
+                        }
+                      >
+                        {listeningChannelIds.includes(channel.id) ? (
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path
+                              d="M3 10v4a1 1 0 0 0 1 1h3l4 4V5L7 9H4a1 1 0 0 0-1 1Zm11.5-3.5a1 1 0 0 0-1 1v9a1 1 0 1 0 2 0v-9a1 1 0 0 0-1-1Zm4-2a1 1 0 0 0-1 1v13a1 1 0 1 0 2 0v-13a1 1 0 0 0-1-1Z"
+                              fill="currentColor"
+                            />
+                          </svg>
+                        ) : (
+                          <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path
+                              d="M3 10v4a1 1 0 0 0 1 1h3l4 4V5L7 9H4a1 1 0 0 0-1 1Zm9.2-2.2a1 1 0 0 1 1.4 0l6.8 6.8a1 1 0 0 1-1.4 1.4l-6.8-6.8a1 1 0 0 1 0-1.4Zm6.8 0a1 1 0 0 1 0 1.4l-6.8 6.8a1 1 0 1 1-1.4-1.4l6.8-6.8a1 1 0 0 1 1.4 0Z"
+                              fill="currentColor"
+                            />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
                     <span
                       className={`pill pill--status-${statusToKey(overview.statuses?.channels?.[channel.id])}`}
                     >
