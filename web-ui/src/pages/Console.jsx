@@ -159,6 +159,7 @@ const Console = ({ user, onLogout }) => {
           <div className="panel__header">Roster</div>
           <div className="panel__body">
             {overview.roster.map((person) => (
+              <div key={person.id} className="roster-item info-card">
               <div
                 key={person.id}
                 className={`roster-item status-card status-card--${statusToKey(
@@ -166,8 +167,8 @@ const Console = ({ user, onLogout }) => {
                 )}`}
               >
                 <div>
-                  <div className="roster-item__name">{person.displayName || person.email}</div>
-                  <div className="roster-item__meta">{person.role}</div>
+                  <div className="info-card__title">{person.displayName || person.email}</div>
+                  <div className="info-card__meta">{person.role}</div>
                 </div>
                 <div className="roster-item__actions">
                   <span
@@ -194,6 +195,9 @@ const Console = ({ user, onLogout }) => {
             <div className="panel__header">Teams</div>
             <div className="panel__body">
               {overview.teams.map((team) => (
+                <div key={team.id} className="team-card info-card">
+                  <div className="info-card__title">{team.name}</div>
+                  <div className="info-card__meta">Team ID: {team.id}</div>
                 <div
                   key={team.id}
                   className={`team-card status-card status-card--${statusToKey(
@@ -253,6 +257,9 @@ const Console = ({ user, onLogout }) => {
             <div className="panel__header">Channels</div>
             <div className="panel__body">
               {overview.channels.map((channel) => (
+                <div key={channel.id} className="channel-card info-card">
+                  <div className="info-card__title">{channel.name}</div>
+                  <div className="info-card__meta">
                 <div
                   key={channel.id}
                   className={`channel-card status-card status-card--${statusToKey(
