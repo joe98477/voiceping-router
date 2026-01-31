@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { apiGet, apiPatch } from "../api.js";
 import SettingsDrawer from "../components/SettingsDrawer.jsx";
+import InfoPopover from "../components/InfoPopover.jsx";
 
 const Console = ({ user, onLogout }) => {
   const { eventId } = useParams();
@@ -100,7 +101,19 @@ const Console = ({ user, onLogout }) => {
           <div className="panel__header">Roster</div>
           <div className="panel__body">
             {overview.roster.map((person) => (
-              <div key={person.id} className="roster-item">
+              <div key={person.id} className="roster-item dispatch-card">
+                <InfoPopover
+                  title={person.displayName || person.email}
+                  details={[
+                    { label: "User ID", value: person.id },
+                    { label: "Role", value: person.role },
+                    { label: "Status", value: person.status },
+                    { label: "Connections", value: "No live telemetry" },
+                    { label: "Bandwidth", value: "Not available" },
+                    { label: "Latency", value: "Not available" },
+                    { label: "Errors", value: "None reported" }
+                  ]}
+                />
                 <div>
                   <div className="roster-item__name">{person.displayName || person.email}</div>
                   <div className="roster-item__meta">{person.role}</div>
@@ -121,7 +134,25 @@ const Console = ({ user, onLogout }) => {
             <div className="panel__header">Teams</div>
             <div className="panel__body">
               {overview.teams.map((team) => (
-                <div key={team.id} className="team-card">
+                <div key={team.id} className="team-card dispatch-card">
+                  <InfoPopover
+                    title={team.name}
+                    details={[
+                      { label: "Team ID", value: team.id },
+                      {
+                        label: "Users",
+                        value: overview.teamMemberCounts?.[team.id] ?? 0
+                      },
+                      {
+                        label: "Channels",
+                        value: overview.channels.filter((channel) => channel.teamId === team.id).length
+                      },
+                      { label: "Connections", value: "No live telemetry" },
+                      { label: "Bandwidth", value: "Not available" },
+                      { label: "Latency", value: "Not available" },
+                      { label: "Errors", value: "None reported" }
+                    ]}
+                  />
                   <div className="team-card__title">{team.name}</div>
                   <div className="team-card__meta">Team ID: {team.id}</div>
                 </div>
@@ -134,7 +165,28 @@ const Console = ({ user, onLogout }) => {
             <div className="panel__header">Channels</div>
             <div className="panel__body">
               {overview.channels.map((channel) => (
-                <div key={channel.id} className="channel-card">
+                <div key={channel.id} className="channel-card dispatch-card">
+                  <InfoPopover
+                    title={channel.name}
+                    details={[
+                      { label: "Channel ID", value: channel.id },
+                      {
+                        label: "Users",
+                        value: overview.channelMemberCounts?.[channel.id] ?? 0
+                      },
+                      { label: "Type", value: channel.type === "EVENT_ADMIN" ? "Admin" : "Team" },
+                      {
+                        label: "Team",
+                        value: channel.teamId
+                          ? overview.teams.find((team) => team.id === channel.teamId)?.name || "Unknown"
+                          : "Event"
+                      },
+                      { label: "Connections", value: "No live telemetry" },
+                      { label: "Bandwidth", value: "Not available" },
+                      { label: "Latency", value: "Not available" },
+                      { label: "Errors", value: "None reported" }
+                    ]}
+                  />
                   <div className="channel-card__title">{channel.name}</div>
                   <div className="channel-card__meta">
                     <span>{channel.type === "EVENT_ADMIN" ? "Admin" : "Team"}</span>
