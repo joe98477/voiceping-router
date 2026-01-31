@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { apiGet, apiPatch } from "../api.js";
 import SettingsDrawer from "../components/SettingsDrawer.jsx";
+import InfoPopover from "../components/InfoPopover.jsx";
 import { statusLabel, statusToKey } from "../utils/status.js";
 
 const Console = ({ user, onLogout }) => {
@@ -159,6 +160,19 @@ const Console = ({ user, onLogout }) => {
           <div className="panel__header">Roster</div>
           <div className="panel__body">
             {overview.roster.map((person) => (
+              <div key={person.id} className="roster-item dispatch-card">
+                <InfoPopover
+                  title={person.displayName || person.email}
+                  details={[
+                    { label: "User ID", value: person.id },
+                    { label: "Role", value: person.role },
+                    { label: "Status", value: person.status },
+                    { label: "Connections", value: "No live telemetry" },
+                    { label: "Bandwidth", value: "Not available" },
+                    { label: "Latency", value: "Not available" },
+                    { label: "Errors", value: "None reported" }
+                  ]}
+                />
               <div key={person.id} className="roster-item info-card">
               <div
                 key={person.id}
@@ -195,6 +209,26 @@ const Console = ({ user, onLogout }) => {
             <div className="panel__header">Teams</div>
             <div className="panel__body">
               {overview.teams.map((team) => (
+                <div key={team.id} className="team-card dispatch-card">
+                  <InfoPopover
+                    title={team.name}
+                    details={[
+                      { label: "Team ID", value: team.id },
+                      {
+                        label: "Users",
+                        value: overview.teamMemberCounts?.[team.id] ?? 0
+                      },
+                      {
+                        label: "Channels",
+                        value: overview.channels.filter((channel) => channel.teamId === team.id).length
+                      },
+                      { label: "Connections", value: "No live telemetry" },
+                      { label: "Bandwidth", value: "Not available" },
+                      { label: "Latency", value: "Not available" },
+                      { label: "Errors", value: "None reported" }
+                    ]}
+                  />
+                  <div className="team-card__title">{team.name}</div>
                 <div key={team.id} className="team-card info-card">
                   <div className="info-card__title">{team.name}</div>
                   <div className="info-card__meta">Team ID: {team.id}</div>
@@ -257,6 +291,29 @@ const Console = ({ user, onLogout }) => {
             <div className="panel__header">Channels</div>
             <div className="panel__body">
               {overview.channels.map((channel) => (
+                <div key={channel.id} className="channel-card dispatch-card">
+                  <InfoPopover
+                    title={channel.name}
+                    details={[
+                      { label: "Channel ID", value: channel.id },
+                      {
+                        label: "Users",
+                        value: overview.channelMemberCounts?.[channel.id] ?? 0
+                      },
+                      { label: "Type", value: channel.type === "EVENT_ADMIN" ? "Admin" : "Team" },
+                      {
+                        label: "Team",
+                        value: channel.teamId
+                          ? overview.teams.find((team) => team.id === channel.teamId)?.name || "Unknown"
+                          : "Event"
+                      },
+                      { label: "Connections", value: "No live telemetry" },
+                      { label: "Bandwidth", value: "Not available" },
+                      { label: "Latency", value: "Not available" },
+                      { label: "Errors", value: "None reported" }
+                    ]}
+                  />
+                  <div className="channel-card__title">{channel.name}</div>
                 <div key={channel.id} className="channel-card info-card">
                   <div className="info-card__title">{channel.name}</div>
                   <div className="info-card__meta">

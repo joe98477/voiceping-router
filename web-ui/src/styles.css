@@ -352,6 +352,77 @@ a {
   cursor: not-allowed;
 }
 
+.dispatch-card {
+  position: relative;
+}
+
+.dispatch-card__info {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+.dispatch-card__info-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: white;
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 0.75rem;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.dispatch-card__popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 220px;
+  max-width: 260px;
+  background: var(--surface);
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  box-shadow: 0 16px 30px var(--shadow);
+  padding: 12px;
+  z-index: 10;
+  display: grid;
+  gap: 8px;
+  font-size: 0.85rem;
+}
+
+.dispatch-card__popover-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.dispatch-card__popover-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.dispatch-card__popover-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 8px;
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+.dispatch-card__popover-row dt {
+  color: var(--muted);
+  margin: 0;
+}
+
+.dispatch-card__popover-row dd {
+  margin: 0;
+  text-align: right;
+  word-break: break-word;
+}
+
 .roster-item {
   grid-template-columns: 1fr auto;
   align-items: center;
