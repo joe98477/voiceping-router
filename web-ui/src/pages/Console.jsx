@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { apiGet, apiPatch } from "../api.js";
 import SettingsDrawer from "../components/SettingsDrawer.jsx";
 import InfoPopover from "../components/InfoPopover.jsx";
+import { statusLabel, statusToKey } from "../utils/status.js";
 
 const Console = ({ user, onLogout }) => {
   const { eventId } = useParams();
@@ -10,6 +11,9 @@ const Console = ({ user, onLogout }) => {
   const [overview, setOverview] = useState(null);
   const [error, setError] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [isOnline, setIsOnline] = useState(() => navigator.onLine);
+  const [listeningTargets, setListeningTargets] = useState(() => new Set());
+  const [transmittingTargets, setTransmittingTargets] = useState(() => new Set());
   const [viewSettings, setViewSettings] = useState(() => {
     const fallback = {
       showRoster: true,
@@ -47,13 +51,60 @@ const Console = ({ user, onLogout }) => {
   }, [eventId]);
 
   useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
     localStorage.setItem("vp.viewSettings", JSON.stringify(viewSettings));
   }, [viewSettings]);
+
+  const currentMember = overview?.roster?.find((person) => person.id === user.id);
+  const hasDispatchPermission = user.globalRole === "ADMIN" || currentMember?.role === "DISPATCH";
+  const controlsEnabled = isOnline && hasDispatchPermission;
+  const disabledReason = !isOnline ? "Offline" : hasDispatchPermission ? "" : "No permission";
 
   const approveUser = async (userId) => {
     await apiPatch(`/api/events/${eventId}/users/${userId}/approve`);
     loadOverview();
   };
+
+  const toggleListen = (targetKey) => {
+    setListeningTargets((prev) => {
+      const next = new Set(prev);
+      if (next.has(targetKey)) {
+        next.delete(targetKey);
+      } else {
+        next.add(targetKey);
+      }
+      return next;
+    });
+  };
+
+  const toggleTransmit = (targetKey) => {
+    setTransmittingTargets((prev) => {
+      const next = new Set(prev);
+      if (next.has(targetKey)) {
+        next.delete(targetKey);
+      } else {
+        next.add(targetKey);
+      }
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (!controlsEnabled) {
+      setListeningTargets(new Set());
+      setTransmittingTargets(new Set());
+    }
+  }, [controlsEnabled]);
 
   if (!overview && error) {
     return (
@@ -94,6 +145,14 @@ const Console = ({ user, onLogout }) => {
           </button>
         </div>
       </header>
+      <div className="status-legend">
+        <span className="pill pill--status-active">Active</span>
+        <span className="status-legend__text">Active traffic</span>
+        <span className="pill pill--status-standby">Standby</span>
+        <span className="status-legend__text">Idle but connected</span>
+        <span className="pill pill--status-offline">Offline</span>
+        <span className="status-legend__text">No users connected</span>
+      </div>
       {error ? <div className="alert">{error}</div> : null}
       <div className={`grid grid--console ${viewSettings.density === "dense" ? "grid--dense" : ""}`}>
         {viewSettings.showRoster ? (
@@ -114,16 +173,32 @@ const Console = ({ user, onLogout }) => {
                     { label: "Errors", value: "None reported" }
                   ]}
                 />
+              <div key={person.id} className="roster-item info-card">
+              <div
+                key={person.id}
+                className={`roster-item status-card status-card--${statusToKey(
+                  overview.statuses?.users?.[person.id]
+                )}`}
+              >
                 <div>
-                  <div className="roster-item__name">{person.displayName || person.email}</div>
-                  <div className="roster-item__meta">{person.role}</div>
+                  <div className="info-card__title">{person.displayName || person.email}</div>
+                  <div className="info-card__meta">{person.role}</div>
                 </div>
-                <div className={`pill pill--${person.status.toLowerCase()}`}>{person.status}</div>
-                {person.status === "PENDING" ? (
-                  <button className="btn btn--tiny" onClick={() => approveUser(person.id)}>
-                    Approve
-                  </button>
-                ) : null}
+                <div className="roster-item__actions">
+                  <span
+                    className={`pill pill--status-${statusToKey(overview.statuses?.users?.[person.id])}`}
+                  >
+                    {statusLabel(overview.statuses?.users?.[person.id])}
+                  </span>
+                  {person.status === "PENDING" ? (
+                    <>
+                      <span className="pill pill--pending">Pending approval</span>
+                      <button className="btn btn--tiny" onClick={() => approveUser(person.id)}>
+                        Approve
+                      </button>
+                    </>
+                  ) : null}
+                </div>
               </div>
             ))}
           </div>
@@ -154,7 +229,58 @@ const Console = ({ user, onLogout }) => {
                     ]}
                   />
                   <div className="team-card__title">{team.name}</div>
+                <div key={team.id} className="team-card info-card">
+                  <div className="info-card__title">{team.name}</div>
+                  <div className="info-card__meta">Team ID: {team.id}</div>
+                <div
+                  key={team.id}
+                  className={`team-card status-card status-card--${statusToKey(
+                    overview.statuses?.teams?.[team.id]
+                  )}`}
+                >
+                  <div className="team-card__header">
+                    <div className="team-card__title">{team.name}</div>
+                    <span
+                      className={`pill pill--status-${statusToKey(overview.statuses?.teams?.[team.id])}`}
+                    >
+                      {statusLabel(overview.statuses?.teams?.[team.id])}
+                    </span>
+                  </div>
                   <div className="team-card__meta">Team ID: {team.id}</div>
+                  <div className="card-controls">
+                    <button
+                      type="button"
+                      className={`card-control ${listeningTargets.has(`team:${team.id}`) ? "card-control--active" : ""}`}
+                      onClick={() => toggleListen(`team:${team.id}`)}
+                      aria-pressed={listeningTargets.has(`team:${team.id}`)}
+                      aria-label={`Listen to ${team.name}`}
+                      disabled={!controlsEnabled}
+                      title={controlsEnabled ? "Listen" : disabledReason}
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                          d="M12 3a7 7 0 0 0-7 7v4a4 4 0 0 0 4 4h1v2a2 2 0 0 0 4 0v-2h1a4 4 0 0 0 4-4v-4a7 7 0 0 0-7-7Zm3 11a2 2 0 0 1-2 2h-2v4a1 1 0 1 1-2 0v-4H9a2 2 0 0 1-2-2v-4a5 5 0 1 1 10 0v4Z"
+                          fill="currentColor"
+                        />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      className={`card-control card-control--transmit ${transmittingTargets.has(`team:${team.id}`) ? "card-control--active" : ""}`}
+                      onClick={() => toggleTransmit(`team:${team.id}`)}
+                      aria-pressed={transmittingTargets.has(`team:${team.id}`)}
+                      aria-label={`Transmit to ${team.name}`}
+                      disabled={!controlsEnabled}
+                      title={controlsEnabled ? "Transmit" : disabledReason}
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                          d="M4 12a1 1 0 0 1 1-1h9.6l-3.3-3.3a1 1 0 1 1 1.4-1.4l5 5a1 1 0 0 1 0 1.4l-5 5a1 1 0 1 1-1.4-1.4l3.3-3.3H5a1 1 0 0 1-1-1Z"
+                          fill="currentColor"
+                        />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -188,9 +314,60 @@ const Console = ({ user, onLogout }) => {
                     ]}
                   />
                   <div className="channel-card__title">{channel.name}</div>
+                <div key={channel.id} className="channel-card info-card">
+                  <div className="info-card__title">{channel.name}</div>
+                  <div className="info-card__meta">
+                <div
+                  key={channel.id}
+                  className={`channel-card status-card status-card--${statusToKey(
+                    overview.statuses?.channels?.[channel.id]
+                  )}`}
+                >
+                  <div className="channel-card__header">
+                    <div className="channel-card__title">{channel.name}</div>
+                    <span
+                      className={`pill pill--status-${statusToKey(overview.statuses?.channels?.[channel.id])}`}
+                    >
+                      {statusLabel(overview.statuses?.channels?.[channel.id])}
+                    </span>
+                  </div>
                   <div className="channel-card__meta">
                     <span>{channel.type === "EVENT_ADMIN" ? "Admin" : "Team"}</span>
                     <span>ID: {channel.id}</span>
+                  </div>
+                  <div className="card-controls">
+                    <button
+                      type="button"
+                      className={`card-control ${listeningTargets.has(`channel:${channel.id}`) ? "card-control--active" : ""}`}
+                      onClick={() => toggleListen(`channel:${channel.id}`)}
+                      aria-pressed={listeningTargets.has(`channel:${channel.id}`)}
+                      aria-label={`Listen to ${channel.name}`}
+                      disabled={!controlsEnabled}
+                      title={controlsEnabled ? "Listen" : disabledReason}
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                          d="M12 3a7 7 0 0 0-7 7v4a4 4 0 0 0 4 4h1v2a2 2 0 0 0 4 0v-2h1a4 4 0 0 0 4-4v-4a7 7 0 0 0-7-7Zm3 11a2 2 0 0 1-2 2h-2v4a1 1 0 1 1-2 0v-4H9a2 2 0 0 1-2-2v-4a5 5 0 1 1 10 0v4Z"
+                          fill="currentColor"
+                        />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      className={`card-control card-control--transmit ${transmittingTargets.has(`channel:${channel.id}`) ? "card-control--active" : ""}`}
+                      onClick={() => toggleTransmit(`channel:${channel.id}`)}
+                      aria-pressed={transmittingTargets.has(`channel:${channel.id}`)}
+                      aria-label={`Transmit to ${channel.name}`}
+                      disabled={!controlsEnabled}
+                      title={controlsEnabled ? "Transmit" : disabledReason}
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                          d="M4 12a1 1 0 0 1 1-1h9.6l-3.3-3.3a1 1 0 1 1 1.4-1.4l5 5a1 1 0 0 1 0 1.4l-5 5a1 1 0 1 1-1.4-1.4l3.3-3.3H5a1 1 0 0 1-1-1Z"
+                          fill="currentColor"
+                        />
+                      </svg>
+                    </button>
                   </div>
                 </div>
               ))}
