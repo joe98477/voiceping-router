@@ -11,6 +11,19 @@
   --accent-2: #1e91d6;
   --shadow: rgba(13, 16, 20, 0.1);
   --border: rgba(17, 20, 24, 0.12);
+  --radius-pill: 999px;
+  --radius-info-card: 14px;
+  --info-card-padding: 12px;
+  --info-card-gap: 8px;
+  --info-card-bg: #fffaf2;
+  --info-card-meta-size: 0.8rem;
+  --pill-font-size: 0.75rem;
+  --pill-padding-x: 12px;
+  --pill-padding-y: 4px;
+  --pill-height: 24px;
+  --icon-btn-size: 40px;
+  --icon-btn-icon-size: 20px;
+  --stack-gap: 12px;
 }
 
 * {
@@ -209,16 +222,16 @@ a {
   background: white;
   color: var(--ink);
   border-radius: 12px;
-  width: 40px;
-  height: 40px;
+  width: var(--icon-btn-size);
+  height: var(--icon-btn-size);
   display: grid;
   place-items: center;
   cursor: pointer;
 }
 
 .icon-btn svg {
-  width: 20px;
-  height: 20px;
+  width: var(--icon-btn-icon-size);
+  height: var(--icon-btn-icon-size);
 }
 
 .grid {
@@ -269,18 +282,34 @@ a {
 
 .panel__body {
   display: grid;
+  gap: var(--stack-gap);
+}
+
+.info-card {
+  padding: var(--info-card-padding);
+  border-radius: var(--radius-info-card);
+  border: 1px solid var(--border);
+  display: grid;
+  gap: var(--info-card-gap);
+  background: var(--info-card-bg);
+}
+
+.info-card__title {
+  font-weight: 600;
+}
+
+.info-card__meta {
+  font-size: var(--info-card-meta-size);
+  color: var(--muted);
+  display: flex;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .roster-item,
 .team-card,
 .channel-card {
-  padding: 12px;
-  border-radius: 14px;
-  border: 1px solid var(--border);
   display: grid;
-  gap: 6px;
-  background: #fffaf2;
 }
 
 .roster-item {
@@ -288,19 +317,14 @@ a {
   align-items: center;
 }
 
-.roster-item__name {
-  font-weight: 600;
-}
-
-.roster-item__meta {
-  font-size: 0.8rem;
-  color: var(--muted);
-}
-
 .pill {
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 0.75rem;
+  padding: var(--pill-padding-y) var(--pill-padding-x);
+  border-radius: var(--radius-pill);
+  font-size: var(--pill-font-size);
+  min-height: var(--pill-height);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: #f0f0f0;
 }
 
@@ -326,8 +350,8 @@ a {
 
 .status-list {
   display: grid;
-  gap: 10px;
-  margin-top: 12px;
+  gap: var(--stack-gap);
+  margin-top: var(--stack-gap);
 }
 
 .status-list--compact {
@@ -419,8 +443,8 @@ a {
 
 .list {
   display: grid;
-  gap: 10px;
-  margin-top: 12px;
+  gap: var(--stack-gap);
+  margin-top: var(--stack-gap);
 }
 
 .list__item {

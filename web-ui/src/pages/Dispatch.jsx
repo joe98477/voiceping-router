@@ -47,10 +47,10 @@ const Dispatch = ({ user, onLogout }) => {
           <div className="panel__header">Roster</div>
           <div className="panel__body">
             {overview.roster.map((person) => (
-              <div key={person.id} className="roster-item">
+              <div key={person.id} className="roster-item info-card">
                 <div>
-                  <div className="roster-item__name">{person.displayName || person.email}</div>
-                  <div className="roster-item__meta">{person.role}</div>
+                  <div className="info-card__title">{person.displayName || person.email}</div>
+                  <div className="info-card__meta">{person.role}</div>
                 </div>
                 <div className={`pill pill--${person.status.toLowerCase()}`}>{person.status}</div>
                 {person.status === "PENDING" ? (
@@ -66,9 +66,9 @@ const Dispatch = ({ user, onLogout }) => {
           <div className="panel__header">Teams</div>
           <div className="panel__body">
             {overview.teams.map((team) => (
-              <div key={team.id} className="team-card">
-                <div className="team-card__title">{team.name}</div>
-                <div className="team-card__meta">Team ID: {team.id}</div>
+              <div key={team.id} className="team-card info-card">
+                <div className="info-card__title">{team.name}</div>
+                <div className="info-card__meta">Team ID: {team.id}</div>
               </div>
             ))}
           </div>
@@ -77,9 +77,9 @@ const Dispatch = ({ user, onLogout }) => {
           <div className="panel__header">Channels</div>
           <div className="panel__body">
             {overview.channels.map((channel) => (
-              <div key={channel.id} className="channel-card">
-                <div className="channel-card__title">{channel.name}</div>
-                <div className="channel-card__meta">
+              <div key={channel.id} className="channel-card info-card">
+                <div className="info-card__title">{channel.name}</div>
+                <div className="info-card__meta">
                   <span>{channel.type === "EVENT_ADMIN" ? "Admin" : "Team"}</span>
                   <span>ID: {channel.id}</span>
                 </div>
