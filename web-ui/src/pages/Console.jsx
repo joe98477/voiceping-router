@@ -10,6 +10,7 @@ const Console = ({ user, onLogout }) => {
   const navigate = useNavigate();
   const [overview, setOverview] = useState(null);
   const [error, setError] = useState("");
+  const [listeningChannelIds, setListeningChannelIds] = useState([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(() => navigator.onLine);
   const [listeningTargets, setListeningTargets] = useState(() => new Set());
@@ -35,6 +36,7 @@ const Console = ({ user, onLogout }) => {
     apiGet(`/api/events/${eventId}/overview`)
       .then((data) => {
         setOverview(data);
+        setListeningChannelIds(data.listenerChannelIds || []);
         setError("");
       })
       .catch((err) => {
@@ -73,6 +75,20 @@ const Console = ({ user, onLogout }) => {
   const approveUser = async (userId) => {
     await apiPatch(`/api/events/${eventId}/users/${userId}/approve`);
     loadOverview();
+  };
+
+  const toggleChannelListen = async (channelId) => {
+    const isListening = listeningChannelIds.includes(channelId);
+    const nextChannelIds = isListening
+      ? listeningChannelIds.filter((id) => id !== channelId)
+      : [...listeningChannelIds, channelId];
+    try {
+      await apiPatch(`/api/events/${eventId}/users/${user.id}/channels`, { channelIds: nextChannelIds });
+      setListeningChannelIds(nextChannelIds);
+      setError("");
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
   const toggleListen = (targetKey) => {
@@ -291,6 +307,43 @@ const Console = ({ user, onLogout }) => {
             <div className="panel__header">Channels</div>
             <div className="panel__body">
               {overview.channels.map((channel) => (
+                <div key={channel.id} className="channel-card">
+                  <div className="channel-card__header">
+                    <div className="channel-card__title">{channel.name}</div>
+                    <button
+                      type="button"
+                      className={`icon-btn icon-btn--small channel-card__toggle ${
+                        listeningChannelIds.includes(channel.id) ? "is-listening" : "is-muted"
+                      }`}
+                      onClick={() => toggleChannelListen(channel.id)}
+                      aria-pressed={listeningChannelIds.includes(channel.id)}
+                      aria-label={
+                        listeningChannelIds.includes(channel.id)
+                          ? `Mute ${channel.name}`
+                          : `Listen to ${channel.name}`
+                      }
+                      title={
+                        listeningChannelIds.includes(channel.id)
+                          ? "Mute channel"
+                          : "Listen to channel"
+                      }
+                    >
+                      {listeningChannelIds.includes(channel.id) ? (
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path
+                            d="M3 10v4a1 1 0 0 0 1 1h3l4 4V5L7 9H4a1 1 0 0 0-1 1Zm11.5-3.5a1 1 0 0 0-1 1v9a1 1 0 1 0 2 0v-9a1 1 0 0 0-1-1Zm4-2a1 1 0 0 0-1 1v13a1 1 0 1 0 2 0v-13a1 1 0 0 0-1-1Z"
+                            fill="currentColor"
+                          />
+                        </svg>
+                      ) : (
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path
+                            d="M3 10v4a1 1 0 0 0 1 1h3l4 4V5L7 9H4a1 1 0 0 0-1 1Zm9.2-2.2a1 1 0 0 1 1.4 0l6.8 6.8a1 1 0 0 1-1.4 1.4l-6.8-6.8a1 1 0 0 1 0-1.4Zm6.8 0a1 1 0 0 1 0 1.4l-6.8 6.8a1 1 0 1 1-1.4-1.4l6.8-6.8a1 1 0 0 1 1.4 0Z"
+                            fill="currentColor"
+                          />
+                        </svg>
+                      )}
+                    </button>
                 <div key={channel.id} className="channel-card dispatch-card">
                   <InfoPopover
                     title={channel.name}

@@ -1020,6 +1020,11 @@ app.get("/api/events/:eventId/overview", requireAuth, requireProfileComplete, re
   const event = await prisma.event.findUnique({ where: { id: eventId } });
   const teams = await prisma.team.findMany({ where: { eventId }, orderBy: { sortOrder: "asc" } });
   const channels = await prisma.channel.findMany({ where: { eventId }, orderBy: { sortOrder: "asc" } });
+  const listenerMemberships = await prisma.channelMembership.findMany({
+    where: { userId: req.user.id, status: "ACTIVE", channel: { eventId } },
+    select: { channelId: true }
+  });
+  const listenerChannelIds = listenerMemberships.map((entry) => entry.channelId);
   const teamMemberCounts = await prisma.teamMembership.groupBy({
     by: ["teamId"],
     _count: { teamId: true },
@@ -1105,6 +1110,7 @@ app.get("/api/events/:eventId/overview", requireAuth, requireProfileComplete, re
     event,
     teams,
     channels,
+    listenerChannelIds,
     teamMemberCounts: teamMemberCounts.reduce((acc, entry) => {
       acc[entry.teamId] = entry._count.teamId;
       return acc;
