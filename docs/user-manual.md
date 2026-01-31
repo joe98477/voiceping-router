@@ -8,6 +8,7 @@
 1. Open `http://localhost:8080`.
 2. Log in with the bootstrap credentials from `.env.test.example`.
 3. You will be required to set:
+   - Email
    - Display name
    - Strong password (12+ characters)
 4. After saving, you are redirected to the Events page.
