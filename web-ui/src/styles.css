@@ -221,6 +221,17 @@ a {
   height: 20px;
 }
 
+.icon-btn--small {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+}
+
+.icon-btn--small svg {
+  width: 16px;
+  height: 16px;
+}
+
 .grid {
   display: grid;
   gap: 20px;
@@ -281,6 +292,29 @@ a {
   display: grid;
   gap: 6px;
   background: #fffaf2;
+}
+
+.channel-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.channel-card__title {
+  font-weight: 600;
+}
+
+.channel-card__toggle.is-listening {
+  background: #d5f1d3;
+  border-color: #b6e2b2;
+  color: #21612a;
+}
+
+.channel-card__toggle.is-muted {
+  background: #f7c2b6;
+  border-color: #f2b6ae;
+  color: #7f2c20;
 }
 
 .roster-item {
