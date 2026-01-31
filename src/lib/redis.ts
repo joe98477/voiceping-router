@@ -385,6 +385,23 @@ class Redis {
     });
   }
 
+  public static getCurrentMessageOfGroup(
+    groupId: numberOrString,
+    callback: (err: Error, message: {
+      audioTime?: string;
+      channelType?: string;
+      fromId?: string;
+      messageType?: string;
+      startTime?: string;
+      toId?: string;
+    }) => void
+  ) {
+    client.hgetall(Keys.forCurrentMessageOfGroup(groupId), function(err, message) {
+      if (err) { return callback(err, null); }
+      return callback(null, message);
+    });
+  }
+
   public static removeCurrentMessageOfGroup(
     groupId: numberOrString,
     callback?: (err: Error, succeed: boolean) => void

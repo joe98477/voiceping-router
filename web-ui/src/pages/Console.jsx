@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { apiGet, apiPatch } from "../api.js";
 import SettingsDrawer from "../components/SettingsDrawer.jsx";
@@ -30,6 +30,7 @@ const Console = ({ user, onLogout }) => {
       return fallback;
     }
   });
+  const listeningChannelIdsRef = useRef(listeningChannelIds);
 
   const loadOverview = () => {
     setError("");
@@ -67,6 +68,10 @@ const Console = ({ user, onLogout }) => {
     localStorage.setItem("vp.viewSettings", JSON.stringify(viewSettings));
   }, [viewSettings]);
 
+  useEffect(() => {
+    listeningChannelIdsRef.current = listeningChannelIds;
+  }, [listeningChannelIds]);
+
   const currentMember = overview?.roster?.find((person) => person.id === user.id);
   const hasDispatchPermission = user.globalRole === "ADMIN" || currentMember?.role === "DISPATCH";
   const controlsEnabled = isOnline && hasDispatchPermission;
@@ -78,16 +83,19 @@ const Console = ({ user, onLogout }) => {
   };
 
   const toggleChannelListen = async (channelId) => {
-    const isListening = listeningChannelIds.includes(channelId);
+    const currentChannels = listeningChannelIdsRef.current;
+    const isListening = currentChannels.includes(channelId);
     const nextChannelIds = isListening
-      ? listeningChannelIds.filter((id) => id !== channelId)
-      : [...listeningChannelIds, channelId];
+      ? currentChannels.filter((id) => id !== channelId)
+      : [...currentChannels, channelId];
+    listeningChannelIdsRef.current = nextChannelIds;
+    setListeningChannelIds(nextChannelIds);
+    setError("");
     try {
       await apiPatch(`/api/events/${eventId}/users/${user.id}/channels`, { channelIds: nextChannelIds });
-      setListeningChannelIds(nextChannelIds);
-      setError("");
     } catch (err) {
       setError(err.message);
+      loadOverview();
     }
   };
 
