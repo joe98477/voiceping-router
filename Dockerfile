@@ -1,8 +1,8 @@
 FROM node:16-alpine
 
 # Global dependencies
-RUN apk --no-cache add --virtual native-deps \
-    g++ gcc libgcc libstdc++ linux-headers git make python bash openssh && \
+RUN apk --no-cache add --virtual .build-deps \
+    g++ gcc libgcc libstdc++ linux-headers git make python3 bash openssh && \
     npm install --quiet node-gyp -g
 
 # App dependencies
@@ -11,7 +11,7 @@ COPY package.json ./
 RUN npm install
 
 # Remove unneeded dependencies
-RUN apk del native-deps
+RUN apk del .build-deps
 
 # Build assets
 COPY . ./
