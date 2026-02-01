@@ -27,6 +27,36 @@ type UnpackCallback = (
   message: IMessage
 ) => void;
 
+const normalizeBinaryPayload = (payload: any): any => {
+  if (!payload) {
+    return payload;
+  }
+  if (Buffer.isBuffer(payload)) {
+    return payload;
+  }
+  if (payload instanceof Uint8Array) {
+    return Buffer.from(payload);
+  }
+  if (Array.isArray(payload)) {
+    return Buffer.from(payload);
+  }
+  if (typeof payload === "object") {
+    const keys = Object.keys(payload);
+    if (keys.length === 0) {
+      return payload;
+    }
+    const isNumeric = keys.every((key) => String(Number(key)) === key);
+    if (isNumeric) {
+      const bytes = keys
+        .map((key) => Number(key))
+        .sort((a, b) => a - b)
+        .map((key) => payload[key]);
+      return Buffer.from(bytes);
+    }
+  }
+  return payload;
+};
+
 class Packer {
 
   public pack(message: IMessage, callback: PackCallback): void {
@@ -105,6 +135,7 @@ class Packer {
       messageId = decoded[MessageIndex.MESSAGE_ID];
       buffer = decoded[MessageIndex.BUFFER];
     }
+    buffer = normalizeBinaryPayload(buffer);
 
     if (!channelId) {
       toId = channelId = 0;

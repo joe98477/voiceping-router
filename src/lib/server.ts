@@ -109,7 +109,12 @@ class Server implements IServer {
   public sendMessageToGroup(this: Server, msg: IMessage) {
     logger.info(`sendMessageToGroup from: ${msg.fromId} to: ${msg.toId} messageType: ${msg.messageType}`);
     Redis.getUsersInsideGroup(msg.toId, (err, userIds) => {
-      if (err || !userIds || !(userIds instanceof Array)) {
+      const senderId = msg.fromId ? msg.fromId.toString() : "";
+      const hasUsers = userIds && userIds instanceof Array && userIds.length > 0;
+      const senderInRedis = hasUsers
+        ? userIds.map((entry) => entry.toString()).includes(senderId)
+        : false;
+      if (err || !hasUsers || !senderInRedis) {
         return States.getUsersInsideGroup(msg.toId, (err1, stateUserIds) => {
           this.broadcastToGroupWithCheck(msg, stateUserIds || []);
         });
@@ -296,7 +301,7 @@ class Server implements IServer {
         fromId: msg.fromId,
         messageType: MessageType.UNAUTHORIZED_GROUP,
         payload: "Unauthorized Group",
-        toId: msg.toId
+        toId: msg.fromId
       });
       return;
     }
