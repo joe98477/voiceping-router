@@ -92,7 +92,15 @@ class AudioOutput {
       return;
     }
     const frame = packet instanceof Uint8Array ? packet : new Uint8Array(packet);
-    const decoded = this.decoder.decodeFrame(frame);
+    if (frame.byteLength === 0) {
+      return;
+    }
+    let decoded = null;
+    try {
+      decoded = this.decoder.decodeFrame(frame);
+    } catch (err) {
+      return;
+    }
     if (!decoded) {
       return;
     }
@@ -376,9 +384,13 @@ export class VoicePingAudioClient {
     if (!shouldLoopback) {
       return;
     }
+    const validPackets = packets.filter((packet) => packet && packet.byteLength > 0);
+    if (validPackets.length === 0) {
+      return;
+    }
     this.output.ensureRunning();
     const delay = 2;
-    packets.forEach((packet, index) => {
+    validPackets.forEach((packet, index) => {
       this.output.playOpusPacket(packet, index === 0 ? delay : 0);
     });
   }
@@ -408,7 +420,13 @@ export class VoicePingAudioClient {
       if (!this.shouldPlayChannel(channelId)) {
         return;
       }
+      if (!msg.payload) {
+        return;
+      }
       const payload = msg.payload instanceof Uint8Array ? msg.payload : new Uint8Array(msg.payload);
+      if (payload.byteLength === 0) {
+        return;
+      }
       this.output.ensureRunning();
       this.output.playOpusPacket(payload);
     }
