@@ -59,7 +59,12 @@ const Console = ({ user, onLogout }) => {
   };
 
   const refreshAudioDevices = async () => {
+    if (!window.isSecureContext && window.location.hostname !== "localhost") {
+      setAudioError("Microphone access requires HTTPS or localhost");
+      return;
+    }
     if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+      setAudioError("Browser does not support microphone access");
       return;
     }
     try {
@@ -77,6 +82,10 @@ const Console = ({ user, onLogout }) => {
 
   const enableAudio = async () => {
     setAudioError("");
+    if (!window.isSecureContext && window.location.hostname !== "localhost") {
+      setAudioError("Microphone access requires HTTPS or localhost");
+      return false;
+    }
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       setAudioError("Browser does not support microphone access");
       return false;
@@ -90,6 +99,7 @@ const Console = ({ user, onLogout }) => {
       stream.getTracks().forEach((track) => track.stop());
       setAudioStatus((prev) => ({ ...prev, permission: "granted" }));
       await refreshAudioDevices();
+      setAudioError("");
       if (audioClientRef.current) {
         audioClientRef.current.resumeOutput();
       }
@@ -171,7 +181,11 @@ const Console = ({ user, onLogout }) => {
         client.connect();
         audioClientRef.current = client;
       } catch (err) {
-        setAudioError(err.message || "Unable to connect audio");
+        if (err.status === 403) {
+          setAudioError("Audio unavailable: you are not active in this event");
+        } else {
+          setAudioError(err.message || "Unable to connect audio");
+        }
       }
     };
     connectAudio();

@@ -68,6 +68,8 @@ Loopback is **dispatch UI only**:
 ## Permissions & browser requirements (normative)
 - WebCodecs (`AudioEncoder` + `MediaStreamTrackProcessor`) is required for transmit.
 - Microphone permission is required and prompted via "Enable audio".
+- Microphone access requires HTTPS or localhost; HTTP on a LAN IP will not prompt for access.
+- Browsers do not prompt for speaker access; only microphone permission is expected.
 - Chrome is the primary supported browser.
 
 ## Error handling (normative)
