@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { apiGet, apiGetStatus, apiPatch } from "../api.js";
+import { apiFetch, apiGet, apiGetStatus, apiPatch, apiPost } from "../api.js";
 import Icon from "../components/Icon.jsx";
 import { mdiArrowLeft } from "../icons.js";
 
@@ -20,6 +20,10 @@ const SystemSettings = ({ onLogout }) => {
   const [status, setStatus] = useState(null);
   const [statusError, setStatusError] = useState("");
   const [statusLoading, setStatusLoading] = useState(false);
+  const [testSeed, setTestSeed] = useState(null);
+  const [testSeedError, setTestSeedError] = useState("");
+  const [testSeedLoading, setTestSeedLoading] = useState(false);
+  const [testSeedActionLoading, setTestSeedActionLoading] = useState(false);
 
   useEffect(() => {
     apiGet("/api/admin/settings")
@@ -51,6 +55,49 @@ const SystemSettings = ({ onLogout }) => {
   useEffect(() => {
     loadStatus();
   }, []);
+
+  const loadTestSeed = async () => {
+    setTestSeedLoading(true);
+    setTestSeedError("");
+    try {
+      const data = await apiGet("/api/admin/test-seed");
+      setTestSeed(data);
+    } catch (err) {
+      setTestSeedError(err.message || "Unable to load test seed");
+    } finally {
+      setTestSeedLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTestSeed();
+  }, []);
+
+  const createTestSeed = async () => {
+    setTestSeedActionLoading(true);
+    setTestSeedError("");
+    try {
+      const data = await apiPost("/api/admin/test-seed");
+      setTestSeed((prev) => ({ ...prev, ...data }));
+    } catch (err) {
+      setTestSeedError(err.message || "Unable to create test seed");
+    } finally {
+      setTestSeedActionLoading(false);
+    }
+  };
+
+  const removeTestSeed = async () => {
+    setTestSeedActionLoading(true);
+    setTestSeedError("");
+    try {
+      await apiFetch("/api/admin/test-seed", { method: "DELETE" });
+      await loadTestSeed();
+    } catch (err) {
+      setTestSeedError(err.message || "Unable to remove test seed");
+    } finally {
+      setTestSeedActionLoading(false);
+    }
+  };
 
   const updateField = (key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -228,6 +275,54 @@ const SystemSettings = ({ onLogout }) => {
                 </div>
               </div>
             ) : null}
+          </div>
+        </section>
+        <section className="panel">
+          <div className="panel__header">Test seed</div>
+          <div className="panel__body">
+            <p>Provision a removable test event/team/channel for QA. Disable auto-seed via env when needed.</p>
+            <div className="form__actions">
+              <button className="btn btn--secondary" type="button" onClick={loadTestSeed}>
+                {testSeedLoading ? "Refreshing..." : "Refresh"}
+              </button>
+            </div>
+            {testSeedError ? <div className="alert">{testSeedError}</div> : null}
+            {testSeed ? (
+              <div className="status-list status-list--compact">
+                <div className="status-row">
+                  <div className="status-row__label">Auto-seed</div>
+                  <div className="status-row__detail">
+                    {testSeed.enabled ? "Enabled (env)" : "Disabled (env)"}
+                  </div>
+                  <div className={testSeed.enabled ? "pill pill--ok" : "pill pill--down"}>
+                    {testSeed.enabled ? "On" : "Off"}
+                  </div>
+                </div>
+                <div className="status-row">
+                  <div className="status-row__label">Event</div>
+                  <div className="status-row__detail">{testSeed.event?.id || "Not created"}</div>
+                  <div className="pill pill--active">{testSeed.event?.name || "-"}</div>
+                </div>
+                <div className="status-row">
+                  <div className="status-row__label">Team</div>
+                  <div className="status-row__detail">{testSeed.team?.id || "Not created"}</div>
+                  <div className="pill pill--active">{testSeed.team?.name || "-"}</div>
+                </div>
+                <div className="status-row">
+                  <div className="status-row__label">Channel</div>
+                  <div className="status-row__detail">{testSeed.channel?.id || "Not created"}</div>
+                  <div className="pill pill--active">{testSeed.channel?.name || "-"}</div>
+                </div>
+              </div>
+            ) : null}
+            <div className="form__actions">
+              <button className="btn btn--primary" type="button" onClick={createTestSeed} disabled={testSeedActionLoading}>
+                {testSeedActionLoading ? "Working..." : "Create test seed"}
+              </button>
+              <button className="btn btn--secondary" type="button" onClick={removeTestSeed} disabled={testSeedActionLoading}>
+                Remove test seed
+              </button>
+            </div>
           </div>
         </section>
       </div>

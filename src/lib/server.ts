@@ -163,7 +163,7 @@ class Server implements IServer {
 
   private getConnectionFromHeaders(headers, log: boolean = false): IConnection {
     let protocols = headers["sec-websocket-protocol"];
-    if (protocols) { protocols = protocols.split(", "); }
+    if (protocols) { protocols = protocols.split(",").map((entry) => entry.trim()).filter((entry) => entry); }
     const token0 = protocols ? protocols[0] : null;
     const deviceId0  = protocols ? protocols[1] : null;
     const token = headers.token || headers.voicepingtoken || token0;

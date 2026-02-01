@@ -31,6 +31,10 @@ const ROUTER_HOST = process.env.ROUTER_HOST || "127.0.0.1";
 const ROUTER_PORT = Number(process.env.ROUTER_PORT || 3000);
 const ROUTER_STATUS_TIMEOUT_MS = Number(process.env.ROUTER_STATUS_TIMEOUT_MS || 500);
 const MAXIMUM_IDLE_DURATION = Number(process.env.MAXIMUM_IDLE_DURATION || 3000);
+const TEST_SEED_ENABLED = process.env.TEST_SEED_ENABLED === "true";
+const TEST_SEED_EVENT_NAME = process.env.TEST_SEED_EVENT_NAME || "VoicePing Test Event";
+const TEST_SEED_TEAM_NAME = process.env.TEST_SEED_TEAM_NAME || "Test Team";
+const TEST_SEED_CHANNEL_NAME = process.env.TEST_SEED_CHANNEL_NAME || "Test Channel";
 
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
@@ -416,6 +420,42 @@ const buildLimits = (limits) => ({
   ...(limits || {})
 });
 
+const findTestSeedEvent = async () =>
+  prisma.event.findFirst({
+    where: { name: TEST_SEED_EVENT_NAME },
+    include: { teams: true, channels: true }
+  });
+
+const ensureTestSeed = async () => {
+  const existing = await findTestSeedEvent();
+  if (existing) {
+    return existing;
+  }
+  const event = await prisma.event.create({
+    data: {
+      name: TEST_SEED_EVENT_NAME,
+      requiresApproval: false,
+      limits: buildLimits()
+    }
+  });
+  const team = await prisma.team.create({
+    data: { eventId: event.id, name: TEST_SEED_TEAM_NAME }
+  });
+  await prisma.channel.create({
+    data: { eventId: event.id, teamId: team.id, name: TEST_SEED_CHANNEL_NAME, type: "TEAM" }
+  });
+  return findTestSeedEvent();
+};
+
+const removeTestSeed = async () => {
+  const existing = await findTestSeedEvent();
+  if (!existing) {
+    return null;
+  }
+  await prisma.event.delete({ where: { id: existing.id } });
+  return existing;
+};
+
 const validatePasswordStrength = (password) => {
   if (!password || typeof password !== "string") {
     return { ok: false, error: "Password required" };
@@ -634,6 +674,40 @@ app.patch("/api/admin/settings", requireAuth, requireAdmin, requireProfileComple
     smtpFrom: settings.smtpFrom || "no-reply@voiceping.local",
     smtpPassSet: !!settings.smtpPassEncrypted
   });
+});
+
+app.get("/api/admin/test-seed", requireAuth, requireAdmin, requireProfileComplete, async (req, res) => {
+  const seed = await findTestSeedEvent();
+  const team = seed?.teams?.find((entry) => entry.name === TEST_SEED_TEAM_NAME) || null;
+  const channel =
+    seed?.channels?.find((entry) => entry.name === TEST_SEED_CHANNEL_NAME) ||
+    seed?.channels?.find((entry) => entry.teamId === team?.id) ||
+    null;
+  res.json({
+    enabled: TEST_SEED_ENABLED,
+    event: seed ? { id: seed.id, name: seed.name } : null,
+    team: team ? { id: team.id, name: team.name } : null,
+    channel: channel ? { id: channel.id, name: channel.name } : null
+  });
+});
+
+app.post("/api/admin/test-seed", requireAuth, requireAdmin, requireProfileComplete, async (req, res) => {
+  const seed = await ensureTestSeed();
+  const team = seed?.teams?.find((entry) => entry.name === TEST_SEED_TEAM_NAME) || null;
+  const channel =
+    seed?.channels?.find((entry) => entry.name === TEST_SEED_CHANNEL_NAME) ||
+    seed?.channels?.find((entry) => entry.teamId === team?.id) ||
+    null;
+  res.json({
+    event: seed ? { id: seed.id, name: seed.name } : null,
+    team: team ? { id: team.id, name: team.name } : null,
+    channel: channel ? { id: channel.id, name: channel.name } : null
+  });
+});
+
+app.delete("/api/admin/test-seed", requireAuth, requireAdmin, requireProfileComplete, async (req, res) => {
+  const removed = await removeTestSeed();
+  res.json({ removed: !!removed });
 });
 
 app.get("/api/admin/status", requireAuth, requireAdmin, requireProfileComplete, async (req, res) => {
@@ -1247,7 +1321,24 @@ const startServer = () => {
     console.log(`Control plane API listening on port ${port}`);
   });
   waitForDatabase()
-    .then(bootstrapAdmin)
+    .then(async () => {
+      await bootstrapAdmin();
+      if (TEST_SEED_ENABLED) {
+        try {
+          const seed = await ensureTestSeed();
+          const team = seed?.teams?.find((entry) => entry.name === TEST_SEED_TEAM_NAME) || null;
+          const channel =
+            seed?.channels?.find((entry) => entry.name === TEST_SEED_CHANNEL_NAME) ||
+            seed?.channels?.find((entry) => entry.teamId === team?.id) ||
+            null;
+          console.log(
+            `[test-seed] event=${seed?.id || "none"} team=${team?.id || "none"} channel=${channel?.id || "none"}`
+          );
+        } catch (err) {
+          console.error("[test-seed] failed to seed", err);
+        }
+      }
+    })
     .catch((err) => {
       console.error("Bootstrap admin failed", err);
     });

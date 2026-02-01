@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { apiGet, apiPatch } from "../api.js";
+import { apiGet, apiPatch, apiPost } from "../api.js";
 import SettingsDrawer from "../components/SettingsDrawer.jsx";
 import InfoPopover from "../components/InfoPopover.jsx";
 import Icon from "../components/Icon.jsx";
 import { statusLabel, statusToKey } from "../utils/status.js";
-import { mdiCog, mdiHeadset, mdiSend, mdiVolumeHigh, mdiVolumeOff } from "../icons.js";
+import { mdiCog, mdiHeadset, mdiSend, mdiVolumeHigh, mdiVolumeOff, mdiRepeat } from "../icons.js";
+import { VoicePingAudioClient, getDeviceId, getRouterWsUrl } from "../utils/voicepingAudio.js";
 
 const Console = ({ user, onLogout }) => {
   const { eventId } = useParams();
@@ -17,6 +18,11 @@ const Console = ({ user, onLogout }) => {
   const [isOnline, setIsOnline] = useState(() => navigator.onLine);
   const [listeningTargets, setListeningTargets] = useState(() => new Set());
   const [transmittingTargets, setTransmittingTargets] = useState(() => new Set());
+  const [audioStatus, setAudioStatus] = useState({ connected: false, permission: "unknown" });
+  const [audioError, setAudioError] = useState("");
+  const [micDevices, setMicDevices] = useState([]);
+  const [selectedMicId, setSelectedMicId] = useState("");
+  const [loopbackChannelIds, setLoopbackChannelIds] = useState(() => new Set());
   const [viewSettings, setViewSettings] = useState(() => {
     const fallback = {
       showRoster: true,
@@ -33,6 +39,7 @@ const Console = ({ user, onLogout }) => {
     }
   });
   const listeningChannelIdsRef = useRef(listeningChannelIds);
+  const audioClientRef = useRef(null);
 
   const loadOverview = () => {
     setError("");
@@ -51,6 +58,48 @@ const Console = ({ user, onLogout }) => {
       });
   };
 
+  const refreshAudioDevices = async () => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+      return;
+    }
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const inputs = devices.filter((device) => device.kind === "audioinput");
+      setMicDevices(inputs);
+      if (!selectedMicId && inputs[0]) {
+        setSelectedMicId(inputs[0].deviceId);
+      }
+    } catch (err) {
+      setAudioError("Unable to list microphone devices");
+    }
+  };
+
+  const enableAudio = async () => {
+    setAudioError("");
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setAudioError("Browser does not support microphone access");
+      return false;
+    }
+    if (!window.AudioEncoder || !window.MediaStreamTrackProcessor) {
+      setAudioError("Browser does not support low-latency audio capture");
+      return false;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((track) => track.stop());
+      setAudioStatus((prev) => ({ ...prev, permission: "granted" }));
+      await refreshAudioDevices();
+      if (audioClientRef.current) {
+        audioClientRef.current.resumeOutput();
+      }
+      return true;
+    } catch (err) {
+      setAudioStatus((prev) => ({ ...prev, permission: "denied" }));
+      setAudioError("Microphone permission denied");
+      return false;
+    }
+  };
+
   useEffect(() => {
     loadOverview();
   }, [eventId]);
@@ -67,12 +116,99 @@ const Console = ({ user, onLogout }) => {
   }, []);
 
   useEffect(() => {
+    if (!navigator.permissions || !navigator.permissions.query) {
+      return;
+    }
+    navigator.permissions
+      .query({ name: "microphone" })
+      .then((status) => {
+        setAudioStatus((prev) => ({ ...prev, permission: status.state }));
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    refreshAudioDevices();
+  }, []);
+
+  useEffect(() => {
     localStorage.setItem("vp.viewSettings", JSON.stringify(viewSettings));
   }, [viewSettings]);
 
   useEffect(() => {
     listeningChannelIdsRef.current = listeningChannelIds;
   }, [listeningChannelIds]);
+
+  useEffect(() => {
+    if (!overview || audioStatus.permission !== "granted") {
+      return;
+    }
+    let cancelled = false;
+    const connectAudio = async () => {
+      setAudioError("");
+      try {
+        const { token } = await apiPost("/api/router/token", { eventId });
+        if (cancelled) {
+          return;
+        }
+        const client = new VoicePingAudioClient({
+          wsUrl: getRouterWsUrl(),
+          token,
+          userId: user.id,
+          deviceId: getDeviceId(),
+          onStatus: (status) => {
+            setAudioStatus((prev) => ({ ...prev, ...status }));
+            if (status.connected) {
+              setAudioError("");
+            }
+          },
+          onError: (message) => setAudioError(message)
+        });
+        client.updateRouting({ channels: overview.channels || [] });
+        client.updateFilters({ listeningChannelIds, listeningTargets });
+        client.updateLoopback(Array.from(loopbackChannelIds));
+        client.connect();
+        audioClientRef.current = client;
+      } catch (err) {
+        setAudioError(err.message || "Unable to connect audio");
+      }
+    };
+    connectAudio();
+    return () => {
+      cancelled = true;
+      if (audioClientRef.current) {
+        audioClientRef.current.disconnect();
+        audioClientRef.current = null;
+      }
+    };
+  }, [overview, audioStatus.permission, eventId, user.id]);
+
+  useEffect(() => {
+    if (!audioClientRef.current || !overview) {
+      return;
+    }
+    audioClientRef.current.updateRouting({ channels: overview.channels || [] });
+  }, [overview]);
+
+  useEffect(() => {
+    if (!audioClientRef.current) {
+      return;
+    }
+    audioClientRef.current.updateFilters({ listeningChannelIds, listeningTargets });
+  }, [listeningChannelIds, listeningTargets]);
+
+  useEffect(() => {
+    if (!audioClientRef.current) {
+      return;
+    }
+    audioClientRef.current.updateLoopback(Array.from(loopbackChannelIds));
+  }, [loopbackChannelIds]);
+
+  useEffect(() => {
+    if (audioStatus.permission === "granted" && audioClientRef.current) {
+      audioClientRef.current.resumeOutput();
+    }
+  }, [audioStatus.permission]);
 
   const currentMember = overview?.roster?.find((person) => person.id === user.id);
   const hasDispatchPermission = user.globalRole === "ADMIN" || currentMember?.role === "DISPATCH";
@@ -113,13 +249,65 @@ const Console = ({ user, onLogout }) => {
     });
   };
 
-  const toggleTransmit = (targetKey) => {
-    setTransmittingTargets((prev) => {
+  const resolveTargetIds = (targetKey) => {
+    if (!overview) {
+      return [];
+    }
+    if (targetKey.startsWith("channel:")) {
+      return [targetKey.split(":")[1]];
+    }
+    if (targetKey.startsWith("team:")) {
+      const teamId = targetKey.split(":")[1];
+      return overview.channels.filter((channel) => channel.teamId === teamId).map((channel) => channel.id);
+    }
+    return [];
+  };
+
+  const beginTransmit = async (targetKey) => {
+    if (!controlsEnabled) {
+      return;
+    }
+    setAudioError("");
+    if (audioStatus.permission !== "granted") {
+      const ok = await enableAudio();
+      if (!ok) {
+        return;
+      }
+    }
+    if (!audioClientRef.current) {
+      setAudioError("Audio connection not ready");
+      return;
+    }
+    if (!audioStatus.connected) {
+      setAudioError("Audio connection is offline");
+      return;
+    }
+    const targetIds = resolveTargetIds(targetKey);
+    if (targetIds.length === 0) {
+      setAudioError("No channels available for this target");
+      return;
+    }
+    setTransmittingTargets(new Set([targetKey]));
+    audioClientRef.current.startTransmit({ targetIds, micDeviceId: selectedMicId });
+  };
+
+  const endTransmit = async (targetKey) => {
+    if (!transmittingTargets.has(targetKey)) {
+      return;
+    }
+    setTransmittingTargets(new Set());
+    if (audioClientRef.current) {
+      await audioClientRef.current.stopTransmit();
+    }
+  };
+
+  const toggleLoopback = (channelId) => {
+    setLoopbackChannelIds((prev) => {
       const next = new Set(prev);
-      if (next.has(targetKey)) {
-        next.delete(targetKey);
+      if (next.has(channelId)) {
+        next.delete(channelId);
       } else {
-        next.add(targetKey);
+        next.add(channelId);
       }
       return next;
     });
@@ -129,8 +317,19 @@ const Console = ({ user, onLogout }) => {
     if (!controlsEnabled) {
       setListeningTargets(new Set());
       setTransmittingTargets(new Set());
+      if (audioClientRef.current) {
+        audioClientRef.current.stopTransmit();
+      }
     }
   }, [controlsEnabled]);
+
+  useEffect(() => {
+    return () => {
+      if (audioClientRef.current) {
+        audioClientRef.current.stopTransmit();
+      }
+    };
+  }, []);
 
   if (!overview && error) {
     return (
@@ -172,6 +371,41 @@ const Console = ({ user, onLogout }) => {
         <span className="status-legend__text">Idle but connected</span>
         <span className="pill pill--status-offline">Offline</span>
         <span className="status-legend__text">No users connected</span>
+      </div>
+      <div className="audio-toolbar">
+        <div className="audio-toolbar__row">
+          <div className="badge">Audio</div>
+          <span className={`pill ${audioStatus.connected ? "pill--ok" : "pill--down"}`}>
+            {audioStatus.connected ? "Connected" : "Disconnected"}
+          </span>
+          <span className={`pill ${audioStatus.permission === "granted" ? "pill--ok" : "pill--down"}`}>
+            {audioStatus.permission === "granted"
+              ? "Mic ready"
+              : audioStatus.permission === "denied"
+              ? "Mic blocked"
+              : "Mic not enabled"}
+          </span>
+          <button className="btn btn--secondary" type="button" onClick={enableAudio}>
+            Enable audio
+          </button>
+          <button className="btn btn--secondary" type="button" onClick={refreshAudioDevices}>
+            Refresh devices
+          </button>
+        </div>
+        <div className="audio-toolbar__row">
+          <label>
+            Microphone
+            <select value={selectedMicId} onChange={(e) => setSelectedMicId(e.target.value)}>
+              {micDevices.length === 0 ? <option value="">No microphones</option> : null}
+              {micDevices.map((device) => (
+                <option key={device.deviceId} value={device.deviceId}>
+                  {device.label || "Microphone"}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        {audioError ? <div className="alert">{audioError}</div> : null}
       </div>
       {error ? <div className="alert">{error}</div> : null}
       <div className={`grid grid--console ${viewSettings.density === "dense" ? "grid--dense" : ""}`}>
@@ -277,7 +511,14 @@ const Console = ({ user, onLogout }) => {
                       <button
                         type="button"
                         className={`card-control card-control--transmit ${transmittingTargets.has(`team:${team.id}`) ? "card-control--active" : ""}`}
-                        onClick={() => toggleTransmit(`team:${team.id}`)}
+                        onPointerDown={(event) => {
+                          event.preventDefault();
+                          event.currentTarget.setPointerCapture(event.pointerId);
+                          beginTransmit(`team:${team.id}`);
+                        }}
+                        onPointerUp={() => endTransmit(`team:${team.id}`)}
+                        onPointerLeave={() => endTransmit(`team:${team.id}`)}
+                        onPointerCancel={() => endTransmit(`team:${team.id}`)}
                         aria-pressed={transmittingTargets.has(`team:${team.id}`)}
                         aria-label={`Transmit to ${team.name}`}
                         disabled={!controlsEnabled}
@@ -374,10 +615,28 @@ const Console = ({ user, onLogout }) => {
                       </button>
                       <button
                         type="button"
+                        className={`card-control ${loopbackChannelIds.has(channel.id) ? "card-control--active" : ""}`}
+                        onClick={() => toggleLoopback(channel.id)}
+                        aria-pressed={loopbackChannelIds.has(channel.id)}
+                        aria-label={`Loopback test for ${channel.name}`}
+                        disabled={!controlsEnabled}
+                        title={controlsEnabled ? "Loopback test" : disabledReason}
+                      >
+                        <Icon path={mdiRepeat} size={16} />
+                      </button>
+                      <button
+                        type="button"
                         className={`card-control card-control--transmit ${
                           transmittingTargets.has(`channel:${channel.id}`) ? "card-control--active" : ""
                         }`}
-                        onClick={() => toggleTransmit(`channel:${channel.id}`)}
+                        onPointerDown={(event) => {
+                          event.preventDefault();
+                          event.currentTarget.setPointerCapture(event.pointerId);
+                          beginTransmit(`channel:${channel.id}`);
+                        }}
+                        onPointerUp={() => endTransmit(`channel:${channel.id}`)}
+                        onPointerLeave={() => endTransmit(`channel:${channel.id}`)}
+                        onPointerCancel={() => endTransmit(`channel:${channel.id}`)}
                         aria-pressed={transmittingTargets.has(`channel:${channel.id}`)}
                         aria-label={`Transmit to ${channel.name}`}
                         disabled={!controlsEnabled}

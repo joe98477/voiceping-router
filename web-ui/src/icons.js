@@ -6,7 +6,8 @@ import {
   mdiVolumeOff,
   mdiHeadset,
   mdiSend,
-  mdiRadioHandheld
+  mdiRadioHandheld,
+  mdiRepeat
 } from "@mdi/js";
 
 export {
@@ -17,5 +18,6 @@ export {
   mdiVolumeOff,
   mdiHeadset,
   mdiSend,
-  mdiRadioHandheld
+  mdiRadioHandheld,
+  mdiRepeat
 };

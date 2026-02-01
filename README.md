@@ -40,6 +40,8 @@ Control-plane / web UI related:
 * `SESSION_SECRET` (string): Session cookie secret for the control-plane API.
 * `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`: SMTP settings (Office 365 compatible) for invites and password resets.
 * `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`: Optional bootstrap admin credentials on first start.
+* `VITE_ROUTER_WS` (string): Optional WS/WSS URL for the router from the dispatch UI (defaults to `ws(s)://<host>:3000`).
+* `TEST_SEED_ENABLED`, `TEST_SEED_EVENT_NAME`, `TEST_SEED_TEAM_NAME`, `TEST_SEED_CHANNEL_NAME`: Optional test seed defaults for QA.
 
 SMTP can also be managed in the dispatch web UI under **System Settings**. Env values are used as the initial defaults.
 
@@ -97,6 +99,10 @@ For a local test stack with safe defaults:
     $ docker compose --env-file .env.test up -d --build
 
 See `docs/deployment-compose.md` for a complete walkthrough.
+For audio codec details and browser expectations, see `docs/opus-implementation.md`.
+
+The test env enables an optional seed event/team/channel for quick QA. You can disable the auto-seed via
+`TEST_SEED_ENABLED=false` or remove it from **System Settings → Test seed**.
 
 The compose file will also start Redis using the repo's configuration file at `redis/redis.conf`, which disables persistence (VoicePing Router uses Redis as temporary storage) and sets an LRU eviction policy. It also boots the control-plane API (port 4000), a Postgres instance for the control plane, and the dispatch web UI (port 8080).
 

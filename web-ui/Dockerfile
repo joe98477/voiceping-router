@@ -2,8 +2,10 @@ FROM node:20-alpine as build
 WORKDIR /app
 ARG VITE_API_BASE
 ARG VITE_STARTUP_STATUS
+ARG VITE_ROUTER_WS
 ENV VITE_API_BASE=$VITE_API_BASE
 ENV VITE_STARTUP_STATUS=$VITE_STARTUP_STATUS
+ENV VITE_ROUTER_WS=$VITE_ROUTER_WS
 COPY package.json package.json
 COPY vite.config.js vite.config.js
 COPY index.html index.html

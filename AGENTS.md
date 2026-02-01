@@ -10,6 +10,9 @@ This file applies to the entire repository unless a more specific AGENTS.md is a
 ## Repo overview
 This repository contains the VoicePing Router Node.js websocket server and its Docker Compose setup.
 
+## Additional docs
+- `docs/opus-implementation.md` documents the current Opus/WebCodecs implementation for the dispatch UI and router payload expectations.
+
 ## Working agreements
 - Keep changes small and focused.
 - Prefer adding new documentation under `docs/` when proposing architecture or workflows.

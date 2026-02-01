@@ -22,12 +22,20 @@ docker compose --env-file .env.test up -d --build
 - Control-plane API: http://localhost:4000
 - Dispatch UI: http://localhost:8080
 
+Dispatch audio uses WebCodecs for low-latency Opus in the browser. Chrome is the primary target for audio PTT.
+
 Note: The dispatch UI proxies `/api/*` to the control-plane service inside the Docker network, so the browser always calls the same origin. Leave `VITE_API_BASE` empty to use the proxy.
+Set `VITE_ROUTER_WS` if the router is not reachable on `ws(s)://<host>:3000`.
 
 4) Log in with the bootstrap admin credentials from `.env.test`:
 
 - Email: `BOOTSTRAP_ADMIN_EMAIL`
 - Password: `BOOTSTRAP_ADMIN_PASSWORD`
+
+### Test seed (optional)
+
+The test env template enables a removable test event/team/channel. You can disable auto-seed in the env with
+`TEST_SEED_ENABLED=false` or remove it in the dispatch UI under **System Settings → Test seed**.
 
 ### Email in test mode
 

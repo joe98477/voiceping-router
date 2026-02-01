@@ -3,7 +3,9 @@ version: '3.1'
 services:
 
   vp-router:
-    image: "smartwalkie/voiceping-router"
+    build:
+      context: .
+    image: voiceping-router:local
     env_file:
       - ${ENV_FILE:-.env}
     environment:
@@ -65,6 +67,7 @@ services:
       args:
         - VITE_API_BASE=${VITE_API_BASE}
         - VITE_STARTUP_STATUS=${VITE_STARTUP_STATUS}
+        - VITE_ROUTER_WS=${VITE_ROUTER_WS}
     ports:
       - 8080:80
     depends_on:
