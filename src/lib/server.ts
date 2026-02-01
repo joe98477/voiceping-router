@@ -109,17 +109,15 @@ class Server implements IServer {
   public sendMessageToGroup(this: Server, msg: IMessage) {
     logger.info(`sendMessageToGroup from: ${msg.fromId} to: ${msg.toId} messageType: ${msg.messageType}`);
     Redis.getUsersInsideGroup(msg.toId, (err, userIds) => {
-      const senderId = msg.fromId ? msg.fromId.toString() : "";
-      const hasUsers = userIds && userIds instanceof Array && userIds.length > 0;
-      const senderInRedis = hasUsers
-        ? userIds.map((entry) => entry.toString()).includes(senderId)
-        : false;
-      if (err || !hasUsers || !senderInRedis) {
-        return States.getUsersInsideGroup(msg.toId, (err1, stateUserIds) => {
-          this.broadcastToGroupWithCheck(msg, stateUserIds || []);
-        });
-      }
-      return this.broadcastToGroupWithCheck(msg, userIds);
+      return States.getUsersInsideGroup(msg.toId, (err1, stateUserIds) => {
+        const redisUsers = userIds && userIds instanceof Array ? userIds : [];
+        const stateUsers = stateUserIds && stateUserIds instanceof Array ? stateUserIds : [];
+        const combined = Array.from(new Set([...redisUsers, ...stateUsers]));
+        if (err || err1 || combined.length === 0) {
+          return this.broadcastToGroupWithCheck(msg, combined);
+        }
+        return this.broadcastToGroupWithCheck(msg, combined);
+      });
     });
   }
 
@@ -233,6 +231,7 @@ class Server implements IServer {
         if (user.channelIds && user.channelIds instanceof Array) {
           user.channelIds.forEach((channelId) => {
             States.addUserToGroup(userId, channelId);
+            Redis.addUserToGroup(userId, channelId, () => {});
           });
         }
         Redis.getGroupsOfUser(userId, (err, groupIds) => {
