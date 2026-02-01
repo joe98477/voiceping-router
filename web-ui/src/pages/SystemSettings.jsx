@@ -197,7 +197,7 @@ const SystemSettings = ({ onLogout }) => {
                 type="text"
                 value={form.smtpFrom}
                 onChange={(e) => updateField("smtpFrom", e.target.value)}
-                placeholder="no-reply@voiceping.local"
+                placeholder="no-reply@connectvoice.local"
               />
             </label>
             <label>

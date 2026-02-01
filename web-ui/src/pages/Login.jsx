@@ -21,7 +21,7 @@ const Login = ({ onLogin }) => {
     <div className="screen screen--center">
       <div className="card card--auth">
         <div className="card__header">
-          <div className="badge">VoicePing</div>
+          <div className="badge">ConnectVoice</div>
           <h1>Dispatch Console</h1>
           <p>Secure sign-in for admins, dispatchers, and users.</p>
         </div>

@@ -32,7 +32,7 @@ const Console = ({ user, onLogout }) => {
       sound: true
     };
     try {
-      const raw = localStorage.getItem("vp.viewSettings");
+      const raw = localStorage.getItem("cv.viewSettings") || localStorage.getItem("vp.viewSettings");
       return raw ? { ...fallback, ...JSON.parse(raw) } : fallback;
     } catch (err) {
       return fallback;
@@ -40,6 +40,7 @@ const Console = ({ user, onLogout }) => {
   });
   const listeningChannelIdsRef = useRef(listeningChannelIds);
   const audioClientRef = useRef(null);
+  const [clock, setClock] = useState(() => new Date());
 
   const loadOverview = () => {
     setError("");
@@ -143,7 +144,7 @@ const Console = ({ user, onLogout }) => {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("vp.viewSettings", JSON.stringify(viewSettings));
+    localStorage.setItem("cv.viewSettings", JSON.stringify(viewSettings));
   }, [viewSettings]);
 
   useEffect(() => {
@@ -346,6 +347,11 @@ const Console = ({ user, onLogout }) => {
     };
   }, []);
 
+  useEffect(() => {
+    const interval = setInterval(() => setClock(new Date()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   if (!overview && error) {
     return (
       <div className="screen screen--center">
@@ -363,20 +369,42 @@ const Console = ({ user, onLogout }) => {
   }
 
   return (
-    <div className="screen">
-      <header className="topbar">
-        <div>
-          <div className="badge">Dispatch</div>
-          <h2>{overview.event.name}</h2>
+    <div className="control-plane">
+      <header className="control-plane__topbar panel">
+        <div className="control-plane__brand">
+          <span>ConnectVoice</span>
+          <h1>Dispatch Control Plane</h1>
+          <div className="control-plane__subtitle">{overview.event.name}</div>
         </div>
-        <div className="topbar__actions">
-          <span className="pill">Pending: {overview.pendingCount}</span>
-          <button className="icon-btn" onClick={() => setSettingsOpen(true)} aria-label="Open settings">
-            <Icon path={mdiCog} />
-          </button>
-          <button className="btn" onClick={onLogout}>
-            Log out
-          </button>
+        <div className="control-plane__stats">
+          <div className="control-plane__stat">
+            <span>Active Incidents</span>
+            <strong>{overview.teams.length}</strong>
+          </div>
+          <div className="control-plane__stat">
+            <span>Online Units</span>
+            <strong>{overview.roster.length}</strong>
+          </div>
+          <div className="control-plane__stat">
+            <span>Channels</span>
+            <strong>{overview.channels.length}</strong>
+          </div>
+        </div>
+        <div>
+          <div className="control-plane__clock">{clock.toLocaleTimeString()}</div>
+          <div className="control-plane__actions">
+            <span className="pill">Pending: {overview.pendingCount}</span>
+            <button
+              className="icon-btn"
+              onClick={() => setSettingsOpen(true)}
+              aria-label="Open settings"
+            >
+              <Icon path={mdiCog} />
+            </button>
+            <button className="btn" onClick={onLogout}>
+              Log out
+            </button>
+          </div>
         </div>
       </header>
       <div className="status-legend">
@@ -387,130 +415,26 @@ const Console = ({ user, onLogout }) => {
         <span className="pill pill--status-offline">Offline</span>
         <span className="status-legend__text">No users connected</span>
       </div>
-      <div className="audio-toolbar">
-        <div className="audio-toolbar__row">
-          <div className="badge">Audio</div>
-          <span className={`pill ${audioStatus.connected ? "pill--ok" : "pill--down"}`}>
-            {audioStatus.connected ? "Connected" : "Disconnected"}
-          </span>
-          <span className={`pill ${audioStatus.permission === "granted" ? "pill--ok" : "pill--down"}`}>
-            {audioStatus.permission === "granted"
-              ? "Mic ready"
-              : audioStatus.permission === "denied"
-              ? "Mic blocked"
-              : "Mic not enabled"}
-          </span>
-          <button className="btn btn--secondary" type="button" onClick={enableAudio}>
-            Enable audio
-          </button>
-          <button className="btn btn--secondary" type="button" onClick={refreshAudioDevices}>
-            Refresh devices
-          </button>
-        </div>
-        <div className="audio-toolbar__row">
-          <label>
-            Microphone
-            <select value={selectedMicId} onChange={(e) => setSelectedMicId(e.target.value)}>
-              {micDevices.length === 0 ? <option value="">No microphones</option> : null}
-              {micDevices.map((device) => (
-                <option key={device.deviceId} value={device.deviceId}>
-                  {device.label || "Microphone"}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        {audioError ? <div className="alert">{audioError}</div> : null}
-      </div>
       {error ? <div className="alert">{error}</div> : null}
-      <div className={`grid grid--console ${viewSettings.density === "dense" ? "grid--dense" : ""}`}>
-        {viewSettings.showRoster ? (
-          <section className="panel panel--roster">
-            <div className="panel__header">Roster</div>
-            <div className="panel__body">
-              {overview.roster.map((person) => (
-                <div
-                  key={person.id}
-                  className={`roster-item status-card dispatch-card status-card--${statusToKey(
-                    overview.statuses?.users?.[person.id]
-                  )}`}
-                >
-                  <div className="dispatch-card__header">
-                    <div className="dispatch-card__title-row">
-                      <div className="info-card__title">{person.displayName || person.email}</div>
-                      <InfoPopover
-                        title={person.displayName || person.email}
-                        details={[
-                          { label: "User ID", value: person.id },
-                          { label: "Role", value: person.role },
-                          { label: "Status", value: person.status },
-                          { label: "Connections", value: "No live telemetry" },
-                          { label: "Bandwidth", value: "Not available" },
-                          { label: "Latency", value: "Not available" },
-                          { label: "Errors", value: "None reported" }
-                        ]}
-                      />
-                    </div>
-                    <span
-                      className={`pill pill--status-${statusToKey(overview.statuses?.users?.[person.id])}`}
-                    >
-                      {statusLabel(overview.statuses?.users?.[person.id])}
-                    </span>
-                  </div>
-                  <div className="info-card__meta">{person.role}</div>
-                  {person.status === "PENDING" ? (
-                    <div className="dispatch-card__footer">
-                      <span className="pill pill--pending">Pending approval</span>
-                      <button className="btn btn--tiny" onClick={() => approveUser(person.id)}>
-                        Approve
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          </section>
-        ) : null}
-        {viewSettings.showTeams ? (
-          <section className="panel panel--teams">
-            <div className="panel__header">Teams</div>
-            <div className="panel__body">
-              {overview.teams.map((team) => (
-                <div
-                  key={team.id}
-                  className={`team-card status-card dispatch-card status-card--${statusToKey(
-                    overview.statuses?.teams?.[team.id]
-                  )}`}
-                >
-                  <div className="dispatch-card__header">
-                    <div className="dispatch-card__title-row">
+      <div className="control-plane__columns">
+        <div className="control-plane__column">
+          {viewSettings.showTeams ? (
+            <section className="control-plane__panel panel">
+              <div className="control-plane__panel-header">Talkgroups</div>
+              <div className="control-plane__list">
+                {overview.teams.map((team) => (
+                  <div key={team.id} className="talkgroup-item">
+                    <div className="talkgroup-item__row">
                       <div className="team-card__title">{team.name}</div>
-                      <InfoPopover
-                        title={team.name}
-                        details={[
-                          { label: "Team ID", value: team.id },
-                          {
-                            label: "Users",
-                            value: overview.teamMemberCounts?.[team.id] ?? 0
-                          },
-                          {
-                            label: "Channels",
-                            value: overview.channels.filter((channel) => channel.teamId === team.id).length
-                          },
-                          { label: "Connections", value: "No live telemetry" },
-                          { label: "Bandwidth", value: "Not available" },
-                          { label: "Latency", value: "Not available" },
-                          { label: "Errors", value: "None reported" }
-                        ]}
-                      />
+                      <span
+                        className={`pill pill--status-${statusToKey(overview.statuses?.teams?.[team.id])}`}
+                      >
+                        {statusLabel(overview.statuses?.teams?.[team.id])}
+                      </span>
                     </div>
-                    <span
-                      className={`pill pill--status-${statusToKey(overview.statuses?.teams?.[team.id])}`}
-                    >
-                      {statusLabel(overview.statuses?.teams?.[team.id])}
-                    </span>
-                  </div>
-                  <div className="dispatch-card__footer">
+                    <div className="talkgroup-item__meta">
+                      Channels: {overview.channels.filter((channel) => channel.teamId === team.id).length}
+                    </div>
                     <div className="card-controls">
                       <button
                         type="button"
@@ -543,130 +467,223 @@ const Console = ({ user, onLogout }) => {
                       </button>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </div>
+        <div className="control-plane__column">
+          <section className="control-plane__panel panel">
+            <div className="control-plane__panel-header">Audio Controls</div>
+            <div className="audio-toolbar">
+              <div className="audio-toolbar__row">
+                <span className={`pill ${audioStatus.connected ? "pill--ok" : "pill--down"}`}>
+                  {audioStatus.connected ? "Connected" : "Disconnected"}
+                </span>
+                <span className={`pill ${audioStatus.permission === "granted" ? "pill--ok" : "pill--down"}`}>
+                  {audioStatus.permission === "granted"
+                    ? "Mic ready"
+                    : audioStatus.permission === "denied"
+                    ? "Mic blocked"
+                    : "Mic not enabled"}
+                </span>
+                <button className="btn btn--secondary" type="button" onClick={enableAudio}>
+                  Enable audio
+                </button>
+                <button className="btn btn--secondary" type="button" onClick={refreshAudioDevices}>
+                  Refresh devices
+                </button>
+              </div>
+              <div className="audio-toolbar__row">
+                <label>
+                  Microphone
+                  <select value={selectedMicId} onChange={(e) => setSelectedMicId(e.target.value)}>
+                    {micDevices.length === 0 ? <option value="">No microphones</option> : null}
+                    {micDevices.map((device) => (
+                      <option key={device.deviceId} value={device.deviceId}>
+                        {device.label || "Microphone"}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              {audioError ? <div className="alert">{audioError}</div> : null}
             </div>
           </section>
-        ) : null}
-        {viewSettings.showChannels ? (
-          <section className="panel panel--channels">
-            <div className="panel__header">Channels</div>
-            <div className="panel__body">
-              {overview.channels.map((channel) => (
-                <div
-                  key={channel.id}
-                  className={`channel-card status-card dispatch-card status-card--${statusToKey(
-                    overview.statuses?.channels?.[channel.id]
-                  )}`}
-                >
-                  <div className="dispatch-card__header">
-                    <div className="dispatch-card__title-row">
-                      <div className="channel-card__title">{channel.name}</div>
-                      <InfoPopover
-                        title={channel.name}
-                        details={[
-                          { label: "Channel ID", value: channel.id },
-                          {
-                            label: "Users",
-                            value: overview.channelMemberCounts?.[channel.id] ?? 0
-                          },
-                          { label: "Type", value: channel.type === "EVENT_ADMIN" ? "Admin" : "Team" },
-                          {
-                            label: "Team",
-                            value: channel.teamId
-                              ? overview.teams.find((team) => team.id === channel.teamId)?.name ||
-                                "Unknown"
-                              : "Event"
-                          },
-                          { label: "Connections", value: "No live telemetry" },
-                          { label: "Bandwidth", value: "Not available" },
-                          { label: "Latency", value: "Not available" },
-                          { label: "Errors", value: "None reported" }
-                        ]}
-                      />
+          {viewSettings.showChannels ? (
+            <section className="control-plane__panel panel">
+              <div className="control-plane__panel-header">Live Activity</div>
+              <div className="control-plane__list">
+                {overview.channels.map((channel) => (
+                  <div key={channel.id} className="live-activity-item">
+                    <div className="dispatch-card__header">
+                      <div className="dispatch-card__title-row">
+                        <div className="live-activity-item__title">{channel.name}</div>
+                        <InfoPopover
+                          title={channel.name}
+                          details={[
+                            { label: "Channel ID", value: channel.id },
+                            {
+                              label: "Users",
+                              value: overview.channelMemberCounts?.[channel.id] ?? 0
+                            },
+                            { label: "Type", value: channel.type === "EVENT_ADMIN" ? "Admin" : "Team" },
+                            {
+                              label: "Team",
+                              value: channel.teamId
+                                ? overview.teams.find((team) => team.id === channel.teamId)?.name || "Unknown"
+                                : "Event"
+                            },
+                            { label: "Connections", value: "No live telemetry" },
+                            { label: "Bandwidth", value: "Not available" },
+                            { label: "Latency", value: "Not available" },
+                            { label: "Errors", value: "None reported" }
+                          ]}
+                        />
+                      </div>
+                      <span
+                        className={`pill pill--status-${statusToKey(overview.statuses?.channels?.[channel.id])}`}
+                      >
+                        {statusLabel(overview.statuses?.channels?.[channel.id])}
+                      </span>
                     </div>
-                    <span
-                      className={`pill pill--status-${statusToKey(overview.statuses?.channels?.[channel.id])}`}
-                    >
-                      {statusLabel(overview.statuses?.channels?.[channel.id])}
-                    </span>
-                  </div>
-                  <div className="channel-card__meta">
-                    <span>{channel.type === "EVENT_ADMIN" ? "Admin" : "Team"}</span>
-                  </div>
-                  <div className="dispatch-card__footer">
-                    <button
-                      type="button"
-                      className={`icon-btn icon-btn--small channel-card__toggle ${
-                        listeningChannelIds.includes(channel.id) ? "is-listening" : "is-muted"
-                      }`}
-                      onClick={() => toggleChannelListen(channel.id)}
-                      aria-pressed={listeningChannelIds.includes(channel.id)}
-                      aria-label={
-                        listeningChannelIds.includes(channel.id)
-                          ? `Mute ${channel.name}`
-                          : `Listen to ${channel.name}`
-                      }
-                      title={
-                        listeningChannelIds.includes(channel.id) ? "Mute channel" : "Listen to channel"
-                      }
-                    >
-                      <Icon
-                        path={listeningChannelIds.includes(channel.id) ? mdiVolumeHigh : mdiVolumeOff}
-                        size={16}
-                      />
-                    </button>
-                    <div className="card-controls">
+                    <div className="dispatch-card__footer">
                       <button
                         type="button"
-                        className={`card-control ${listeningTargets.has(`channel:${channel.id}`) ? "card-control--active" : ""}`}
-                        onClick={() => toggleListen(`channel:${channel.id}`)}
-                        aria-pressed={listeningTargets.has(`channel:${channel.id}`)}
-                        aria-label={`Listen to ${channel.name}`}
-                        disabled={!controlsEnabled}
-                        title={controlsEnabled ? "Listen" : disabledReason}
-                      >
-                        <Icon path={mdiHeadset} size={16} />
-                      </button>
-                      <button
-                        type="button"
-                        className={`card-control ${loopbackChannelIds.has(channel.id) ? "card-control--active" : ""}`}
-                        onClick={() => toggleLoopback(channel.id)}
-                        aria-pressed={loopbackChannelIds.has(channel.id)}
-                        aria-label={`Loopback test for ${channel.name}`}
-                        disabled={!controlsEnabled}
-                        title={controlsEnabled ? "Loopback test" : disabledReason}
-                      >
-                        <Icon path={mdiRepeat} size={16} />
-                      </button>
-                      <button
-                        type="button"
-                        className={`card-control card-control--transmit ${
-                          transmittingTargets.has(`channel:${channel.id}`) ? "card-control--active" : ""
+                        className={`icon-btn icon-btn--small channel-card__toggle ${
+                          listeningChannelIds.includes(channel.id) ? "is-listening" : "is-muted"
                         }`}
-                        onPointerDown={(event) => {
-                          event.preventDefault();
-                          event.currentTarget.setPointerCapture(event.pointerId);
-                          beginTransmit(`channel:${channel.id}`);
-                        }}
-                        onPointerUp={() => endTransmit(`channel:${channel.id}`)}
-                        onPointerLeave={() => endTransmit(`channel:${channel.id}`)}
-                        onPointerCancel={() => endTransmit(`channel:${channel.id}`)}
-                        aria-pressed={transmittingTargets.has(`channel:${channel.id}`)}
-                        aria-label={`Transmit to ${channel.name}`}
-                        disabled={!controlsEnabled}
-                        title={controlsEnabled ? "Transmit" : disabledReason}
+                        onClick={() => toggleChannelListen(channel.id)}
+                        aria-pressed={listeningChannelIds.includes(channel.id)}
+                        aria-label={
+                          listeningChannelIds.includes(channel.id)
+                            ? `Mute ${channel.name}`
+                            : `Listen to ${channel.name}`
+                        }
+                        title={
+                          listeningChannelIds.includes(channel.id) ? "Mute channel" : "Listen to channel"
+                        }
                       >
-                        <Icon path={mdiSend} size={16} />
+                        <Icon
+                          path={listeningChannelIds.includes(channel.id) ? mdiVolumeHigh : mdiVolumeOff}
+                          size={16}
+                        />
                       </button>
+                      <div className="card-controls">
+                        <button
+                          type="button"
+                          className={`card-control ${listeningTargets.has(`channel:${channel.id}`) ? "card-control--active" : ""}`}
+                          onClick={() => toggleListen(`channel:${channel.id}`)}
+                          aria-pressed={listeningTargets.has(`channel:${channel.id}`)}
+                          aria-label={`Listen to ${channel.name}`}
+                          disabled={!controlsEnabled}
+                          title={controlsEnabled ? "Listen" : disabledReason}
+                        >
+                          <Icon path={mdiHeadset} size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          className={`card-control ${loopbackChannelIds.has(channel.id) ? "card-control--active" : ""}`}
+                          onClick={() => toggleLoopback(channel.id)}
+                          aria-pressed={loopbackChannelIds.has(channel.id)}
+                          aria-label={`Loopback test for ${channel.name}`}
+                          disabled={!controlsEnabled}
+                          title={controlsEnabled ? "Loopback test" : disabledReason}
+                        >
+                          <Icon path={mdiRepeat} size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          className={`card-control card-control--transmit ${
+                            transmittingTargets.has(`channel:${channel.id}`) ? "card-control--active" : ""
+                          }`}
+                          onPointerDown={(event) => {
+                            event.preventDefault();
+                            event.currentTarget.setPointerCapture(event.pointerId);
+                            beginTransmit(`channel:${channel.id}`);
+                          }}
+                          onPointerUp={() => endTransmit(`channel:${channel.id}`)}
+                          onPointerLeave={() => endTransmit(`channel:${channel.id}`)}
+                          onPointerCancel={() => endTransmit(`channel:${channel.id}`)}
+                          aria-pressed={transmittingTargets.has(`channel:${channel.id}`)}
+                          aria-label={`Transmit to ${channel.name}`}
+                          disabled={!controlsEnabled}
+                          title={controlsEnabled ? "Transmit" : disabledReason}
+                        >
+                          <Icon path={mdiSend} size={16} />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        ) : null}
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </div>
+        <div className="control-plane__column">
+          {viewSettings.showRoster ? (
+            <section className="control-plane__panel panel">
+              <div className="control-plane__panel-header">Roster</div>
+              <div className="control-plane__list">
+                {overview.roster.map((person) => (
+                  <div
+                    key={person.id}
+                    className={`roster-panel-item status-card status-card--${statusToKey(
+                      overview.statuses?.users?.[person.id]
+                    )}`}
+                  >
+                    <div className="dispatch-card__header">
+                      <div className="dispatch-card__title-row">
+                        <div className="info-card__title">{person.displayName || person.email}</div>
+                        <InfoPopover
+                          title={person.displayName || person.email}
+                          details={[
+                            { label: "User ID", value: person.id },
+                            { label: "Role", value: person.role },
+                            { label: "Status", value: person.status },
+                            { label: "Connections", value: "No live telemetry" },
+                            { label: "Bandwidth", value: "Not available" },
+                            { label: "Latency", value: "Not available" },
+                            { label: "Errors", value: "None reported" }
+                          ]}
+                        />
+                      </div>
+                      <span
+                        className={`pill pill--status-${statusToKey(overview.statuses?.users?.[person.id])}`}
+                      >
+                        {statusLabel(overview.statuses?.users?.[person.id])}
+                      </span>
+                    </div>
+                    <div className="info-card__meta">{person.role}</div>
+                    {person.status === "PENDING" ? (
+                      <div className="dispatch-card__footer">
+                        <span className="pill pill--pending">Pending approval</span>
+                        <button className="btn btn--tiny" onClick={() => approveUser(person.id)}>
+                          Approve
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </div>
       </div>
+      <footer className="control-plane__footer panel">
+        <div className="control-plane__footer-left">
+          <span>Monitor: {listeningChannelIds.length}</span>
+          <span>Audio: {audioStatus.connected ? "Connected" : "Disconnected"}</span>
+          <span>Mic: {audioStatus.permission === "granted" ? "Ready" : "Blocked"}</span>
+        </div>
+        <button className="ptt-button" type="button" disabled>
+          Push To Talk
+        </button>
+        <div className="control-plane__footer-right">
+          <span>Emergency: Standby</span>
+          <span>Supervisor override: Ready</span>
+        </div>
+      </footer>
       <SettingsDrawer
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}

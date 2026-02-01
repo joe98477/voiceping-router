@@ -2,9 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { apiGet, apiPatch } from "../api.js";
 import InfoPopover from "../components/InfoPopover.jsx";
-import Icon from "../components/Icon.jsx";
 import { statusLabel, statusToKey } from "../utils/status.js";
-import { mdiRadioHandheld } from "../icons.js";
 
 const Dispatch = ({ user, onLogout }) => {
   const { eventId } = useParams();
@@ -12,6 +10,7 @@ const Dispatch = ({ user, onLogout }) => {
   const [overview, setOverview] = useState(null);
   const [error, setError] = useState("");
   const [trafficByChannel, setTrafficByChannel] = useState({});
+  const [clock, setClock] = useState(() => new Date());
 
   const loadOverview = () => {
     setError("");
@@ -51,6 +50,11 @@ const Dispatch = ({ user, onLogout }) => {
     return () => clearInterval(interval);
   }, [eventId]);
 
+  useEffect(() => {
+    const interval = setInterval(() => setClock(new Date()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   const approveUser = async (userId) => {
     await apiPatch(`/api/events/${eventId}/users/${userId}/approve`);
     loadOverview();
@@ -69,21 +73,39 @@ const Dispatch = ({ user, onLogout }) => {
     );
   }
   if (!overview) {
-    return <div className="screen screen--center">Loading…</div>;
+    return <div className="screen screen--center">Loading...</div>;
   }
 
   return (
-    <div className="screen">
-      <header className="topbar">
-        <div>
-          <div className="badge">Dispatch</div>
-          <h2>{overview.event.name}</h2>
+    <div className="control-plane">
+      <header className="control-plane__topbar panel">
+        <div className="control-plane__brand">
+          <span>ConnectVoice</span>
+          <h1>Dispatch Control Plane</h1>
+          <div className="control-plane__subtitle">{overview.event.name}</div>
         </div>
-        <div className="topbar__actions">
-          <span className="pill">Pending: {overview.pendingCount}</span>
-          <button className="btn" onClick={onLogout}>
-            Log out
-          </button>
+        <div className="control-plane__stats">
+          <div className="control-plane__stat">
+            <span>Active Incidents</span>
+            <strong>{overview.teams.length}</strong>
+          </div>
+          <div className="control-plane__stat">
+            <span>Online Units</span>
+            <strong>{overview.roster.length}</strong>
+          </div>
+          <div className="control-plane__stat">
+            <span>Channels</span>
+            <strong>{overview.channels.length}</strong>
+          </div>
+        </div>
+        <div>
+          <div className="control-plane__clock">{clock.toLocaleTimeString()}</div>
+          <div className="control-plane__actions">
+            <span className="pill">Pending: {overview.pendingCount}</span>
+            <button className="btn" onClick={onLogout}>
+              Log out
+            </button>
+          </div>
         </div>
       </header>
       <div className="status-legend">
@@ -95,117 +117,41 @@ const Dispatch = ({ user, onLogout }) => {
         <span className="status-legend__text">No users connected</span>
       </div>
       {error ? <div className="alert">{error}</div> : null}
-      <div className="grid grid--dispatch">
-        <section className="panel">
-          <div className="panel__header">Roster</div>
-          <div className="panel__body">
-            {overview.roster.map((person) => (
-              <div
-                key={person.id}
-                className={`roster-item status-card dispatch-card status-card--${statusToKey(
-                  overview.statuses?.users?.[person.id]
-                )}`}
-              >
-                <div className="dispatch-card__header">
-                  <div className="dispatch-card__title-row">
-                    <div className="info-card__title">{person.displayName || person.email}</div>
-                    <InfoPopover
-                      title={person.displayName || person.email}
-                      details={[
-                        { label: "User ID", value: person.id },
-                        { label: "Role", value: person.role },
-                        { label: "Status", value: person.status },
-                        { label: "Connections", value: "No live telemetry" },
-                        { label: "Bandwidth", value: "Not available" },
-                        { label: "Latency", value: "Not available" },
-                        { label: "Errors", value: "None reported" }
-                      ]}
-                    />
-                  </div>
-                  <span
-                    className={`pill pill--status-${statusToKey(overview.statuses?.users?.[person.id])}`}
-                  >
-                    {statusLabel(overview.statuses?.users?.[person.id])}
-                  </span>
-                </div>
-                <div className="info-card__meta">{person.role}</div>
-                {person.status === "PENDING" ? (
-                  <div className="dispatch-card__footer">
-                    <span className="pill pill--pending">Pending approval</span>
-                    <button className="btn btn--tiny" onClick={() => approveUser(person.id)}>
-                      Approve
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        </section>
-        <section className="panel">
-          <div className="panel__header">Teams</div>
-          <div className="panel__body">
-            {overview.teams.map((team) => (
-              <div
-                key={team.id}
-                className={`team-card status-card dispatch-card status-card--${statusToKey(
-                  overview.statuses?.teams?.[team.id]
-                )}`}
-              >
-                <div className="dispatch-card__header">
-                  <div className="dispatch-card__title-row">
+      <div className="control-plane__columns">
+        <div className="control-plane__column">
+          <section className="control-plane__panel panel">
+            <div className="control-plane__panel-header">Talkgroups</div>
+            <div className="control-plane__list">
+              {overview.teams.map((team) => (
+                <div key={team.id} className="talkgroup-item">
+                  <div className="talkgroup-item__row">
                     <div className="team-card__title">{team.name}</div>
-                    <InfoPopover
-                      title={team.name}
-                      details={[
-                        { label: "Team ID", value: team.id },
-                        {
-                          label: "Users",
-                          value: overview.teamMemberCounts?.[team.id] ?? 0
-                        },
-                        {
-                          label: "Channels",
-                          value: overview.channels.filter((channel) => channel.teamId === team.id).length
-                        },
-                        { label: "Connections", value: "No live telemetry" },
-                        { label: "Bandwidth", value: "Not available" },
-                        { label: "Latency", value: "Not available" },
-                        { label: "Errors", value: "None reported" }
-                      ]}
-                    />
+                    <span
+                      className={`pill pill--status-${statusToKey(overview.statuses?.teams?.[team.id])}`}
+                    >
+                      {statusLabel(overview.statuses?.teams?.[team.id])}
+                    </span>
                   </div>
-                  <span
-                    className={`pill pill--status-${statusToKey(overview.statuses?.teams?.[team.id])}`}
-                  >
-                    {statusLabel(overview.statuses?.teams?.[team.id])}
-                  </span>
+                  <div className="talkgroup-item__meta">
+                    Channels: {overview.channels.filter((channel) => channel.teamId === team.id).length}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </section>
-        <section className="panel">
-          <div className="panel__header">Channels</div>
-          <div className="panel__body">
-            {overview.channels.map((channel) => {
-              const traffic = trafficByChannel[channel.id];
-              const isActive = !!traffic?.active;
-              return (
-                <div
-                  key={channel.id}
-                  className={`channel-card status-card dispatch-card channel-card--with-icon ${
-                    isActive ? "channel-card--active" : ""
-                  } status-card--${statusToKey(overview.statuses?.channels?.[channel.id])}`}
-                >
-                  <div
-                    className={`channel-card__icon ${isActive ? "channel-card__icon--active" : ""}`}
-                    aria-label={isActive ? "Channel active" : "Channel idle"}
-                  >
-                    <Icon path={mdiRadioHandheld} size={18} />
-                  </div>
-                  <div className="channel-card__content">
+              ))}
+            </div>
+          </section>
+        </div>
+        <div className="control-plane__column">
+          <section className="control-plane__panel panel">
+            <div className="control-plane__panel-header">Live Activity</div>
+            <div className="control-plane__list">
+              {overview.channels.map((channel) => {
+                const traffic = trafficByChannel[channel.id];
+                const isActive = !!traffic?.active;
+                return (
+                  <div key={channel.id} className="live-activity-item">
                     <div className="dispatch-card__header">
                       <div className="dispatch-card__title-row">
-                        <div className="channel-card__title">{channel.name}</div>
+                        <div className="live-activity-item__title">{channel.name}</div>
                         <InfoPopover
                           title={channel.name}
                           details={[
@@ -218,8 +164,7 @@ const Dispatch = ({ user, onLogout }) => {
                             {
                               label: "Team",
                               value: channel.teamId
-                                ? overview.teams.find((team) => team.id === channel.teamId)?.name ||
-                                  "Unknown"
+                                ? overview.teams.find((team) => team.id === channel.teamId)?.name || "Unknown"
                                 : "Event"
                             },
                             { label: "Connections", value: "No live telemetry" },
@@ -237,16 +182,76 @@ const Dispatch = ({ user, onLogout }) => {
                         {statusLabel(overview.statuses?.channels?.[channel.id])}
                       </span>
                     </div>
-                    <div className="channel-card__meta">
-                      <span>{channel.type === "EVENT_ADMIN" ? "Admin" : "Team"}</span>
+                    <div className="talkgroup-item__meta">
+                      {isActive ? "Active traffic" : "Idle"}
                     </div>
                   </div>
+                );
+              })}
+            </div>
+          </section>
+        </div>
+        <div className="control-plane__column">
+          <section className="control-plane__panel panel">
+            <div className="control-plane__panel-header">Roster</div>
+            <div className="control-plane__list">
+              {overview.roster.map((person) => (
+                <div
+                  key={person.id}
+                  className={`roster-panel-item status-card status-card--${statusToKey(
+                    overview.statuses?.users?.[person.id]
+                  )}`}
+                >
+                  <div className="dispatch-card__header">
+                    <div className="dispatch-card__title-row">
+                      <div className="info-card__title">{person.displayName || person.email}</div>
+                      <InfoPopover
+                        title={person.displayName || person.email}
+                        details={[
+                          { label: "User ID", value: person.id },
+                          { label: "Role", value: person.role },
+                          { label: "Status", value: person.status },
+                          { label: "Connections", value: "No live telemetry" },
+                          { label: "Bandwidth", value: "Not available" },
+                          { label: "Latency", value: "Not available" },
+                          { label: "Errors", value: "None reported" }
+                        ]}
+                      />
+                    </div>
+                    <span
+                      className={`pill pill--status-${statusToKey(overview.statuses?.users?.[person.id])}`}
+                    >
+                      {statusLabel(overview.statuses?.users?.[person.id])}
+                    </span>
+                  </div>
+                  <div className="info-card__meta">{person.role}</div>
+                  {person.status === "PENDING" ? (
+                    <div className="dispatch-card__footer">
+                      <span className="pill pill--pending">Pending approval</span>
+                      <button className="btn btn--tiny" onClick={() => approveUser(person.id)}>
+                        Approve
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
-              );
-            })}
-          </div>
-        </section>
+              ))}
+            </div>
+          </section>
+        </div>
       </div>
+      <footer className="control-plane__footer panel">
+        <div className="control-plane__footer-left">
+          <span>Monitor: {overview.roster.length}</span>
+          <span>Incident: {overview.event.name}</span>
+        </div>
+        <button className="ptt-button" type="button" disabled>
+          Push To Talk
+        </button>
+        <div className="control-plane__footer-right">
+          <span>Emergency: Standby</span>
+          <span>Supervisor override: Ready</span>
+        </div>
+      </footer>
     </div>
   );
 };

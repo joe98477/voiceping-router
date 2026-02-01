@@ -29,7 +29,7 @@ const Admin = ({ onLogout }) => {
   };
 
   if (!event || !limits) {
-    return <div className="screen screen--center">Loading…</div>;
+    return <div className="screen screen--center">Loading...</div>;
   }
 
   return (

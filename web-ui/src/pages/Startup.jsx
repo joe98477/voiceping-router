@@ -19,7 +19,7 @@ const Startup = ({ status, error, showDetails, onRetry }) => {
     <div className="screen screen--center">
       <div className="card card--auth">
         <div className="card__header">
-          <div className="badge">VoicePing</div>
+          <div className="badge">ConnectVoice</div>
           <h1>Starting services</h1>
           <p>Preparing the dispatch system. This should only take a moment.</p>
         </div>
