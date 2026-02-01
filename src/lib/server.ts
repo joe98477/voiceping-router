@@ -231,7 +231,7 @@ class Server implements IServer {
         if (user.channelIds && user.channelIds instanceof Array) {
           user.channelIds.forEach((channelId) => {
             States.addUserToGroup(userId, channelId);
-            Redis.addUserToGroup(userId, channelId, () => {});
+            Redis.addUserToGroup(userId, channelId);
           });
         }
         Redis.getGroupsOfUser(userId, (err, groupIds) => {
