@@ -1,4 +1,4 @@
-FROM node:8.16.0-alpine
+FROM node:16-alpine
 
 # Global dependencies
 RUN apk --no-cache add --virtual native-deps \
