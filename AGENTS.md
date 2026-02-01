@@ -16,6 +16,7 @@ This repository contains the VoicePing Router Node.js websocket server and its D
 ## Working agreements
 - Keep changes small and focused.
 - Prefer adding new documentation under `docs/` when proposing architecture or workflows.
+- update `docs/user-manual.md` when changes are made that impact user flow.
 - Update `README.md` only when user-facing setup steps change.
 - Use `npm run build` and `npm test` when practical before committing.
 
