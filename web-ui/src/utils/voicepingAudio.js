@@ -1,5 +1,5 @@
 import notepack from "notepack.io";
-import OpusDecoder from "opus-decoder";
+import { OpusDecoder } from "opus-decoder";
 
 const ChannelType = {
   GROUP: 0,
