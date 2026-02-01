@@ -66,6 +66,7 @@ const Console = ({ user, onLogout }) => {
       const devices = await navigator.mediaDevices.enumerateDevices();
       const inputs = devices.filter((device) => device.kind === "audioinput");
       setMicDevices(inputs);
+      setAudioError("");
       if (!selectedMicId && inputs[0]) {
         setSelectedMicId(inputs[0].deviceId);
       }
@@ -140,7 +141,7 @@ const Console = ({ user, onLogout }) => {
   }, [listeningChannelIds]);
 
   useEffect(() => {
-    if (!overview || audioStatus.permission !== "granted") {
+    if (!overview) {
       return;
     }
     let cancelled = false;
@@ -181,7 +182,7 @@ const Console = ({ user, onLogout }) => {
         audioClientRef.current = null;
       }
     };
-  }, [overview, audioStatus.permission, eventId, user.id]);
+  }, [overview, eventId, user.id]);
 
   useEffect(() => {
     if (!audioClientRef.current || !overview) {
