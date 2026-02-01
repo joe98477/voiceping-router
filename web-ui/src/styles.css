@@ -24,6 +24,7 @@
   --icon-btn-size: 40px;
   --icon-btn-icon-size: 20px;
   --stack-gap: 12px;
+  --checkbox-size: 18px;
 }
 
 * {
@@ -197,6 +198,13 @@ a {
   gap: 8px;
   font-size: 0.9rem;
   color: var(--muted);
+}
+
+input[type="checkbox"] {
+  width: var(--checkbox-size);
+  height: var(--checkbox-size);
+  margin: 0;
+  accent-color: var(--accent-2);
 }
 
 .form--grid {
