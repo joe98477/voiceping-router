@@ -9,6 +9,10 @@ const config = {
   app: {
     port: process.env.PORT || 3000
   },
+  auth: {
+    legacyJoinEnabled: process.env.LEGACY_JOIN_ENABLED === "true",
+    routerJwtSecret: process.env.ROUTER_JWT_SECRET || process.env.SECRET_KEY || "awesomevoiceping"
+  },
   group: {
     busyTimeout: Number(process.env.GROUP_BUSY_TIMEOUT) || (95 * 1000),
     inspectInterval: Number(process.env.GROUP_INSPECT_INTERVAL) || (60 * 1000)
@@ -32,10 +36,6 @@ const config = {
     port: process.env.REDIS_PORT || 6379
   },
   secretKey: process.env.SECRET_KEY || "awesomevoiceping",
-  auth: {
-    routerJwtSecret: process.env.ROUTER_JWT_SECRET || process.env.SECRET_KEY || "awesomevoiceping",
-    legacyJoinEnabled: process.env.LEGACY_JOIN_ENABLED === "true"
-  },
   web: {
     serverUrl: process.env.WEB_SERVER_URL || "",
     socketSecret: process.env.WEB_SOCKET_SECRET || ""
