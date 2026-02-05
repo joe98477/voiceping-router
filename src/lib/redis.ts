@@ -267,12 +267,13 @@ class Redis {
 
   public static addUserToGroup(
     userId: numberOrString, groupId: numberOrString,
-    callback: (err: Error, succeed: boolean) => void) {
+    callback?: (err: Error, succeed: boolean) => void) {
 
     const multi = client.multi();
     multi.sadd(Keys.forGroupsOfUser(userId), groupId);
     multi.sadd(Keys.forUsersInsideGroup(groupId), userId);
     multi.exec(function(err, replies) {
+      if (!callback) { return; }
       if (err) { return callback(err, null); }
       return callback(null, !!replies);
     });
