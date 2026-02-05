@@ -37,6 +37,12 @@ const normalizeBinaryPayload = (payload: any): any => {
   if (payload instanceof Uint8Array) {
     return Buffer.from(payload);
   }
+  if (payload instanceof ArrayBuffer) {
+    return Buffer.from(new Uint8Array(payload));
+  }
+  if (ArrayBuffer.isView(payload)) {
+    return Buffer.from(payload.buffer as ArrayBuffer);
+  }
   if (Array.isArray(payload)) {
     return Buffer.from(payload);
   }
@@ -55,6 +61,28 @@ const normalizeBinaryPayload = (payload: any): any => {
     }
   }
   return payload;
+};
+
+const normalizeIncomingData = (data: any): Buffer => {
+  if (!data) {
+    return data;
+  }
+  if (Buffer.isBuffer(data)) {
+    return data;
+  }
+  if (data instanceof Uint8Array) {
+    return Buffer.from(data);
+  }
+  if (data instanceof ArrayBuffer) {
+    return Buffer.from(new Uint8Array(data));
+  }
+  if (ArrayBuffer.isView(data)) {
+    return Buffer.from(data.buffer as ArrayBuffer);
+  }
+  if (typeof data === "string") {
+    return Buffer.from(data, "binary");
+  }
+  return Buffer.from(data);
 };
 
 class Packer {
@@ -78,7 +106,8 @@ class Packer {
   public unpack(data: Buffer, callback: UnpackCallback): void {
     let decoded = null;
     try {
-      decoded = notepack.decode(data);
+      const normalized = normalizeIncomingData(data);
+      decoded = notepack.decode(normalized);
     } catch (exception) {
       if (exception instanceof Error) {
         const err = exception;

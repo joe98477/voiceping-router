@@ -107,8 +107,24 @@ export default class Connection extends EventEmitter {
 
   private handleSocketMessage = (data: Buffer) => {
     debug(`*************************************`);
+    let rawSummary = "";
+    if (typeof data === "string") {
+      const preview = data.length > 120 ? `${data.slice(0, 120)}...` : data;
+      rawSummary = `text length ${data.length} preview ${preview}`;
+    } else {
+      const buffer =
+        Buffer.isBuffer(data) ? data :
+        (data instanceof Uint8Array ? Buffer.from(data) :
+        (data instanceof ArrayBuffer ? Buffer.from(new Uint8Array(data)) : null));
+      if (buffer) {
+        const sample = buffer.slice(0, 24).toString("hex");
+        rawSummary = `binary length ${buffer.length} hex ${sample}${buffer.length > 24 ? "..." : ""}`;
+      } else {
+        rawSummary = `unknown payload type`;
+      }
+    }
     debug(`id ${this.clientId} key ${this.key}` +
-              ` handleSocketMessage RAW data: ${data.toString()}` +
+              ` handleSocketMessage RAW ${rawSummary}` +
               ` device ${this.deviceId}` +
               ` socketState ${this.socket.readyState}`);
     packer.unpack(data, (err: Error, msg: IMessage) => {
