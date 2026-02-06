@@ -29,10 +29,17 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Audio works across Chrome, Firefox, and Safari desktop browsers
   4. User receives visual feedback when PTT is blocked due to busy channel
   5. WebSocket connection automatically reconnects after temporary network loss
-**Plans**: TBD
+**Plans**: 8 plans
 
 Plans:
-- [ ] TBD - Will be created during plan-phase
+- [ ] 01-01-PLAN.md -- Project modernization: Node 20, TypeScript 5, mediasoup deps, shared types and protocol
+- [ ] 01-02-PLAN.md -- mediasoup SFU core: worker pool, router, transports, producers/consumers
+- [ ] 01-03-PLAN.md -- Redis state: speaker locks, channel state, session store
+- [ ] 01-04-PLAN.md -- Signaling server: WebSocket auth, message handlers, server entry point wiring
+- [ ] 01-05-PLAN.md -- Client audio pipeline: mediasoup-client device, transports, microphone, signaling client
+- [ ] 01-06-PLAN.md -- PTT UX: button (hold/toggle), audio feedback tones, busy state, PTT controller
+- [ ] 01-07-PLAN.md -- Reconnection: exponential backoff WebSocket, session recovery, connection manager
+- [ ] 01-08-PLAN.md -- Integration: Docker deployment, test demo page, cross-browser verification
 
 ### Phase 2: User Management & Access Control
 **Goal**: Role-based permissions and organizational hierarchy enable secure multi-user coordination
@@ -82,11 +89,11 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. WebRTC Audio Foundation | 0/TBD | Not started | - |
+| 1. WebRTC Audio Foundation | 0/8 | Planned | - |
 | 2. User Management & Access Control | 0/TBD | Not started | - |
 | 3. Browser UI for General Users | 0/TBD | Not started | - |
 | 4. Dispatch Multi-Channel Monitoring | 0/TBD | Not started | - |
