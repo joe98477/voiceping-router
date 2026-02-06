@@ -10,29 +10,29 @@ See: .planning/PROJECT.md (updated 2026-02-06)
 ## Current Position
 
 Phase: 2 of 4 (User Management & Access Control)
-Plan: 01 of 07 complete
+Plan: 02 of 07 complete
 Status: In progress
-Last activity: 2026-02-06 — Completed 02-01-PLAN.md (Authorization Foundation)
+Last activity: 2026-02-06 — Completed 02-02-PLAN.md (Rate Limiting & Worker Optimization)
 
-Progress: [██░░░░░░░░] 27% (1 phase complete + 1 of 7 plans in phase 2)
+Progress: [██░░░░░░░░] 29% (1 phase complete + 2 of 7 plans in phase 2)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 9
-- Average duration: 10.8 minutes
-- Total execution time: 1.6 hours
+- Total plans completed: 10
+- Average duration: 10.3 minutes
+- Total execution time: 1.7 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01 | 8 | 93 min | 11.6 min |
-| 02 | 1 | 6 min | 6.0 min |
+| 02 | 2 | 12 min | 6.0 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-05 (8 min), 01-06 (9 min), 01-07 (5 min), 01-08 (37 min), 02-01 (6 min)
-- Trend: Efficient (02-01 was foundation layer with clear types and interfaces)
+- Last 5 plans: 01-06 (9 min), 01-07 (5 min), 01-08 (37 min), 02-01 (6 min), 02-02 (6 min)
+- Trend: Fast execution for focused technical tasks, longer for integration/testing tasks
 
 *Updated after each plan completion*
 
@@ -144,6 +144,16 @@ Recent decisions affecting current work:
 | CONFIG-003 | 40-80ms jitter buffer configuration range | Per user constraint for network reliability on degraded networks | Server-side buffering smooths packet arrival times; improves audio quality on cellular/high-jitter networks |
 | REDIS-001 | Redis key patterns match control-plane conventions | u.{userId}.g for user channels, g.{channelId}.u for channel users | Seamless integration with existing control-plane syncUserChannelsToRedis |
 
+**From 02-02 execution:**
+
+| ID | Decision | Rationale | Impact |
+|----|----------|-----------|--------|
+| RATE-001 | Progressive slowdown instead of hard lockout | Legitimate users should never be permanently blocked. Exponential backoff (1s, 2s, 4s, 8s, 16s, 30s) slows brute force while keeping legitimate users unblocked after brief delay | Rate limiting is lenient, security through slowdown not hard denial |
+| RATE-002 | Fail-safe rate limiting (fail open on Redis errors) | Redis connection issues or errors should NOT block legitimate users. Rate limiting is security layer, not critical path | getSlowdownMs() returns 0 on Redis errors, allowing operation to proceed |
+| WORKER-001 | Load-aware worker selection over round-robin | Workers can have uneven load (channels with different user counts). Selecting worker with fewest routers provides better load distribution | More even load distribution across workers, better scalability |
+| WORKER-002 | 25% CPU headroom for system overhead | Single-server 1000+ user target needs system resources for Redis, nginx, OS overhead. Reserve 25% CPU | getOptimalWorkerCount() returns floor(cpuCount * 0.75), e.g., 6 workers on 8-core system |
+| TRANSPORT-001 | 600kbps outgoing bitrate for voice | Opus audio typically uses 24-48kbps. 600kbps provides 10-20x headroom for multiple consumers and transport overhead without overallocation | Increased from 100kbps baseline, sufficient for voice, prevents bandwidth waste |
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -161,17 +171,11 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-06T10:43:23Z
-Stopped at: Completed 02-01-PLAN.md (Authorization Foundation: PermissionManager, AuditLogger, extended types)
+Last session: 2026-02-06T10:43:59Z
+Stopped at: Completed 02-02-PLAN.md (Rate Limiting & Worker Optimization)
 Resume file: None
 
-**Phase 2 (User Management & Access Control) in progress.** Plan 02-01 complete, 6 plans remaining.
-
-**02-01 delivered:**
-- PermissionManager with role-based channel access validation
-- AuditLogger with non-blocking Redis storage
-- Extended shared types (UserRole, AuthenticatedUser, PermissionSet, ChannelPermission, AuditEvent)
-- Phase 2 signaling protocol types
-- Phase 2 configuration (auth, dispatch, channels, jitterBuffer)
-
-Ready to proceed to 02-02 (Rate Limiting & Security Events).
+**Phase 2 (User Management & Access Control) in progress.**
+- ✓ 02-01: Authorization Foundation complete (audit logging, security events backend)
+- ✓ 02-02: Rate Limiting & Worker Optimization complete (progressive rate limiting, load-aware worker pool)
+- Next: 02-03 onwards (permissions enforcement, role-based access control)
