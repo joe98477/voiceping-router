@@ -64,6 +64,19 @@ export class SignalingHandlers {
   }
 
   /**
+   * Get producer ID for a user in a channel
+   * Used by DispatchHandlers to access producer IDs for PTT operations
+   *
+   * @param userId - User ID
+   * @param channelId - Channel ID
+   * @returns Producer ID or undefined if not found
+   */
+  getUserProducerId(userId: string, channelId: string): string | undefined {
+    const producerKey = `${userId}:${channelId}`;
+    return this.userProducers.get(producerKey);
+  }
+
+  /**
    * Handle JOIN_CHANNEL: Add user to channel and subscribe to state updates
    */
   async handleJoinChannel(ctx: ClientContext, message: SignalingMessage): Promise<void> {
@@ -575,6 +588,122 @@ export class SignalingHandlers {
       logger.error(`Error handling PTT_STOP: ${err instanceof Error ? err.message : String(err)}`);
       this.sendError(ctx, message.id, err instanceof Error ? err.message : 'Failed to stop PTT');
     }
+  }
+
+  /**
+   * Handle PRIORITY_PTT_START: Delegate to DispatchHandlers
+   * Validates Dispatch role before delegating
+   */
+  async handlePriorityPttStart(ctx: ClientContext, message: SignalingMessage): Promise<void> {
+    // Validate role
+    if (ctx.role !== UserRole.DISPATCH) {
+      logger.warn(`PRIORITY_PTT_START denied for ${ctx.userId}: not a Dispatch user`);
+
+      this.auditLogger.log({
+        action: AuditAction.PERMISSION_DENIED,
+        actorId: ctx.userId,
+        eventId: ctx.eventId,
+        metadata: {
+          userName: ctx.userName,
+          role: ctx.role,
+          operation: 'priority_ptt_start',
+        },
+      });
+
+      this.sendError(ctx, message.id, 'Permission denied: Priority PTT is only available to Dispatch users');
+      return;
+    }
+
+    // Note: Actual delegation will be wired in Plan 07 when DispatchHandlers is instantiated
+    logger.warn('PRIORITY_PTT_START: DispatchHandlers not yet wired (will be completed in Plan 07)');
+    this.sendError(ctx, message.id, 'Priority PTT not yet implemented');
+  }
+
+  /**
+   * Handle PRIORITY_PTT_STOP: Delegate to DispatchHandlers
+   * Validates Dispatch role before delegating
+   */
+  async handlePriorityPttStop(ctx: ClientContext, message: SignalingMessage): Promise<void> {
+    // Validate role
+    if (ctx.role !== UserRole.DISPATCH) {
+      logger.warn(`PRIORITY_PTT_STOP denied for ${ctx.userId}: not a Dispatch user`);
+
+      this.auditLogger.log({
+        action: AuditAction.PERMISSION_DENIED,
+        actorId: ctx.userId,
+        eventId: ctx.eventId,
+        metadata: {
+          userName: ctx.userName,
+          role: ctx.role,
+          operation: 'priority_ptt_stop',
+        },
+      });
+
+      this.sendError(ctx, message.id, 'Permission denied: Priority PTT is only available to Dispatch users');
+      return;
+    }
+
+    // Note: Actual delegation will be wired in Plan 07 when DispatchHandlers is instantiated
+    logger.warn('PRIORITY_PTT_STOP: DispatchHandlers not yet wired (will be completed in Plan 07)');
+    this.sendError(ctx, message.id, 'Priority PTT not yet implemented');
+  }
+
+  /**
+   * Handle EMERGENCY_BROADCAST_START: Delegate to DispatchHandlers
+   * Validates Dispatch role before delegating
+   */
+  async handleEmergencyBroadcastStart(ctx: ClientContext, message: SignalingMessage): Promise<void> {
+    // Validate role
+    if (ctx.role !== UserRole.DISPATCH) {
+      logger.warn(`EMERGENCY_BROADCAST_START denied for ${ctx.userId}: not a Dispatch user`);
+
+      this.auditLogger.log({
+        action: AuditAction.PERMISSION_DENIED,
+        actorId: ctx.userId,
+        eventId: ctx.eventId,
+        metadata: {
+          userName: ctx.userName,
+          role: ctx.role,
+          operation: 'emergency_broadcast_start',
+        },
+      });
+
+      this.sendError(ctx, message.id, 'Permission denied: Emergency broadcast is only available to Dispatch users');
+      return;
+    }
+
+    // Note: Actual delegation will be wired in Plan 07 when DispatchHandlers is instantiated
+    logger.warn('EMERGENCY_BROADCAST_START: DispatchHandlers not yet wired (will be completed in Plan 07)');
+    this.sendError(ctx, message.id, 'Emergency broadcast not yet implemented');
+  }
+
+  /**
+   * Handle EMERGENCY_BROADCAST_STOP: Delegate to DispatchHandlers
+   * Validates Dispatch role before delegating
+   */
+  async handleEmergencyBroadcastStop(ctx: ClientContext, message: SignalingMessage): Promise<void> {
+    // Validate role
+    if (ctx.role !== UserRole.DISPATCH) {
+      logger.warn(`EMERGENCY_BROADCAST_STOP denied for ${ctx.userId}: not a Dispatch user`);
+
+      this.auditLogger.log({
+        action: AuditAction.PERMISSION_DENIED,
+        actorId: ctx.userId,
+        eventId: ctx.eventId,
+        metadata: {
+          userName: ctx.userName,
+          role: ctx.role,
+          operation: 'emergency_broadcast_stop',
+        },
+      });
+
+      this.sendError(ctx, message.id, 'Permission denied: Emergency broadcast is only available to Dispatch users');
+      return;
+    }
+
+    // Note: Actual delegation will be wired in Plan 07 when DispatchHandlers is instantiated
+    logger.warn('EMERGENCY_BROADCAST_STOP: DispatchHandlers not yet wired (will be completed in Plan 07)');
+    this.sendError(ctx, message.id, 'Emergency broadcast not yet implemented');
   }
 
   /**
