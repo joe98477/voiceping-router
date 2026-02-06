@@ -9,29 +9,30 @@ See: .planning/PROJECT.md (updated 2026-02-06)
 
 ## Current Position
 
-Phase: 1 of 4 complete (✓ WebRTC Audio Foundation)
-Plan: N/A
-Status: Ready for Phase 2 planning
-Last activity: 2026-02-06 — Phase 1 complete: All 8 plans executed, goal verified
+Phase: 2 of 4 (User Management & Access Control)
+Plan: 01 of 07 complete
+Status: In progress
+Last activity: 2026-02-06 — Completed 02-01-PLAN.md (Authorization Foundation)
 
-Progress: [██░░░░░░░░] 25% (1 of 4 phases complete)
+Progress: [██░░░░░░░░] 27% (1 phase complete + 1 of 7 plans in phase 2)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 8
-- Average duration: 11.6 minutes
-- Total execution time: 1.5 hours
+- Total plans completed: 9
+- Average duration: 10.8 minutes
+- Total execution time: 1.6 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01 | 8 | 93 min | 11.6 min |
+| 02 | 1 | 6 min | 6.0 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-04 (7 min), 01-05 (8 min), 01-06 (9 min), 01-07 (5 min), 01-08 (37 min)
-- Trend: Variable (01-08 included Docker setup and human verification checkpoint)
+- Last 5 plans: 01-05 (8 min), 01-06 (9 min), 01-07 (5 min), 01-08 (37 min), 02-01 (6 min)
+- Trend: Efficient (02-01 was foundation layer with clear types and interfaces)
 
 *Updated after each plan completion*
 
@@ -130,6 +131,19 @@ Recent decisions affecting current work:
 | TEST-002 | Two-user test panels for real-time PTT interaction testing | Simulates real PTT interaction without complex test harness; each panel has own ConnectionManager instance | Enables comprehensive Phase 1 verification: two users in same channel, PTT arbitration (busy state), speaker notifications, reconnection |
 | TEST-003 | Latency measurement with performance.now() and audio element 'playing' event | Record timestamp when PTT button pressed, calculate difference when audio starts playing | Enables verification of <300ms latency requirement (Phase 1 Success Criterion #2) |
 
+**From 02-01 execution:**
+
+| ID | Decision | Rationale | Impact |
+|----|----------|-----------|--------|
+| AUTH-001 | Admin role does NOT have PTT priority | Per user decision: Admin role is management, not real-time communication | Admin can force-disconnect and manage channels, but cannot interrupt speakers |
+| AUTH-002 | Permission checks at channel join time only | No per-PTT-action overhead per user decision; balances security with performance | Enables <300ms PTT latency; heartbeat refresh catches revocations |
+| AUTH-003 | 30-second heartbeat-based permission refresh interval | Balances Redis load vs revocation delay; matches existing heartbeat infrastructure | Catches permission changes within 30s without per-action database queries |
+| AUTH-004 | 1-hour JWT token TTL combined with heartbeat sync | Balances security (fresh permissions) vs authentication overhead | Users stay authenticated for session duration; heartbeat ensures fresh permissions |
+| AUDIT-001 | Non-blocking audit logging with fire-and-forget pattern | Audit logging must never break core PTT functionality | log() method wrapped in try/catch, never throws; Redis failures logged but ignored |
+| AUDIT-002 | Redis audit log capped at 10,000 entries with LTRIM | Prevents unbounded growth while keeping recent history | Rolling window of recent events; older events exported to control-plane database |
+| CONFIG-003 | 40-80ms jitter buffer configuration range | Per user constraint for network reliability on degraded networks | Server-side buffering smooths packet arrival times; improves audio quality on cellular/high-jitter networks |
+| REDIS-001 | Redis key patterns match control-plane conventions | u.{userId}.g for user channels, g.{channelId}.u for channel users | Seamless integration with existing control-plane syncUserChannelsToRedis |
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -147,16 +161,17 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-06T19:13:00Z
-Stopped at: Completed 01-08-PLAN.md execution (Docker Deployment with WSS and End-to-End Testing) — **Phase 1 complete**
+Last session: 2026-02-06T10:43:23Z
+Stopped at: Completed 02-01-PLAN.md (Authorization Foundation: PermissionManager, AuditLogger, extended types)
 Resume file: None
 
-**Phase 1 (WebRTC Audio Foundation) is complete.** All 8 plans executed successfully. All Phase 1 success criteria verified:
-1. ✓ User can press button to transmit audio and hear received audio in real-time
-2. ✓ Audio transmission latency <300ms from button press to hearing audio
-3. ✓ Audio works across Chrome, Firefox, and Safari desktop browsers
-4. ✓ User receives visual feedback when PTT is blocked due to busy channel
-5. ✓ WebSocket connection automatically reconnects after temporary network loss
-6. ✓ SEC-02 (WSS with TLS/SSL) satisfied via nginx reverse proxy
+**Phase 2 (User Management & Access Control) in progress.** Plan 02-01 complete, 6 plans remaining.
 
-Ready to proceed to Phase 2 (Scaling and Production Infrastructure).
+**02-01 delivered:**
+- PermissionManager with role-based channel access validation
+- AuditLogger with non-blocking Redis storage
+- Extended shared types (UserRole, AuthenticatedUser, PermissionSet, ChannelPermission, AuditEvent)
+- Phase 2 signaling protocol types
+- Phase 2 configuration (auth, dispatch, channels, jitterBuffer)
+
+Ready to proceed to 02-02 (Rate Limiting & Security Events).
