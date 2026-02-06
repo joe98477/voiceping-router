@@ -73,10 +73,13 @@ Plans:
   2. User can click PTT button on any assigned channel to transmit audio
   3. User sees visual indicator when channel is busy
   4. User sees which user is currently speaking on each channel
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] TBD - Will be created during plan-phase
+- [ ] 03-01-PLAN.md -- Auth/session foundation: tokenStorage, useAuth hook, ChannelContext provider
+- [ ] 03-02-PLAN.md -- Connection & PTT: useChannelConnection hook, ChannelCard with PttController wrapper
+- [ ] 03-03-PLAN.md -- Page assembly: ChannelList, Channels page, route wiring, PERMISSION_UPDATE, CSS styling
+- [ ] 03-04-PLAN.md -- Build verification, integration fixes, and visual verification checkpoint
 
 ### Phase 4: Dispatch Multi-Channel Monitoring
 **Goal**: Dispatch users can monitor and communicate on multiple channels simultaneously
@@ -102,7 +105,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 |-------|----------------|--------|-----------|
 | 1. WebRTC Audio Foundation | 8/8 | ✓ Complete | 2026-02-06 |
 | 2. User Management & Access Control | 0/8 | Planning complete | - |
-| 3. Browser UI for General Users | 0/TBD | Not started | - |
+| 3. Browser UI for General Users | 0/4 | Planning complete | - |
 | 4. Dispatch Multi-Channel Monitoring | 0/TBD | Not started | - |
 
 ---
