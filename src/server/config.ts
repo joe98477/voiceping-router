@@ -113,10 +113,10 @@ export const config = {
 
   turn: parseTurnServer(process.env.TURN_SERVER)
     ? {
-        ...parseTurnServer(process.env.TURN_SERVER)!,
-        username: process.env.TURN_USERNAME || '',
-        password: process.env.TURN_PASSWORD || '',
-      }
+      ...parseTurnServer(process.env.TURN_SERVER)!,
+      username: process.env.TURN_USERNAME || '',
+      password: process.env.TURN_PASSWORD || '',
+    }
     : null,
 
   auth: {
