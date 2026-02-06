@@ -13,6 +13,7 @@
     "start": "node dist/server/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:load": "npx tsx src/server/test/loadTest.ts",
     "lint": "eslint src/shared src/server --ext .ts"
   },
   "keywords": [
