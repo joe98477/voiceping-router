@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-02-06)
 ## Current Position
 
 Phase: 2 of 4 (User Management & Access Control)
-Plan: 02 of 07 complete
+Plan: 03 of 07 complete
 Status: In progress
-Last activity: 2026-02-06 — Completed 02-02-PLAN.md (Rate Limiting & Worker Optimization)
+Last activity: 2026-02-06 — Completed 02-03-PLAN.md (Channel Authorization Enforcement)
 
-Progress: [██░░░░░░░░] 29% (1 phase complete + 2 of 7 plans in phase 2)
+Progress: [███░░░░░░░] 31% (1 phase complete + 3 of 7 plans in phase 2)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 10
-- Average duration: 10.3 minutes
-- Total execution time: 1.7 hours
+- Total plans completed: 11
+- Average duration: 9.5 minutes
+- Total execution time: 1.8 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01 | 8 | 93 min | 11.6 min |
-| 02 | 2 | 12 min | 6.0 min |
+| 02 | 3 | 16 min | 5.3 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-06 (9 min), 01-07 (5 min), 01-08 (37 min), 02-01 (6 min), 02-02 (6 min)
+- Last 5 plans: 01-07 (5 min), 01-08 (37 min), 02-01 (6 min), 02-02 (6 min), 02-04 (4 min)
 - Trend: Fast execution for focused technical tasks, longer for integration/testing tasks
 
 *Updated after each plan completion*
@@ -154,6 +154,15 @@ Recent decisions affecting current work:
 | WORKER-002 | 25% CPU headroom for system overhead | Single-server 1000+ user target needs system resources for Redis, nginx, OS overhead. Reserve 25% CPU | getOptimalWorkerCount() returns floor(cpuCount * 0.75), e.g., 6 workers on 8-core system |
 | TRANSPORT-001 | 600kbps outgoing bitrate for voice | Opus audio typically uses 24-48kbps. 600kbps provides 10-20x headroom for multiple consumers and transport overhead without overallocation | Increased from 100kbps baseline, sufficient for voice, prevents bandwidth waste |
 
+**From 02-04 execution:**
+
+| ID | Decision | Rationale | Impact |
+|----|----------|-----------|--------|
+| PUBSUB-001 | Dedicated Redis subscriber client for pub/sub | Redis v4 requires separate client instances for pub/sub operations | PermissionSyncManager creates its own subscriber client, matching ChannelStateManager pattern |
+| PUBSUB-002 | Exponential backoff retry for pub/sub failures | Network failures and Redis restarts should not crash permission sync; retry with increasing delays prevents server overload | Retry delays: 1s, 2s, 4s, 8s, 16s, 30s (cap); heartbeat is fallback if pub/sub down |
+| EVENT-001 | Event-to-channel mapping via Redis hash | Multi-channel event operations (emergency broadcast, event-wide pause) need to know which channels belong to which event | channel:events hash maps channelId -> eventId, enabling event-based queries |
+| EVENT-002 | Callback pattern for permission change notifications | Decouples PermissionSyncManager from WebSocket server; index.ts will wire callback in Plan 07 | Clean separation of concerns, easier testing, pluggable architecture |
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -171,11 +180,12 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-06T10:43:59Z
-Stopped at: Completed 02-02-PLAN.md (Rate Limiting & Worker Optimization)
+Last session: 2026-02-06T11:18:51Z
+Stopped at: Completed 02-04-PLAN.md (Real-Time Permission Sync)
 Resume file: None
 
 **Phase 2 (User Management & Access Control) in progress.**
 - ✓ 02-01: Authorization Foundation complete (audit logging, security events backend)
 - ✓ 02-02: Rate Limiting & Worker Optimization complete (progressive rate limiting, load-aware worker pool)
-- Next: 02-03 onwards (permissions enforcement, role-based access control)
+- ✓ 02-04: Real-Time Permission Sync complete (Redis pub/sub for membership updates, event-based multi-user tracking)
+- Next: 02-05 onwards (WebSocket integration, emergency broadcast)
