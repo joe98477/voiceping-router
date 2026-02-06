@@ -15,6 +15,7 @@ import { PermissionManager } from '../auth/permissionManager';
 import { AuditLogger, AuditAction } from '../auth/auditLogger';
 import { SecurityEventsManager } from '../auth/securityEvents';
 import { AdminHandlers } from './adminHandlers';
+import { DispatchHandlers } from './dispatchHandlers';
 import { createLogger } from '../logger';
 import { config } from '../config';
 import { ClientContext } from './websocketServer';
@@ -40,6 +41,7 @@ export class SignalingHandlers {
   private auditLogger: AuditLogger;
   private adminHandlers?: AdminHandlers;
   private securityEventsManager?: SecurityEventsManager;
+  private dispatchHandlers?: DispatchHandlers;
 
   // Track user's producer IDs for PTT operations
   private userProducers = new Map<string, string>(); // userId:channelId -> producerId
@@ -79,6 +81,13 @@ export class SignalingHandlers {
    */
   setSecurityEventsManager(securityEventsManager: SecurityEventsManager): void {
     this.securityEventsManager = securityEventsManager;
+  }
+
+  /**
+   * Set DispatchHandlers instance (called during initialization in Plan 07)
+   */
+  setDispatchHandlers(dispatchHandlers: DispatchHandlers): void {
+    this.dispatchHandlers = dispatchHandlers;
   }
 
   /**
@@ -632,9 +641,14 @@ export class SignalingHandlers {
       return;
     }
 
-    // Note: Actual delegation will be wired in Plan 07 when DispatchHandlers is instantiated
-    logger.warn('PRIORITY_PTT_START: DispatchHandlers not yet wired (will be completed in Plan 07)');
-    this.sendError(ctx, message.id, 'Priority PTT not yet implemented');
+    // Delegate to DispatchHandlers
+    if (!this.dispatchHandlers) {
+      logger.warn('PRIORITY_PTT_START: DispatchHandlers not yet wired');
+      this.sendError(ctx, message.id, 'Priority PTT not yet implemented');
+      return;
+    }
+
+    await this.dispatchHandlers.handlePriorityPttStart(ctx, message);
   }
 
   /**
@@ -661,9 +675,14 @@ export class SignalingHandlers {
       return;
     }
 
-    // Note: Actual delegation will be wired in Plan 07 when DispatchHandlers is instantiated
-    logger.warn('PRIORITY_PTT_STOP: DispatchHandlers not yet wired (will be completed in Plan 07)');
-    this.sendError(ctx, message.id, 'Priority PTT not yet implemented');
+    // Delegate to DispatchHandlers
+    if (!this.dispatchHandlers) {
+      logger.warn('PRIORITY_PTT_STOP: DispatchHandlers not yet wired');
+      this.sendError(ctx, message.id, 'Priority PTT not yet implemented');
+      return;
+    }
+
+    await this.dispatchHandlers.handlePriorityPttStop(ctx, message);
   }
 
   /**
@@ -690,9 +709,14 @@ export class SignalingHandlers {
       return;
     }
 
-    // Note: Actual delegation will be wired in Plan 07 when DispatchHandlers is instantiated
-    logger.warn('EMERGENCY_BROADCAST_START: DispatchHandlers not yet wired (will be completed in Plan 07)');
-    this.sendError(ctx, message.id, 'Emergency broadcast not yet implemented');
+    // Delegate to DispatchHandlers
+    if (!this.dispatchHandlers) {
+      logger.warn('EMERGENCY_BROADCAST_START: DispatchHandlers not yet wired');
+      this.sendError(ctx, message.id, 'Emergency broadcast not yet implemented');
+      return;
+    }
+
+    await this.dispatchHandlers.handleEmergencyBroadcastStart(ctx, message);
   }
 
   /**
@@ -719,9 +743,14 @@ export class SignalingHandlers {
       return;
     }
 
-    // Note: Actual delegation will be wired in Plan 07 when DispatchHandlers is instantiated
-    logger.warn('EMERGENCY_BROADCAST_STOP: DispatchHandlers not yet wired (will be completed in Plan 07)');
-    this.sendError(ctx, message.id, 'Emergency broadcast not yet implemented');
+    // Delegate to DispatchHandlers
+    if (!this.dispatchHandlers) {
+      logger.warn('EMERGENCY_BROADCAST_STOP: DispatchHandlers not yet wired');
+      this.sendError(ctx, message.id, 'Emergency broadcast not yet implemented');
+      return;
+    }
+
+    await this.dispatchHandlers.handleEmergencyBroadcastStop(ctx, message);
   }
 
   /**

@@ -44,6 +44,8 @@ export enum SignalingType {
   EMERGENCY_BROADCAST_STOP = 'emergency-broadcast-stop',
   PTT_INTERRUPTED = 'ptt-interrupted',
   ROLE_INFO = 'role-info',
+  BAN_USER = 'ban-user',
+  UNBAN_USER = 'unban-user',
 }
 
 /**

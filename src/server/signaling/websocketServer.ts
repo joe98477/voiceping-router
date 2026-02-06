@@ -13,6 +13,7 @@ import { createLogger } from '../logger';
 import { SignalingHandlers } from './handlers';
 import { PermissionManager } from '../auth/permissionManager';
 import { AuditLogger, AuditAction } from '../auth/auditLogger';
+import { SecurityEventsManager } from '../auth/securityEvents';
 import { rateLimiter } from '../auth/rateLimiter';
 
 const logger = createLogger('SignalingServer');
@@ -57,6 +58,7 @@ export class SignalingServer {
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private permissionManager: PermissionManager;
   private auditLogger: AuditLogger;
+  private securityEventsManager?: SecurityEventsManager;
 
   constructor(
     server: http.Server,
@@ -81,6 +83,13 @@ export class SignalingServer {
     this.startHeartbeat();
 
     logger.info('WebSocket signaling server initialized at /ws');
+  }
+
+  /**
+   * Set SecurityEventsManager instance (called after construction)
+   */
+  setSecurityEventsManager(securityEventsManager: SecurityEventsManager): void {
+    this.securityEventsManager = securityEventsManager;
   }
 
   /**
@@ -188,6 +197,17 @@ export class SignalingServer {
       (info.req as any).role = user.role;
       (info.req as any).channelIds = user.channelIds;
       (info.req as any).globalRole = user.globalRole;
+
+      // Check if user is banned (if SecurityEventsManager is available)
+      if (this.securityEventsManager) {
+        const isBanned = await this.securityEventsManager.checkBanOnConnect(decoded.userId);
+        if (isBanned) {
+          logger.warn(`Connection rejected: User ${decoded.userId} is banned`);
+          await rateLimiter.recordAuthFailure(ip);
+          callback(false, 403, 'Account is suspended');
+          return;
+        }
+      }
 
       // Record successful auth
       await rateLimiter.recordAuthSuccess(ip);
@@ -345,6 +365,34 @@ export class SignalingServer {
           await this.handlers.handlePing(ctx, message);
           break;
 
+        case SignalingType.PRIORITY_PTT_START:
+          await this.handlers.handlePriorityPttStart(ctx, message);
+          break;
+
+        case SignalingType.PRIORITY_PTT_STOP:
+          await this.handlers.handlePriorityPttStop(ctx, message);
+          break;
+
+        case SignalingType.EMERGENCY_BROADCAST_START:
+          await this.handlers.handleEmergencyBroadcastStart(ctx, message);
+          break;
+
+        case SignalingType.EMERGENCY_BROADCAST_STOP:
+          await this.handlers.handleEmergencyBroadcastStop(ctx, message);
+          break;
+
+        case SignalingType.FORCE_DISCONNECT:
+          await this.handlers.handleForceDisconnect(ctx, message);
+          break;
+
+        case SignalingType.BAN_USER:
+          await this.handlers.handleBanUser(ctx, message);
+          break;
+
+        case SignalingType.UNBAN_USER:
+          await this.handlers.handleUnbanUser(ctx, message);
+          break;
+
         default:
           logger.warn(`Unhandled message type: ${message.type}`);
           this.sendError(ctx.ws, `Unhandled message type: ${message.type}`, message.id);
@@ -416,6 +464,63 @@ export class SignalingServer {
    */
   getConnectedClients(): number {
     return this.clients.size;
+  }
+
+  /**
+   * Disconnect a specific user by userId
+   * Used by admin handlers for force-disconnect
+   * @param targetUserId - User ID to disconnect
+   * @param reason - Reason for disconnection
+   * @returns true if user was found and disconnected, false otherwise
+   */
+  disconnectUser(targetUserId: string, reason: string): boolean {
+    for (const [connectionId, ctx] of this.clients.entries()) {
+      if (ctx.userId === targetUserId) {
+        this.sendToClient(ctx.ws, createMessage(SignalingType.FORCE_DISCONNECT, { reason }));
+        ctx.ws.close(4003, reason);
+        logger.info(`User ${targetUserId} force-disconnected: ${reason}`);
+        return true;
+      }
+    }
+    logger.warn(`User ${targetUserId} not found for disconnect`);
+    return false;
+  }
+
+  /**
+   * Send message to a specific user by userId
+   * Used by dispatch handlers for PTT interruption notifications
+   * @param targetUserId - User ID to send message to
+   * @param message - Message to send
+   * @returns true if user was found and message sent, false otherwise
+   */
+  sendToUser(targetUserId: string, message: SignalingMessage): boolean {
+    for (const ctx of this.clients.values()) {
+      if (ctx.userId === targetUserId) {
+        this.sendToClient(ctx.ws, message);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Push permission update to a user
+   * Used by permission sync manager for real-time permission updates
+   * @param userId - User ID to update
+   * @param newChannelIds - New channel IDs user has access to
+   * @param action - Action that triggered the update
+   */
+  pushPermissionUpdate(userId: string, newChannelIds: string[], action: string): void {
+    for (const ctx of this.clients.values()) {
+      if (ctx.userId === userId) {
+        ctx.authorizedChannels = new Set(newChannelIds);
+        this.sendToClient(ctx.ws, createMessage(SignalingType.PERMISSION_UPDATE, {
+          channelIds: newChannelIds,
+          action,
+        }));
+        logger.info(`Permission update pushed to ${userId}: ${action}`);
+      }
+    }
   }
 
   /**
