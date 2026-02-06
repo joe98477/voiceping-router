@@ -56,7 +56,7 @@ async function main() {
     const auditLogger = new AuditLogger(getRedisClient);
     logger.info('Auth managers initialized');
 
-    // 6. Create HTTP server with health endpoint and test page (dev only)
+    // 6. Create HTTP server with health endpoint and test pages (dev only)
     const server = http.createServer((req, res) => {
       if (req.url === '/health' && req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -68,6 +68,43 @@ async function main() {
             connections: signalingServer?.getConnectedClients() || 0,
           })
         );
+      } else if (req.url === '/dev/seed-test-data' && req.method === 'POST' && process.env.NODE_ENV !== 'production') {
+        // Dev-only endpoint: Seed Redis with test users
+        (async () => {
+          try {
+            const redis = getRedisClient();
+
+            // Create test users with permissions
+            const testUsers = [
+              { userId: 'admin-1', role: 'ADMIN', channels: ['test-channel-1', 'test-channel-2'] },
+              { userId: 'dispatch-1', role: 'DISPATCH', channels: ['test-channel-1', 'test-channel-2'] },
+              { userId: 'general-1', role: 'GENERAL', channels: ['test-channel-1', 'test-channel-2'] },
+            ];
+
+            for (const user of testUsers) {
+              const userKey = `u.${user.userId}.g`;
+              await redis.sAdd(userKey, user.channels);
+            }
+
+            // Seed channel-user mappings
+            for (const channelId of ['test-channel-1', 'test-channel-2']) {
+              const channelKey = `g.${channelId}.u`;
+              await redis.sAdd(channelKey, testUsers.map(u => u.userId));
+            }
+
+            // Seed event-channel mapping
+            await redis.sAdd('e.test-event-1.g', ['test-channel-1', 'test-channel-2']);
+
+            logger.info('Test data seeded successfully');
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true, users: testUsers.map(u => u.userId) }));
+          } catch (err: any) {
+            logger.error('Failed to seed test data:', err);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Failed to seed test data', message: err.message }));
+          }
+        })();
       } else if (req.url === '/test' && req.method === 'GET' && process.env.NODE_ENV !== 'production') {
         // Serve test demo page (development only)
         const fs = require('fs');
@@ -93,6 +130,36 @@ async function main() {
           if (err) {
             res.writeHead(404, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Test page JavaScript not found. Run: npm run build' }));
+            return;
+          }
+          res.writeHead(200, { 'Content-Type': 'application/javascript' });
+          res.end(data);
+        });
+      } else if (req.url === '/test/phase2' && req.method === 'GET' && process.env.NODE_ENV !== 'production') {
+        // Serve Phase 2 E2E test page (development only)
+        const fs = require('fs');
+        const path = require('path');
+        const htmlPath = path.join(__dirname, '../client/test/e2e-phase2.html');
+
+        fs.readFile(htmlPath, 'utf8', (err: Error | null, data: string) => {
+          if (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Failed to load Phase 2 test page' }));
+            return;
+          }
+          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.end(data);
+        });
+      } else if (req.url === '/test/phase2.js' && req.method === 'GET' && process.env.NODE_ENV !== 'production') {
+        // Serve compiled Phase 2 test page JavaScript
+        const fs = require('fs');
+        const path = require('path');
+        const jsPath = path.join(__dirname, '../client/test/e2e-phase2.js');
+
+        fs.readFile(jsPath, 'utf8', (err: Error | null, data: string) => {
+          if (err) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Phase 2 test page JavaScript not found. Run: npm run build:test-phase2' }));
             return;
           }
           res.writeHead(200, { 'Content-Type': 'application/javascript' });

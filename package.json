@@ -8,8 +8,9 @@
   },
   "scripts": {
     "dev": "tsx watch src/server/index.ts",
-    "build": "tsc && npm run build:client",
+    "build": "tsc && npm run build:client && npm run build:test-phase2",
     "build:client": "esbuild src/client/test/pttDemo.ts --bundle --outfile=dist/client/test/pttDemo.js --format=esm --platform=browser --target=es2020",
+    "build:test-phase2": "esbuild src/client/test/e2e-phase2.ts --bundle --outfile=dist/client/test/e2e-phase2.js --format=esm --platform=browser --target=es2020",
     "start": "node dist/server/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
