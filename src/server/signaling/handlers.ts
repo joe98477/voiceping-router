@@ -13,6 +13,8 @@ import { ChannelStateManager } from '../state/channelState';
 import { SessionStore } from '../state/sessionStore';
 import { PermissionManager } from '../auth/permissionManager';
 import { AuditLogger, AuditAction } from '../auth/auditLogger';
+import { SecurityEventsManager } from '../auth/securityEvents';
+import { AdminHandlers } from './adminHandlers';
 import { createLogger } from '../logger';
 import { config } from '../config';
 import { ClientContext } from './websocketServer';
@@ -36,6 +38,8 @@ export class SignalingHandlers {
   private broadcastToChannel: BroadcastFunction;
   private permissionManager: PermissionManager;
   private auditLogger: AuditLogger;
+  private adminHandlers?: AdminHandlers;
+  private securityEventsManager?: SecurityEventsManager;
 
   // Track user's producer IDs for PTT operations
   private userProducers = new Map<string, string>(); // userId:channelId -> producerId
@@ -61,6 +65,20 @@ export class SignalingHandlers {
     this.broadcastToChannel = broadcastToChannel;
     this.permissionManager = permissionManager;
     this.auditLogger = auditLogger;
+  }
+
+  /**
+   * Set AdminHandlers instance (called during initialization in Plan 07)
+   */
+  setAdminHandlers(adminHandlers: AdminHandlers): void {
+    this.adminHandlers = adminHandlers;
+  }
+
+  /**
+   * Set SecurityEventsManager instance (called during initialization in Plan 07)
+   */
+  setSecurityEventsManager(securityEventsManager: SecurityEventsManager): void {
+    this.securityEventsManager = securityEventsManager;
   }
 
   /**
@@ -704,6 +722,126 @@ export class SignalingHandlers {
     // Note: Actual delegation will be wired in Plan 07 when DispatchHandlers is instantiated
     logger.warn('EMERGENCY_BROADCAST_STOP: DispatchHandlers not yet wired (will be completed in Plan 07)');
     this.sendError(ctx, message.id, 'Emergency broadcast not yet implemented');
+  }
+
+  /**
+   * Handle FORCE_DISCONNECT: Delegate to AdminHandlers
+   * Validates DISPATCH or ADMIN role before delegating
+   */
+  async handleForceDisconnect(ctx: ClientContext, message: SignalingMessage): Promise<void> {
+    try {
+      // Validate role
+      if (ctx.role !== UserRole.DISPATCH && ctx.role !== UserRole.ADMIN) {
+        logger.warn(`FORCE_DISCONNECT denied for ${ctx.userId}: not a Dispatch or Admin user`);
+
+        this.auditLogger.log({
+          action: AuditAction.PERMISSION_DENIED,
+          actorId: ctx.userId,
+          eventId: ctx.eventId,
+          metadata: {
+            userName: ctx.userName,
+            role: ctx.role,
+            operation: 'force_disconnect',
+          },
+        });
+
+        this.sendError(ctx, message.id, 'Permission denied: Force disconnect is only available to Dispatch or Admin users');
+        return;
+      }
+
+      // Delegate to AdminHandlers if available
+      if (!this.adminHandlers) {
+        logger.warn('FORCE_DISCONNECT: AdminHandlers not yet wired (will be completed in Plan 07)');
+        this.sendError(ctx, message.id, 'Force disconnect not yet implemented');
+        return;
+      }
+
+      await this.adminHandlers.handleForceDisconnect(ctx, message);
+      this.sendResponse(ctx, message.id, { success: true });
+    } catch (err) {
+      logger.error(`Error handling FORCE_DISCONNECT: ${err instanceof Error ? err.message : String(err)}`);
+      this.sendError(ctx, message.id, err instanceof Error ? err.message : 'Failed to force disconnect user');
+    }
+  }
+
+  /**
+   * Handle BAN_USER: Delegate to AdminHandlers
+   * Validates DISPATCH or ADMIN role before delegating
+   */
+  async handleBanUser(ctx: ClientContext, message: SignalingMessage): Promise<void> {
+    try {
+      // Validate role
+      if (ctx.role !== UserRole.DISPATCH && ctx.role !== UserRole.ADMIN) {
+        logger.warn(`BAN_USER denied for ${ctx.userId}: not a Dispatch or Admin user`);
+
+        this.auditLogger.log({
+          action: AuditAction.PERMISSION_DENIED,
+          actorId: ctx.userId,
+          eventId: ctx.eventId,
+          metadata: {
+            userName: ctx.userName,
+            role: ctx.role,
+            operation: 'ban_user',
+          },
+        });
+
+        this.sendError(ctx, message.id, 'Permission denied: Ban user is only available to Dispatch or Admin users');
+        return;
+      }
+
+      // Delegate to AdminHandlers if available
+      if (!this.adminHandlers) {
+        logger.warn('BAN_USER: AdminHandlers not yet wired (will be completed in Plan 07)');
+        this.sendError(ctx, message.id, 'Ban user not yet implemented');
+        return;
+      }
+
+      await this.adminHandlers.handleBanUser(ctx, message);
+      this.sendResponse(ctx, message.id, { success: true });
+    } catch (err) {
+      logger.error(`Error handling BAN_USER: ${err instanceof Error ? err.message : String(err)}`);
+      this.sendError(ctx, message.id, err instanceof Error ? err.message : 'Failed to ban user');
+    }
+  }
+
+  /**
+   * Handle UNBAN_USER: Delegate to AdminHandlers
+   * Validates DISPATCH or ADMIN role before delegating
+   */
+  async handleUnbanUser(ctx: ClientContext, message: SignalingMessage): Promise<void> {
+    try {
+      // Validate role
+      if (ctx.role !== UserRole.DISPATCH && ctx.role !== UserRole.ADMIN) {
+        logger.warn(`UNBAN_USER denied for ${ctx.userId}: not a Dispatch or Admin user`);
+
+        this.auditLogger.log({
+          action: AuditAction.PERMISSION_DENIED,
+          actorId: ctx.userId,
+          eventId: ctx.eventId,
+          metadata: {
+            userName: ctx.userName,
+            role: ctx.role,
+            operation: 'unban_user',
+          },
+        });
+
+        this.sendError(ctx, message.id, 'Permission denied: Unban user is only available to Dispatch or Admin users');
+        return;
+      }
+
+      // Delegate to AdminHandlers if available
+      if (!this.adminHandlers) {
+        logger.warn('UNBAN_USER: AdminHandlers not yet wired (will be completed in Plan 07)');
+        this.sendError(ctx, message.id, 'Unban user not yet implemented');
+        return;
+      }
+
+      await this.adminHandlers.handleUnbanUser(ctx, message);
+      this.sendResponse(ctx, message.id, { success: true });
+    } catch (err) {
+      logger.error(`Error handling UNBAN_USER: ${err instanceof Error ? err.message : String(err)}`);
+      this.sendError(ctx, message.id, err instanceof Error ? err.message : 'Failed to unban user');
+    }
   }
 
   /**
