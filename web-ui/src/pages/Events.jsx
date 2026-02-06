@@ -87,6 +87,9 @@ const Events = ({ user, onLogout }) => {
             </div>
             <div className="card__body">
               <div className="card__actions">
+                <Link className="btn btn--secondary" to={`/event/${event.id}/channels`}>
+                  My Channels
+                </Link>
                 <Link className="btn btn--secondary" to={`/event/${event.id}/dispatch`}>
                   Dispatch View
                 </Link>

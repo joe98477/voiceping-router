@@ -1039,3 +1039,169 @@ input[type="checkbox"] {
     text-align: center;
   }
 }
+
+/* Channels Page (Phase 3 - General Users) */
+.channels-page {
+  min-height: 100vh;
+  padding: 32px 40px 64px;
+}
+
+.channels-page__topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  padding: 16px 20px;
+  border-radius: 18px;
+  margin-bottom: 24px;
+}
+
+.channels-page__brand {
+  display: grid;
+  gap: 4px;
+}
+
+.channels-page__brand h1 {
+  margin: 0;
+  font-size: 1.1rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.channels-page__brand span {
+  font-size: 0.75rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.channels-page__actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+/* Channel List Grid */
+.channel-list {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 600px) {
+  .channel-list {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 900px) {
+  .channel-list {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.channel-list__empty {
+  text-align: center;
+  padding: 64px 32px;
+  color: var(--muted);
+  font-size: 1rem;
+}
+
+/* Channel Card Styling */
+.channel-card {
+  background: var(--surface);
+  border-radius: var(--radius-info-card);
+  padding: 16px;
+  box-shadow: 0 4px 12px var(--shadow);
+  border: 2px solid transparent;
+  transition: border-color 0.3s ease;
+}
+
+.channel-card--busy {
+  border-left: 4px solid var(--accent);
+  border-left-color: var(--accent);
+}
+
+.channel-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.channel-card__name {
+  font-weight: 600;
+  font-size: 1rem;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.channel-card__status {
+  flex-shrink: 0;
+}
+
+.channel-card__speaker {
+  background: rgba(228, 87, 46, 0.1);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.channel-card__speaker-icon {
+  color: var(--muted);
+}
+
+.channel-card__speaker-name {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.channel-card__ptt {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 48px;
+  margin-bottom: 8px;
+}
+
+.channel-card__error {
+  color: var(--accent);
+  font-size: 0.8rem;
+  text-align: center;
+  padding: 4px 0;
+}
+
+/* PTT Button States (for ChannelCard) */
+.ptt-idle {
+  background: linear-gradient(135deg, #6cd3ff 0%, #2a7dd2 100%);
+  color: #071427;
+}
+
+.ptt-transmitting {
+  background: linear-gradient(135deg, #4caf50 0%, #2e7d32 100%);
+  color: white;
+  box-shadow: 0 8px 24px rgba(76, 175, 80, 0.4);
+}
+
+.ptt-blocked {
+  background: #f7c2b6;
+  color: #7f2c20;
+  cursor: not-allowed;
+}
+
+@media (max-width: 720px) {
+  .channels-page {
+    padding: 20px;
+  }
+  .channels-page__topbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
