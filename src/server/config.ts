@@ -14,19 +14,19 @@ dotenv.config();
  * mediasoup audio codec configuration
  * Opus optimized for real-time voice communication
  */
-const mediaCodecs: mediasoupTypes.RtpCodecCapability[] = [
+const mediaCodecs = [
   {
-    kind: 'audio',
+    kind: 'audio' as const,
     mimeType: 'audio/opus',
     preferredPayloadType: 111,
     clockRate: 48000,
-    channels: 1, // Mono for PTT
-    parameters: {
-      'sprop-stereo': 0,
-      usedtx: 0, // DTX disabled per research - prevents first-word cutoff
-      maxplaybackrate: 48000,
-      ptime: 20, // Start with 20ms per research, can optimize to 10ms if needed
-    },
+    channels: 2,
+    rtcpFeedback: [
+      { type: 'nack' },
+      { type: 'transport-cc' },
+    ],
+    // Note: We'll configure mono in the SDP parameters at the transport/producer level
+    // mediasoup requires channels: 2 in codec capabilities, but we can use mono for actual transmission
   },
 ];
 
