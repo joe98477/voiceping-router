@@ -510,6 +510,14 @@ export class VoicePingAudioClient {
     const packed = encodeMessage(message);
     this.ws.send(packed);
   }
+
+  getStats() {
+    return {
+      connected: !!(this.ws && this.ws.readyState === WebSocket.OPEN),
+      output: this.output ? { ...this.output.stats } : null,
+      transmitter: this.transmitter ? { ...this.transmitter.stats } : null
+    };
+  }
 }
 
 export const getRouterWsUrl = () => {

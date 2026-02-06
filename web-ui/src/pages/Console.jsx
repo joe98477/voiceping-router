@@ -23,6 +23,7 @@ const Console = ({ user, onLogout }) => {
   const [micDevices, setMicDevices] = useState([]);
   const [selectedMicId, setSelectedMicId] = useState("");
   const [loopbackChannelIds, setLoopbackChannelIds] = useState(() => new Set());
+  const [audioStats, setAudioStats] = useState(null);
   const [viewSettings, setViewSettings] = useState(() => {
     const fallback = {
       showRoster: true,
@@ -225,6 +226,24 @@ const Console = ({ user, onLogout }) => {
       audioClientRef.current.resumeOutput();
     }
   }, [audioStatus.permission]);
+
+  useEffect(() => {
+    let interval = null;
+    const update = () => {
+      if (!audioClientRef.current) {
+        setAudioStats(null);
+        return;
+      }
+      setAudioStats(audioClientRef.current.getStats());
+    };
+    update();
+    interval = setInterval(update, 1000);
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [overview, eventId, user.id]);
 
   const currentMember = overview?.roster?.find((person) => person.id === user.id);
   const hasDispatchPermission = user.globalRole === "ADMIN" || currentMember?.role === "DISPATCH";
@@ -507,6 +526,28 @@ const Console = ({ user, onLogout }) => {
                   </select>
                 </label>
               </div>
+              {audioStats ? (
+                <div className="audio-toolbar__row">
+                  <div className="pill">
+                    TX {audioStats.transmitter?.encoded ?? 0}
+                  </div>
+                  <div className="pill">
+                    TX drop {audioStats.transmitter?.droppedEmpty ?? 0}
+                  </div>
+                  <div className="pill">
+                    RX {audioStats.output?.played ?? 0}
+                  </div>
+                  <div className="pill">
+                    RX drop {audioStats.output?.droppedEmpty ?? 0}
+                  </div>
+                  <div className="pill">
+                    RX decode {audioStats.output?.droppedDecode ?? 0}
+                  </div>
+                  <div className="pill">
+                    RX invalid {audioStats.output?.droppedInvalid ?? 0}
+                  </div>
+                </div>
+              ) : null}
               {audioError ? <div className="alert">{audioError}</div> : null}
             </div>
           </section>
