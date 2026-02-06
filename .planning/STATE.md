@@ -97,6 +97,16 @@ Recent decisions affecting current work:
 | CLIENT-002 | Permission API with Safari fallback for microphone access | navigator.permissions.query not supported in Safari; check permission before getUserMedia for better UX | Graceful degradation across browsers; better UX by showing permission state early |
 | CLIENT-003 | Track mute via track.enabled instead of stop() | PTT toggle needs fast enable/disable without re-requesting microphone permission | Efficient PTT toggle; no permission prompts on each press |
 
+**From 01-06 execution:**
+
+| ID | Decision | Rationale | Impact |
+|----|----------|-----------|--------|
+| UX-001 | Optimistic UI for instant PTT feedback | Physical walkie-talkie feel requires immediate visual/audio response | Button state changes before server confirms, reverts if denied |
+| UX-002 | Framework-agnostic vanilla TypeScript components | PttButton will be wrapped in React for web-ui in Phase 3 | Components use plain DOM APIs, no framework dependencies |
+| UX-003 | Configurable audio tones with folder/naming convention | Per user's specific idea for admin-uploadable event-specific audio prompts | Supports /audio/{tone}.mp3 and /audio/events/{eventId}/{tone}.mp3 paths |
+| UX-004 | Busy state auto-reverts after 3 seconds | Prevent button from staying stuck in blocked state | User can retry PTT after brief cooldown |
+| UX-005 | Controller creates button with bound callbacks | Simplifies initialization and ensures proper method binding | buttonContainer passed in options instead of pre-created button |
+
 **From 01-07 execution:**
 
 | ID | Decision | Rationale | Impact |
