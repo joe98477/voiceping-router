@@ -69,3 +69,58 @@ export interface SpeakerLockResult {
   currentSpeaker?: string;
   currentSpeakerName?: string;
 }
+
+/**
+ * User role enumeration (maps to Prisma GlobalRole + EventRole)
+ */
+export enum UserRole {
+  ADMIN = 'ADMIN',
+  DISPATCH = 'DISPATCH',
+  GENERAL = 'GENERAL',
+}
+
+/**
+ * Authenticated user with JWT claims and permissions
+ */
+export interface AuthenticatedUser {
+  userId: string;
+  userName: string;
+  eventId: string;
+  role: UserRole;
+  channelIds: string[];
+  globalRole: string;
+}
+
+/**
+ * Permission set for a user based on role
+ */
+export interface PermissionSet {
+  canJoinChannel: boolean;
+  canPtt: boolean;
+  canPriorityPtt: boolean;
+  canEmergencyBroadcast: boolean;
+  canForceDisconnect: boolean;
+  canManageChannels: boolean;
+}
+
+/**
+ * Channel-specific permission
+ */
+export interface ChannelPermission {
+  channelId: string;
+  canListen: boolean;
+  canSpeak: boolean;
+}
+
+/**
+ * Audit event for security tracking
+ */
+export interface AuditEvent {
+  id: string;
+  actorId: string;
+  eventId: string | null;
+  action: string;
+  targetId: string | null;
+  metadata: Record<string, unknown>;
+  timestamp: number;
+}

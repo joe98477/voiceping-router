@@ -33,6 +33,17 @@ export enum SignalingType {
   // Connection health
   PING = 'ping',
   PONG = 'pong',
+
+  // Phase 2: Permission and role management
+  PERMISSION_UPDATE = 'permission-update',
+  CHANNEL_LIST = 'channel-list',
+  FORCE_DISCONNECT = 'force-disconnect',
+  PRIORITY_PTT_START = 'priority-ptt-start',
+  PRIORITY_PTT_STOP = 'priority-ptt-stop',
+  EMERGENCY_BROADCAST_START = 'emergency-broadcast-start',
+  EMERGENCY_BROADCAST_STOP = 'emergency-broadcast-stop',
+  PTT_INTERRUPTED = 'ptt-interrupted',
+  ROLE_INFO = 'role-info',
 }
 
 /**

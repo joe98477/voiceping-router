@@ -123,10 +123,28 @@ export const config = {
 
   auth: {
     jwtSecret: process.env.ROUTER_JWT_SECRET || 'change-me',
+    tokenTtlSeconds: 3600, // 1 hour per user decision
+    permissionRefreshIntervalMs: 30000, // 30s heartbeat-based permission refresh
   },
 
   ptt: {
     lockTtlSeconds: 30,
     busyTimeoutMs: 30000,
+  },
+
+  dispatch: {
+    emergencyBroadcastHoldMs: 2000, // 2-second long press guard
+    priorityPttEnabled: true,
+  },
+
+  channels: {
+    defaultMaxUsersPerChannel: 100,
+    defaultSimultaneousChannelLimit: 10,
+  },
+
+  jitterBuffer: {
+    minMs: 40,
+    maxMs: 80,
+    defaultMs: 60,
   },
 };
