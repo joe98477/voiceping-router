@@ -28,10 +28,10 @@ Progress: [███░░░░░░░] 31% (1 phase complete + 3 of 7 plans 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01 | 8 | 93 min | 11.6 min |
-| 02 | 3 | 16 min | 5.3 min |
+| 02 | 3 | 18 min | 6.0 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-07 (5 min), 01-08 (37 min), 02-01 (6 min), 02-02 (6 min), 02-04 (4 min)
+- Last 5 plans: 01-08 (37 min), 02-01 (6 min), 02-02 (6 min), 02-03 (6 min)
 - Trend: Fast execution for focused technical tasks, longer for integration/testing tasks
 
 *Updated after each plan completion*
@@ -154,6 +154,17 @@ Recent decisions affecting current work:
 | WORKER-002 | 25% CPU headroom for system overhead | Single-server 1000+ user target needs system resources for Redis, nginx, OS overhead. Reserve 25% CPU | getOptimalWorkerCount() returns floor(cpuCount * 0.75), e.g., 6 workers on 8-core system |
 | TRANSPORT-001 | 600kbps outgoing bitrate for voice | Opus audio typically uses 24-48kbps. 600kbps provides 10-20x headroom for multiple consumers and transport overhead without overallocation | Increased from 100kbps baseline, sufficient for voice, prevents bandwidth waste |
 
+**From 02-03 execution:**
+
+| ID | Decision | Rationale | Impact |
+|----|----------|-----------|--------|
+| AUTHZ-001 | Permission refresh integrated into heartbeat | 30s heartbeat already exists for dead connection detection. Adding permission refresh adds no network overhead | Efficient periodic sync without per-action overhead; 30s latency acceptable per 02-01 decision |
+| AUTHZ-002 | Deferred channel removal for transmitting users | Permission revoked while user transmitting should not cut audio mid-sentence | User gets PERMISSION_UPDATE with pendingRemoval flag; removal executed in handlePttStop after checking pendingChannelRemovals map |
+| AUTHZ-003 | Admin role bypasses channel permission checks | Global admins (globalRole==='ADMIN') can join any channel without explicit permission, simplifies admin operations | Admin can manage/monitor any channel but still subject to rate limits for security |
+| AUTHZ-004 | Channel limits enforced at join time | defaultSimultaneousChannelLimit (10) and defaultMaxUsersPerChannel (100) prevent resource exhaustion | Admin bypasses simultaneous limit but not max users limit (prevents server overload) |
+| AUTHZ-005 | Rate limiting in verifyClient | Progressive slowdown (1s to 30s) prevents authentication bypass via repeated connection attempts | Connection rate limit checked first, then auth rate limit with progressive delay |
+| AUTHZ-006 | PERMISSION_UPDATE messages for real-time sync | Heartbeat detects permission changes and sends update with added/removed channel arrays | Enables real-time UI updates (channel list refresh, access revoked warnings) |
+
 **From 02-04 execution:**
 
 | ID | Decision | Rationale | Impact |
@@ -180,12 +191,12 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-06T11:18:51Z
-Stopped at: Completed 02-04-PLAN.md (Real-Time Permission Sync)
+Last session: 2026-02-06T11:00:11Z
+Stopped at: Completed 02-03-PLAN.md (Channel Authorization Enforcement)
 Resume file: None
 
 **Phase 2 (User Management & Access Control) in progress.**
 - ✓ 02-01: Authorization Foundation complete (audit logging, security events backend)
 - ✓ 02-02: Rate Limiting & Worker Optimization complete (progressive rate limiting, load-aware worker pool)
-- ✓ 02-04: Real-Time Permission Sync complete (Redis pub/sub for membership updates, event-based multi-user tracking)
-- Next: 02-05 onwards (WebSocket integration, emergency broadcast)
+- ✓ 02-03: Channel Authorization Enforcement complete (role-aware JWT, permission refresh, graceful revocation)
+- Next: 02-04 onwards (priority PTT, force disconnect, emergency broadcast)
