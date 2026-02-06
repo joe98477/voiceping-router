@@ -96,7 +96,8 @@ services:
   # Web UI - Browser-based management interface
   web-ui:
     build:
-      context: ./web-ui
+      context: .
+      dockerfile: web-ui/Dockerfile
       args:
         - VITE_API_BASE=${VITE_API_BASE}
         - VITE_STARTUP_STATUS=${VITE_STARTUP_STATUS}
