@@ -20,9 +20,11 @@ const mediaCodecs: mediasoupTypes.RtpCodecCapability[] = [
     mimeType: 'audio/opus',
     preferredPayloadType: 111,
     clockRate: 48000,
-    channels: 2,
+    channels: 1, // Mono for PTT
     parameters: {
-      usedtx: 0,
+      'sprop-stereo': 0,
+      usedtx: 0, // DTX disabled per research - prevents first-word cutoff
+      maxplaybackrate: 48000,
       ptime: 20, // Start with 20ms per research, can optimize to 10ms if needed
     },
   },
