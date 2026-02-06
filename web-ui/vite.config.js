@@ -8,6 +8,7 @@ export default defineConfig({
     alias: {
       "@client": path.resolve(__dirname, "../src/client"),
       "@shared": path.resolve(__dirname, "../src/shared"),
+      "mediasoup-client": path.resolve(__dirname, "node_modules/mediasoup-client"),
     },
   },
   server: {
