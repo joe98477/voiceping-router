@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-06)
 ## Current Position
 
 Phase: 3 of 4 (Browser UI for General Users)
-Plan: 03 of 05 complete
+Plan: 04 of 05 complete
 Status: In progress
-Last activity: 2026-02-06 — Completed 03-03-PLAN.md (Channels Page)
+Last activity: 2026-02-06 — Completed 03-04-PLAN.md (Real-Time Permission Updates)
 
-Progress: [█████▓░░░░] 58% (19 plans complete)
+Progress: [██████░░░░] 61% (20 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 19
-- Average duration: 7.2 minutes
-- Total execution time: 2.3 hours
+- Total plans completed: 20
+- Average duration: 7.0 minutes
+- Total execution time: 2.4 hours
 
 **By Phase:**
 
@@ -29,10 +29,10 @@ Progress: [█████▓░░░░] 58% (19 plans complete)
 |-------|-------|-------|----------|
 | 01 | 8 | 93 min | 11.6 min |
 | 02 | 8 | 38 min | 4.8 min |
-| 03 | 3 | 9 min | 3.0 min |
+| 03 | 4 | 13 min | 3.3 min |
 
 **Recent Trend:**
-- Last 5 plans: 02-07 (4 min), 02-08 (5 min), 03-01 (4 min), 03-02 (2 min), 03-03 (3 min)
+- Last 5 plans: 02-08 (5 min), 03-01 (4 min), 03-02 (2 min), 03-03 (3 min), 03-04 (4 min)
 - Trend: Consistently fast execution with established patterns and clear specifications
 
 *Updated after each plan completion*
@@ -228,6 +228,13 @@ Recent decisions affecting current work:
 | UX-006 | Hold-to-talk PTT via native React event handlers | PttButton was designed for PttController integration (creates button DOM element dynamically); without PttController, cleaner to use React-native button with event handlers | Simpler React component, no DOM manipulation, easier to test; button behavior fully managed in React lifecycle |
 | UX-007 | Optimistic PTT UI with error revert pattern | Instant visual feedback (physical walkie-talkie feel) requires optimistic UI; if PTT denied (channel busy), button shows "Channel Busy" state for 3 seconds then reverts | Better UX with no perceived lag, simple error recovery via auto-revert, minimal code complexity |
 
+**From 03-04 execution:**
+
+| ID | Decision | Rationale | Impact |
+|----|----------|-----------|--------|
+| ARCH-005 | Separate global WebSocket for permissions (not ConnectionManager) | Permission updates are global (affect user's entire channel list), not channel-specific; ConnectionManager is designed for per-channel audio/PTT with WebRTC setup | Clear separation of concerns; permission WebSocket has no audio infrastructure; per-channel ConnectionManagers remain focused on audio/PTT; one additional lightweight WebSocket connection per user |
+| UX-008 | Function updater pattern for concurrent-safe channel list updates | Permission updates can arrive while user is interacting with UI; direct state updates can cause race conditions if multiple updates occur in quick succession | Concurrent-safe updates; permission changes always merge correctly with existing channel list using React's function updater pattern |
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -245,8 +252,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-06T22:37:54Z
-Stopped at: Completed 03-03-PLAN.md (Channels Page)
+Last session: 2026-02-06T22:45:26Z
+Stopped at: Completed 03-04-PLAN.md (Real-Time Permission Updates)
 Resume file: None
 
 **Phase 2 (User Management & Access Control) COMPLETE WITH VERIFICATION.**
@@ -255,4 +262,5 @@ Resume file: None
 - ✓ 03-01: Session Management Foundation complete (Vite config, tokenStorage, useAuth, ChannelContext)
 - ✓ 03-02: Connection Management Hooks complete (useChannelConnection, ChannelCard with PTT)
 - ✓ 03-03: Channels Page complete (ChannelList, routing, CSS, My Channels link)
-- Next: 03-04: Real-time Permission Updates
+- ✓ 03-04: Real-Time Permission Updates complete (usePermissionUpdates hook, global WebSocket)
+- Next: 03-05: Multi-Channel Dashboard Enhancements
