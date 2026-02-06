@@ -3,7 +3,10 @@
  * Manages device initialization with server router capabilities
  */
 
-import { Device, RtpCapabilities } from 'mediasoup-client';
+import * as mediasoupClient from 'mediasoup-client';
+
+type Device = mediasoupClient.types.Device;
+type RtpCapabilities = mediasoupClient.types.RtpCapabilities;
 import { SignalingClient } from '../signaling/signalingClient';
 
 export class MediasoupDevice {
@@ -13,7 +16,7 @@ export class MediasoupDevice {
   private loadedCapabilities: RtpCapabilities | null = null;
 
   constructor(signalingClient: SignalingClient) {
-    this.device = new Device();
+    this.device = new mediasoupClient.Device();
     this.signalingClient = signalingClient;
   }
 
