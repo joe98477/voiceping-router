@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(gsd:map-codebase)",
+      "Bash(wc:*)",
+      "Bash(grep:*)"
+    ]
+  }
+}
