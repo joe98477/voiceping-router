@@ -77,4 +77,4 @@
 - **Redirected to first-run**: you must complete profile setup before accessing the console.
 - **No events visible**: admin must create an event before dispatch users can access it.
 - **Invite emails not sent**: ensure SMTP settings are configured in System tab.
-- **Loopback or playback errors**: some browsers emit empty Opus frames on stop; the UI skips invalid packets. Ensure both users are active in the channel.
+- **Loopback or playback errors**: some browsers emit empty Opus frames on stop; the UI skips invalid packets. Ensure both users are active in the channel and use Chrome for transmit.

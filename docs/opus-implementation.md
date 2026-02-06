@@ -53,6 +53,8 @@ File: `web-ui/src/utils/voicepingAudio.js`
 - Playback is gated by:
   - Channel listen toggles (`listenerChannelIds`).
   - Dispatch listen toggles (team/channel).
+- Empty or invalid Opus frames are dropped before decode and before `createBuffer` to avoid playback errors.
+- A small jitter buffer (~100ms target) is used to smooth network jitter; long gaps reset the playhead.
 
 ### Playback timing
 - Packets are scheduled in order with a simple playhead.
@@ -79,6 +81,7 @@ Loopback is **dispatch UI only**:
   - Router WebSocket is not open.
   - No valid target channels resolved for a team.
 - `START_FAILED` or `UNAUTHORIZED_GROUP` responses surface a UI error.
+- Encoder output frames of zero length are dropped and logged when debug is enabled.
 
 ## Router expectations (normative)
 - Router treats payload as opaque bytes and forwards to group members.
@@ -99,6 +102,7 @@ If modifying the audio pipeline, update:
 - Listen/mute toggles control playback as expected.
 - Loopback test plays audio ~2s after transmission ends.
 - Android SDK client receives audio from dispatch UI (if applicable).
+- No console errors about invalid audio buffers during playback.
 
 ## Audio capture (dispatch UI)
 `web-ui/src/utils/voicepingAudio.js`

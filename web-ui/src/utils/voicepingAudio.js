@@ -18,6 +18,9 @@ const MessageType = {
 
 const DEFAULT_SAMPLE_RATE = 48000;
 const DEFAULT_BITRATE = 24000;
+const DEFAULT_JITTER_TARGET_MS = 100;
+const DEFAULT_JITTER_RESET_MS = 500;
+const DEBUG_AUDIO = import.meta.env.VITE_DEBUG_AUDIO === "true";
 
 const decodeMessage = (data) => {
   let decoded;
@@ -67,6 +70,16 @@ class AudioOutput {
     this.playhead = this.context.currentTime;
     this.ready = false;
     this.pending = [];
+    this.lastPacketAt = null;
+    this.jitterTargetMs = DEFAULT_JITTER_TARGET_MS;
+    this.jitterResetMs = DEFAULT_JITTER_RESET_MS;
+    this.stats = {
+      played: 0,
+      droppedEmpty: 0,
+      droppedDecode: 0,
+      droppedInvalid: 0,
+      droppedCreateBuffer: 0
+    };
     this.decoder.ready
       .then(() => {
         this.ready = true;
@@ -85,6 +98,7 @@ class AudioOutput {
 
   playOpusPacket(packet, delaySeconds = 0) {
     if (!packet) {
+      this.stats.droppedEmpty += 1;
       return;
     }
     if (!this.ready) {
@@ -93,32 +107,58 @@ class AudioOutput {
     }
     const frame = packet instanceof Uint8Array ? packet : new Uint8Array(packet);
     if (frame.byteLength === 0) {
+      this.stats.droppedEmpty += 1;
       return;
     }
     let decoded = null;
     try {
       decoded = this.decoder.decodeFrame(frame);
     } catch (err) {
+      this.stats.droppedDecode += 1;
+      if (DEBUG_AUDIO) {
+        console.debug("audio decode failed", err);
+      }
       return;
     }
     if (!decoded) {
+      this.stats.droppedDecode += 1;
       return;
     }
     const channels = Array.isArray(decoded) ? decoded : [decoded];
     if (!channels[0] || channels[0].length === 0) {
+      this.stats.droppedInvalid += 1;
       return;
     }
     const length = channels[0].length;
-    const buffer = this.context.createBuffer(channels.length, length, this.sampleRate);
+    if (!Number.isFinite(length) || length <= 0) {
+      this.stats.droppedInvalid += 1;
+      return;
+    }
+    let buffer = null;
+    try {
+      buffer = this.context.createBuffer(channels.length, length, this.sampleRate);
+    } catch (err) {
+      this.stats.droppedCreateBuffer += 1;
+      if (DEBUG_AUDIO) {
+        console.debug("audio createBuffer failed", err);
+      }
+      return;
+    }
     channels.forEach((data, index) => {
       buffer.getChannelData(index).set(data);
     });
     const source = this.context.createBufferSource();
     source.buffer = buffer;
     source.connect(this.context.destination);
-    const startAt = Math.max(this.context.currentTime, this.playhead) + delaySeconds;
+    const now = this.context.currentTime;
+    if (!this.lastPacketAt || (now - this.lastPacketAt) * 1000 > this.jitterResetMs) {
+      this.playhead = Math.max(this.playhead, now + this.jitterTargetMs / 1000);
+    }
+    const startAt = Math.max(now, this.playhead) + delaySeconds;
     source.start(startAt);
     this.playhead = startAt + buffer.duration;
+    this.lastPacketAt = now;
+    this.stats.played += 1;
   }
 }
 
@@ -131,6 +171,11 @@ class AudioTransmitter {
     this.reader = null;
     this.stream = null;
     this.running = false;
+    this.stats = {
+      encoded: 0,
+      droppedEmpty: 0,
+      lastChunkBytes: 0
+    };
   }
 
   async start({ deviceId }) {
@@ -152,8 +197,17 @@ class AudioTransmitter {
     this.reader = processor.readable.getReader();
     this.encoder = new AudioEncoder({
       output: (chunk) => {
+        if (!chunk || chunk.byteLength <= 0) {
+          this.stats.droppedEmpty += 1;
+          if (DEBUG_AUDIO) {
+            console.debug("audio encoder produced empty chunk");
+          }
+          return;
+        }
         const data = new Uint8Array(chunk.byteLength);
         chunk.copyTo(data);
+        this.stats.encoded += 1;
+        this.stats.lastChunkBytes = data.byteLength;
         this.onPacket(data);
       },
       error: (err) => {
