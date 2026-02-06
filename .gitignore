@@ -79,3 +79,5 @@ uploads/
 *.swp
 
 dist/
+# TLS certificates (never commit)
+deploy/nginx/certs/

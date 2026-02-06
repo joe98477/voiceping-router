@@ -2,29 +2,58 @@ version: '3.1'
 
 services:
 
-  vp-router:
+  # VoicePing Audio Server - mediasoup-based WebRTC audio infrastructure
+  audio-server:
     build:
       context: .
-    image: voiceping-router:local
+    image: voiceping-audio-server:local
     env_file:
       - ${ENV_FILE:-.env}
     environment:
       - REDIS_HOST=redis
       - ROUTER_JWT_SECRET=${ROUTER_JWT_SECRET}
       - SECRET_KEY=${SECRET_KEY}
-      - LEGACY_JOIN_ENABLED=${LEGACY_JOIN_ENABLED}
+      - MEDIASOUP_ANNOUNCED_IP=${MEDIASOUP_ANNOUNCED_IP:-127.0.0.1}
+      - NODE_ENV=${NODE_ENV:-development}
       - DEBUG=${DEBUG}
+    expose:
+      - 3000
     ports:
-      - 3000:3000
+      # mediasoup RTC port range (UDP)
+      - 40000-49999:40000-49999/udp
     depends_on:
       - redis
+      - postgres
+    networks:
+      - voiceping
     logging:
       driver: "json-file"
       options:
         max-file: "2"
         max-size: "100m"
-    restart: always
+    restart: unless-stopped
 
+  # Nginx reverse proxy - TLS termination for WSS (SEC-02)
+  nginx:
+    image: nginx:1.25-alpine
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - ./deploy/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - audio-server
+    networks:
+      - voiceping
+    logging:
+      driver: "json-file"
+      options:
+        max-file: "2"
+        max-size: "100m"
+    restart: unless-stopped
+
+  # Control Plane - User management and channel administration
   control-plane:
     build:
       context: ./control-plane
@@ -34,7 +63,7 @@ services:
       - PORT=4000
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_HOST=redis
-      - ROUTER_HOST=vp-router
+      - ROUTER_HOST=audio-server
       - ROUTER_PORT=3000
       - ROUTER_JWT_SECRET=${ROUTER_JWT_SECRET}
       - SESSION_SECRET=${SESSION_SECRET}
@@ -55,13 +84,16 @@ services:
     depends_on:
       - postgres
       - redis
+    networks:
+      - voiceping
     logging:
       driver: "json-file"
       options:
         max-file: "2"
         max-size: "100m"
-    restart: always
+    restart: unless-stopped
 
+  # Web UI - Browser-based management interface
   web-ui:
     build:
       context: ./web-ui
@@ -73,25 +105,31 @@ services:
       - 8080:80
     depends_on:
       - control-plane
+    networks:
+      - voiceping
     logging:
       driver: "json-file"
       options:
         max-file: "2"
         max-size: "100m"
-    restart: always
+    restart: unless-stopped
 
+  # Redis - State management and pub/sub
   redis:
-    image: redis
+    image: redis:7-alpine
     command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
     volumes:
       - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    networks:
+      - voiceping
     logging:
       driver: "json-file"
       options:
         max-file: "2"
         max-size: "100m"
-    restart: always
+    restart: unless-stopped
 
+  # PostgreSQL - User and channel data
   postgres:
     image: postgres:14-alpine
     environment:
@@ -100,12 +138,18 @@ services:
       - POSTGRES_DB=${POSTGRES_DB}
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    networks:
+      - voiceping
     logging:
       driver: "json-file"
       options:
         max-file: "2"
         max-size: "100m"
-    restart: always
+    restart: unless-stopped
+
+networks:
+  voiceping:
+    driver: bridge
 
 volumes:
   postgres-data:
