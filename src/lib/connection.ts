@@ -105,17 +105,18 @@ export default class Connection extends EventEmitter {
           ` device ${this.deviceId}`);
   }
 
-  private handleSocketMessage = (data: Buffer) => {
+  private handleSocketMessage = (data: any) => {
     debug(`*************************************`);
     let rawSummary = "";
-    if (typeof data === "string") {
-      const preview = data.length > 120 ? `${data.slice(0, 120)}...` : data;
-      rawSummary = `text length ${data.length} preview ${preview}`;
+    const dataAny: any = data;
+    if (typeof dataAny === "string") {
+      const preview = dataAny.length > 120 ? `${dataAny.slice(0, 120)}...` : dataAny;
+      rawSummary = `text length ${dataAny.length} preview ${preview}`;
     } else {
       const buffer =
-        Buffer.isBuffer(data) ? data :
-        (data instanceof Uint8Array ? Buffer.from(data) :
-        (data instanceof ArrayBuffer ? Buffer.from(new Uint8Array(data)) : null));
+        Buffer.isBuffer(dataAny) ? dataAny :
+        (dataAny instanceof Uint8Array ? Buffer.from(dataAny) :
+        (dataAny instanceof ArrayBuffer ? Buffer.from(new Uint8Array(dataAny)) : null));
       if (buffer) {
         const sample = buffer.slice(0, 24).toString("hex");
         rawSummary = `binary length ${buffer.length} hex ${sample}${buffer.length > 24 ? "..." : ""}`;
