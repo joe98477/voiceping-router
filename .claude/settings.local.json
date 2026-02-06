@@ -3,7 +3,13 @@
     "allow": [
       "Skill(gsd:map-codebase)",
       "Bash(wc:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "WebSearch",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:www.forasoft.com)",
+      "WebFetch(domain:blog.logrocket.com)"
     ]
   }
 }
