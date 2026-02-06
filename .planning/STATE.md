@@ -10,29 +10,29 @@ See: .planning/PROJECT.md (updated 2026-02-06)
 ## Current Position
 
 Phase: 2 of 4 (User Management & Access Control)
-Plan: 03 of 07 complete
+Plan: 05 of 07 complete
 Status: In progress
-Last activity: 2026-02-06 — Completed 02-03-PLAN.md (Channel Authorization Enforcement)
+Last activity: 2026-02-06 — Completed 02-05-PLAN.md (Dispatch PTT Priority & Emergency Broadcast)
 
-Progress: [███░░░░░░░] 31% (1 phase complete + 3 of 7 plans in phase 2)
+Progress: [████░░░░░░] 37% (1 phase complete + 5 of 7 plans in phase 2)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 11
-- Average duration: 9.5 minutes
-- Total execution time: 1.8 hours
+- Total plans completed: 13
+- Average duration: 8.8 minutes
+- Total execution time: 1.9 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01 | 8 | 93 min | 11.6 min |
-| 02 | 3 | 18 min | 6.0 min |
+| 02 | 5 | 21 min | 4.2 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-08 (37 min), 02-01 (6 min), 02-02 (6 min), 02-03 (6 min)
-- Trend: Fast execution for focused technical tasks, longer for integration/testing tasks
+- Last 5 plans: 02-01 (6 min), 02-02 (6 min), 02-03 (6 min), 02-04 (3 min - estimated), 02-05 (3 min)
+- Trend: Extremely fast execution for focused technical tasks with clear specifications
 
 *Updated after each plan completion*
 
@@ -174,6 +174,16 @@ Recent decisions affecting current work:
 | EVENT-001 | Event-to-channel mapping via Redis hash | Multi-channel event operations (emergency broadcast, event-wide pause) need to know which channels belong to which event | channel:events hash maps channelId -> eventId, enabling event-based queries |
 | EVENT-002 | Callback pattern for permission change notifications | Decouples PermissionSyncManager from WebSocket server; index.ts will wire callback in Plan 07 | Clean separation of concerns, easier testing, pluggable architecture |
 
+**From 02-05 execution:**
+
+| ID | Decision | Rationale | Impact |
+|----|----------|-----------|--------|
+| DISPATCH-001 | Dispatch can interrupt General users but not other Dispatch | Dispatch users have equal priority (no hierarchy within Dispatch role), but higher priority than General users | Prevents Dispatch-on-Dispatch interruption while enabling supervision of General users |
+| DISPATCH-002 | Emergency broadcast requires 2-second hold guard | Prevents accidental activation of event-wide broadcast which interrupts all speakers | Client must track button hold duration and only send message after threshold; reduces risk of mis-clicks |
+| DISPATCH-003 | Temporary channel join tracking for emergency broadcast | Dispatch user may be permanently in some channels; only temporary joins should be cleaned up | Emergency broadcast state tracks temporaryJoins Set, cleanup only leaves those channels |
+| DISPATCH-004 | getUserProducerId public method in SignalingHandlers | DispatchHandlers needs to pause/resume producers for interrupted speakers and Dispatch user | Exposes producer lookup without exposing entire userProducers map; clean encapsulation |
+| DISPATCH-005 | Delegation methods with role validation | Defense in depth - role check at entry point plus in handler implementation | Audit logs PERMISSION_DENIED at SignalingHandlers level for unauthorized attempts |
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -191,12 +201,14 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-06T11:00:11Z
-Stopped at: Completed 02-03-PLAN.md (Channel Authorization Enforcement)
+Last session: 2026-02-06T11:08:58Z
+Stopped at: Completed 02-05-PLAN.md (Dispatch PTT Priority & Emergency Broadcast)
 Resume file: None
 
 **Phase 2 (User Management & Access Control) in progress.**
 - ✓ 02-01: Authorization Foundation complete (audit logging, security events backend)
 - ✓ 02-02: Rate Limiting & Worker Optimization complete (progressive rate limiting, load-aware worker pool)
 - ✓ 02-03: Channel Authorization Enforcement complete (role-aware JWT, permission refresh, graceful revocation)
-- Next: 02-04 onwards (priority PTT, force disconnect, emergency broadcast)
+- ✓ 02-04: Permission Sync & Event Mapping complete (Redis pub/sub for permission updates, event-to-channel mapping)
+- ✓ 02-05: Dispatch PTT Priority & Emergency Broadcast complete (priority override, multi-channel broadcast)
+- Next: 02-06 onwards (force disconnect, admin tools)
