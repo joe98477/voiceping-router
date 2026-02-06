@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-02-06)
 ## Current Position
 
 Phase: 1 of 4 (WebRTC Audio Foundation)
-Plan: 3 of TBD in current phase
+Plan: 4 of TBD in current phase
 Status: In progress
-Last activity: 2026-02-06 — Completed 01-02-PLAN.md (Mediasoup SFU Core)
+Last activity: 2026-02-06 — Completed 01-04-PLAN.md (WebSocket Signaling Server)
 
-Progress: [███░░░░░░░] 30% (estimated based on phase scope)
+Progress: [████░░░░░░] 40% (estimated based on phase scope)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
-- Average duration: 11 minutes
-- Total execution time: 0.5 hours
+- Total plans completed: 4
+- Average duration: 10 minutes
+- Total execution time: 0.7 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01 | 3 | 32 min | 11 min |
+| 01 | 4 | 39 min | 10 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (9 min), 01-02 (14 min), 01-03 (9 min)
-- Trend: Stable (11 min average)
+- Last 5 plans: 01-01 (9 min), 01-02 (14 min), 01-03 (9 min), 01-04 (7 min)
+- Trend: Improving (10 min average, last plan 7 min)
 
 *Updated after each plan completion*
 
@@ -75,6 +75,17 @@ Recent decisions affecting current work:
 | LOCK-002 | Speaker lock TTL of 30s | Balances preventing deadlocks vs allowing reasonable PTT hold | Auto-expiry prevents stuck locks on client crashes |
 | SESSION-001 | Session auto-expiry with 1-hour TTL | Automatic cleanup of stale sessions | Redis handles session cleanup without manual intervention |
 
+**From 01-04 execution:**
+
+| ID | Decision | Rationale | Impact |
+|----|----------|-----------|--------|
+| DEP-004 | Installed @types/jsonwebtoken for TypeScript JWT type definitions | jsonwebtoken package lacks bundled types | Enables proper type checking for JWT verification and payload extraction |
+| SIG-001 | WebSocket server at dedicated /ws path | Per user decision for dedicated WebSocket channel for WebRTC signaling | Clear separation from HTTP endpoints, explicit signaling path |
+| SIG-002 | Three JWT token locations: Authorization header, query param, sec-websocket-protocol | Authorization header is standard, query param for convenience, sec-websocket-protocol for legacy client compatibility | Flexible authentication supports multiple client implementations |
+| SIG-003 | 30-second heartbeat interval with ping/pong | Detects dead connections from network failures or client crashes | Automatic cleanup of stale connections prevents resource leaks |
+| PTT-002 | PTT_DENIED message sent to blocked clients with current speaker info | Per plan requirement to show "visual message showing [username] is speaking" when PTT denied | Clients receive denial reason with speaker identity for user feedback |
+| SHUTDOWN-001 | Graceful shutdown closes resources in reverse initialization order | WebSocket → HTTP → ChannelState → Workers → Redis ensures clean teardown | SIGTERM/SIGINT handled gracefully, proper cleanup on deployment/restart |
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -91,6 +102,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-06T06:55:12Z
-Stopped at: Completed 01-02-PLAN.md execution (Mediasoup SFU Core)
+Last session: 2026-02-06T07:06:25Z
+Stopped at: Completed 01-04-PLAN.md execution (WebSocket Signaling Server)
 Resume file: None
