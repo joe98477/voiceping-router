@@ -10,17 +10,17 @@ See: .planning/PROJECT.md (updated 2026-02-06)
 ## Current Position
 
 Phase: 2 of 4 (User Management & Access Control)
-Plan: 06 of 07 complete
-Status: In progress
-Last activity: 2026-02-06 — Completed 02-06-PLAN.md (Force-Disconnect & Security Events Backend)
+Plan: 07 of 07 complete
+Status: Phase complete
+Last activity: 2026-02-06 — Completed 02-07-PLAN.md (Integration Wiring for Phase 2)
 
-Progress: [████░░░░░░] 40% (1 phase complete + 6 of 7 plans in phase 2)
+Progress: [█████░░░░░] 50% (2 phases complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 14
-- Average duration: 8.6 minutes
+- Total plans completed: 15
+- Average duration: 8.1 minutes
 - Total execution time: 2.0 hours
 
 **By Phase:**
@@ -28,10 +28,10 @@ Progress: [████░░░░░░] 40% (1 phase complete + 6 of 7 plans 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01 | 8 | 93 min | 11.6 min |
-| 02 | 6 | 29 min | 4.8 min |
+| 02 | 7 | 33 min | 4.7 min |
 
 **Recent Trend:**
-- Last 5 plans: 02-02 (6 min), 02-03 (6 min), 02-04 (3 min), 02-05 (3 min), 02-06 (8 min)
+- Last 5 plans: 02-03 (6 min), 02-04 (3 min), 02-05 (3 min), 02-06 (8 min), 02-07 (4 min)
 - Trend: Extremely fast execution for focused technical tasks with clear specifications
 
 *Updated after each plan completion*
@@ -195,6 +195,14 @@ Recent decisions affecting current work:
 | SECURITY-001 | Security events trimmed to 5000 entries in Redis | Prevents unbounded growth while keeping recent history for queries | Older events exported to control-plane database via audit log |
 | RATE-001 | Rate limit status read from existing rl:conn, rl:auth, rl:fail keys | Leverage rate limiting infrastructure from Plan 02-02 | Admin dashboard can query active rate limits and monitor abuse |
 
+**From 02-07 execution:**
+
+| ID | Decision | Rationale | Impact |
+|----|----------|-----------|--------|
+| WIRE-001 | SecurityEventsManager wired via setter instead of constructor parameter | SignalingServer constructor already has 4 parameters; adding a 5th would increase complexity. Setter pattern allows clean initialization order | SecurityEventsManager can be optionally wired (graceful degradation if not set), cleaner constructor signature |
+| WIRE-002 | PermissionSyncManager started before HTTP server | Ensures permission updates published during server startup are not missed | Permission sync is active before first client connects, no race condition |
+| WIRE-003 | Ban check after JWT verification | Invalid tokens (most connection failures) don't need ban check; reduces Redis load | Optimized authentication flow - ban check only for valid JWTs |
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -212,15 +220,16 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-06T22:05:47Z
-Stopped at: Completed 02-06-PLAN.md (Force-Disconnect & Security Events Backend)
+Last session: 2026-02-06T22:11:07Z
+Stopped at: Completed 02-07-PLAN.md (Integration Wiring for Phase 2)
 Resume file: None
 
-**Phase 2 (User Management & Access Control) in progress.**
+**Phase 2 (User Management & Access Control) COMPLETE.**
 - ✓ 02-01: Authorization Foundation complete (audit logging, security events backend)
 - ✓ 02-02: Rate Limiting & Worker Optimization complete (progressive rate limiting, load-aware worker pool)
 - ✓ 02-03: Channel Authorization Enforcement complete (role-aware JWT, permission refresh, graceful revocation)
 - ✓ 02-04: Permission Sync & Event Mapping complete (Redis pub/sub for permission updates, event-to-channel mapping)
 - ✓ 02-05: Dispatch PTT Priority & Emergency Broadcast complete (priority override, multi-channel broadcast)
 - ✓ 02-06: Force-Disconnect & Security Events Backend complete (admin handlers, ban/unban)
-- Next: 02-07 (Index.ts Integration & Phase Verification)
+- ✓ 02-07: Integration Wiring complete (all Phase 2 modules wired and operational)
+- Next: Phase 3 (Browser UI) or Phase 2 verification (02-08 if planned)
