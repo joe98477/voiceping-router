@@ -5,6 +5,26 @@
 
 import { SignalingType, SignalingMessage, SignalingRequest } from '../../shared/protocol';
 
+/**
+ * Interface for signaling client operations
+ * Implemented by both SignalingClient and ReconnectingSignalingClient
+ */
+export interface ISignalingClient {
+  request(type: SignalingType, data?: Record<string, unknown>): Promise<SignalingMessage>;
+  on(type: SignalingType, callback: (data: Record<string, unknown>) => void): void;
+  off(type: SignalingType, callback: (data: Record<string, unknown>) => void): void;
+  isConnected(): boolean;
+  joinChannel(channelId: string): Promise<SignalingMessage>;
+  leaveChannel(channelId: string): Promise<SignalingMessage>;
+  getRouterCapabilities(channelId: string): Promise<SignalingMessage>;
+  createTransport(channelId: string, direction: 'send' | 'recv'): Promise<SignalingMessage>;
+  connectTransport(transportId: string, dtlsParameters: object): Promise<SignalingMessage>;
+  produce(transportId: string, kind: string, rtpParameters: object, channelId: string): Promise<SignalingMessage>;
+  consume(channelId: string, producerId: string): Promise<SignalingMessage>;
+  pttStart(channelId: string): Promise<SignalingMessage>;
+  pttStop(channelId: string): Promise<SignalingMessage>;
+}
+
 type PendingRequest = {
   resolve: (message: SignalingMessage) => void;
   reject: (error: Error) => void;
@@ -15,7 +35,7 @@ type EventHandler = (data: Record<string, unknown>) => void;
 
 type ConnectionState = 'disconnected' | 'connecting' | 'connected';
 
-export class SignalingClient {
+export class SignalingClient implements ISignalingClient {
   private ws: WebSocket | null = null;
   private url: string;
   private token: string;

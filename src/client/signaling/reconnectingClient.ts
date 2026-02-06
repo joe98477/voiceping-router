@@ -3,7 +3,7 @@
  * Wraps SignalingClient with automatic reconnection after network loss
  */
 
-import { SignalingClient } from './signalingClient';
+import { SignalingClient, ISignalingClient } from './signalingClient';
 import { SignalingType, SignalingMessage } from '../../shared/protocol';
 
 type ConnectionState = 'connected' | 'connecting' | 'reconnecting' | 'disconnected';
@@ -26,7 +26,7 @@ interface QueuedMessage {
   reject: (error: Error) => void;
 }
 
-export class ReconnectingSignalingClient {
+export class ReconnectingSignalingClient implements ISignalingClient {
   private signalingClient: SignalingClient;
   private url: string;
   private token: string;

@@ -9,17 +9,17 @@ type Transport = mediasoupClient.types.Transport;
 type Producer = mediasoupClient.types.Producer;
 type Consumer = mediasoupClient.types.Consumer;
 import { MediasoupDevice } from './device';
-import { SignalingClient } from '../signaling/signalingClient';
+import { ISignalingClient } from '../signaling/signalingClient';
 
 export class TransportClient {
   private device: MediasoupDevice;
-  private signalingClient: SignalingClient;
+  private signalingClient: ISignalingClient;
   private sendTransport: Transport | null = null;
   private recvTransport: Transport | null = null;
   private producer: Producer | null = null;
   private consumers = new Map<string, Consumer>();
 
-  constructor(device: MediasoupDevice, signalingClient: SignalingClient) {
+  constructor(device: MediasoupDevice, signalingClient: ISignalingClient) {
     this.device = device;
     this.signalingClient = signalingClient;
   }

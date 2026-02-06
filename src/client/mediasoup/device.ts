@@ -7,15 +7,15 @@ import * as mediasoupClient from 'mediasoup-client';
 
 type Device = mediasoupClient.types.Device;
 type RtpCapabilities = mediasoupClient.types.RtpCapabilities;
-import { SignalingClient } from '../signaling/signalingClient';
+import { ISignalingClient } from '../signaling/signalingClient';
 
 export class MediasoupDevice {
   private device: Device;
-  private signalingClient: SignalingClient;
+  private signalingClient: ISignalingClient;
   private channelId: string | null = null;
   private loadedCapabilities: RtpCapabilities | null = null;
 
-  constructor(signalingClient: SignalingClient) {
+  constructor(signalingClient: ISignalingClient) {
     this.device = new mediasoupClient.Device();
     this.signalingClient = signalingClient;
   }
