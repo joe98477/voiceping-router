@@ -6,7 +6,10 @@
 import { createClient, RedisClientType } from 'redis';
 import { ChannelState } from '../../shared/types';
 import { config } from '../config';
+import { createLogger } from '../logger';
 import * as speakerLock from './speakerLock';
+
+const logger = createLogger('ChannelState');
 
 /**
  * Channel state manager
@@ -23,8 +26,8 @@ export class ChannelStateManager {
     this.subClient = createClient({ url: config.redis.url });
 
     // Setup error handlers
-    this.pubClient.on('error', (err) => console.error('Pub client error:', err));
-    this.subClient.on('error', (err) => console.error('Sub client error:', err));
+    this.pubClient.on('error', (err) => logger.error('Pub client error:', err));
+    this.subClient.on('error', (err) => logger.error('Sub client error:', err));
   }
 
   /**
@@ -37,9 +40,9 @@ export class ChannelStateManager {
         this.pubClient.connect(),
         this.subClient.connect(),
       ]);
-      console.info('Channel state manager initialized');
+      logger.info('Channel state manager initialized');
     } catch (err) {
-      console.error('Failed to initialize channel state manager:', err);
+      logger.error('Failed to initialize channel state manager:', err);
       throw err;
     }
   }
@@ -53,9 +56,9 @@ export class ChannelStateManager {
         this.pubClient.disconnect(),
         this.subClient.disconnect(),
       ]);
-      console.info('Channel state manager shut down');
+      logger.info('Channel state manager shut down');
     } catch (err) {
-      console.error('Error shutting down channel state manager:', err);
+      logger.error('Error shutting down channel state manager:', err);
       throw err;
     }
   }
@@ -112,7 +115,7 @@ export class ChannelStateManager {
         return { success: false, state };
       }
     } catch (err) {
-      console.error('Error starting PTT:', err);
+      logger.error('Error starting PTT:', err);
 
       // Return failure state
       const state: ChannelState = {
@@ -154,7 +157,7 @@ export class ChannelStateManager {
 
       return state;
     } catch (err) {
-      console.error('Error stopping PTT:', err);
+      logger.error('Error stopping PTT:', err);
 
       // Return current state even on error
       return this.getChannelState(channelId);
@@ -189,7 +192,7 @@ export class ChannelStateManager {
         lockTimestamp: null,
       };
     } catch (err) {
-      console.error('Error getting channel state:', err);
+      logger.error('Error getting channel state:', err);
 
       return {
         channelId,
@@ -227,7 +230,7 @@ export class ChannelStateManager {
             const callbacks = this.subscriptions.get(eventKey) || [];
             callbacks.forEach((cb) => cb(state));
           } catch (err) {
-            console.error('Error parsing channel state message:', err);
+            logger.error('Error parsing channel state message:', err);
           }
         });
       }
@@ -235,7 +238,7 @@ export class ChannelStateManager {
       // Add this callback
       this.subscriptions.get(eventKey)!.push(callback);
     } catch (err) {
-      console.error('Error subscribing to channel:', err);
+      logger.error('Error subscribing to channel:', err);
       throw err;
     }
   }
@@ -255,7 +258,7 @@ export class ChannelStateManager {
       // Unsubscribe from Redis pub/sub
       await this.subClient.unsubscribe(eventKey);
     } catch (err) {
-      console.error('Error unsubscribing from channel:', err);
+      logger.error('Error unsubscribing from channel:', err);
       throw err;
     }
   }
@@ -271,8 +274,135 @@ export class ChannelStateManager {
       const eventKey = this.getEventKey(channelId);
       await this.pubClient.publish(eventKey, JSON.stringify(state));
     } catch (err) {
-      console.error('Error publishing speaker changed event:', err);
+      logger.error('Error publishing speaker changed event:', err);
       // Don't throw - event publication is non-critical
+    }
+  }
+
+  /**
+   * Associate a channel with an event
+   * Stores mapping in Redis hash for event-based operations
+   *
+   * @param channelId - Channel to associate
+   * @param eventId - Event to associate with
+   */
+  async setChannelEvent(channelId: string, eventId: string): Promise<void> {
+    try {
+      const hashKey = 'channel:events';
+      await this.pubClient.hSet(hashKey, channelId, eventId);
+      logger.info(`Associated channel ${channelId} with event ${eventId}`);
+    } catch (err) {
+      logger.error(`Error associating channel ${channelId} with event ${eventId}:`, err);
+      throw err;
+    }
+  }
+
+  /**
+   * Get the event associated with a channel
+   *
+   * @param channelId - Channel to query
+   * @returns Event ID or null if not associated
+   */
+  async getChannelEvent(channelId: string): Promise<string | null> {
+    try {
+      const hashKey = 'channel:events';
+      const eventId = await this.pubClient.hGet(hashKey, channelId);
+      return eventId || null;
+    } catch (err) {
+      logger.error(`Error getting event for channel ${channelId}:`, err);
+      return null;
+    }
+  }
+
+  /**
+   * Get all channels associated with an event
+   *
+   * @param eventId - Event to query
+   * @returns Array of channel IDs
+   */
+  async getChannelsForEvent(eventId: string): Promise<string[]> {
+    try {
+      const hashKey = 'channel:events';
+      const allMappings = await this.pubClient.hGetAll(hashKey);
+
+      // Filter mappings to find channels belonging to this event
+      const channelIds: string[] = [];
+      for (const [channelId, mappedEventId] of Object.entries(allMappings)) {
+        if (mappedEventId === eventId) {
+          channelIds.push(channelId);
+        }
+      }
+
+      return channelIds;
+    } catch (err) {
+      logger.error(`Error getting channels for event ${eventId}:`, err);
+      return [];
+    }
+  }
+
+  /**
+   * Get all active speakers in an event
+   * Returns map of channelId -> userId for all channels with active speakers
+   *
+   * @param eventId - Event to query
+   * @returns Map of channel ID to user ID for active speakers
+   */
+  async getEventActiveSpeakers(eventId: string): Promise<Map<string, string>> {
+    const activeSpeakers = new Map<string, string>();
+
+    try {
+      // Get all channels for this event
+      const channelIds = await this.getChannelsForEvent(eventId);
+
+      // Check each channel for active speaker
+      for (const channelId of channelIds) {
+        const speaker = await speakerLock.getCurrentSpeaker(channelId);
+        if (speaker) {
+          activeSpeakers.set(channelId, speaker.userId);
+        }
+      }
+
+      return activeSpeakers;
+    } catch (err) {
+      logger.error(`Error getting active speakers for event ${eventId}:`, err);
+      return activeSpeakers;
+    }
+  }
+
+  /**
+   * Pause all active speakers in an event
+   * Stops PTT for all channels with active speakers
+   *
+   * @param eventId - Event to pause speakers in
+   * @returns Array of affected channel IDs
+   */
+  async pauseAllSpeakers(eventId: string): Promise<string[]> {
+    const affectedChannels: string[] = [];
+
+    try {
+      // Get all active speakers in event
+      const activeSpeakers = await this.getEventActiveSpeakers(eventId);
+
+      // Stop PTT for each active speaker
+      for (const [channelId, userId] of activeSpeakers) {
+        try {
+          await this.stopPtt(channelId, userId);
+          affectedChannels.push(channelId);
+          logger.info(`Paused speaker ${userId} in channel ${channelId} (event ${eventId})`);
+        } catch (err) {
+          logger.error(`Error pausing speaker ${userId} in channel ${channelId}:`, err);
+          // Continue with other speakers even if one fails
+        }
+      }
+
+      if (affectedChannels.length > 0) {
+        logger.info(`Paused ${affectedChannels.length} speakers in event ${eventId}`);
+      }
+
+      return affectedChannels;
+    } catch (err) {
+      logger.error(`Error pausing speakers for event ${eventId}:`, err);
+      return affectedChannels;
     }
   }
 }
