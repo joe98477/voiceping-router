@@ -52,10 +52,17 @@ Plans:
   4. General user can only PTT on channels they are assigned to
   5. User authorization is checked before granting channel access
   6. System successfully handles 100 concurrent users in testing environment
-**Plans**: TBD
+**Plans**: 8 plans
 
 Plans:
-- [ ] TBD - Will be created during plan-phase
+- [ ] 02-01-PLAN.md -- Auth foundation: enhanced JWT claims, PermissionManager, AuditLogger, extended types/protocol
+- [ ] 02-02-PLAN.md -- Rate limiter (progressive slowdown), jitter buffer config, worker pool optimization
+- [ ] 02-03-PLAN.md -- Channel authorization enforcement: permission-checked join, heartbeat refresh, graceful revocation
+- [ ] 02-04-PLAN.md -- Real-time permission sync via Redis pub/sub, enhanced channel state with event association
+- [ ] 02-05-PLAN.md -- Dispatch PTT priority interrupt and emergency broadcast (all-channel override)
+- [ ] 02-06-PLAN.md -- Force-disconnect, security events backend, ban/unban management
+- [ ] 02-07-PLAN.md -- Integration: wire all Phase 2 modules, complete message routing, permission sync callback
+- [ ] 02-08-PLAN.md -- Load testing (100 concurrent users), E2E test page, Phase 2 verification
 
 ### Phase 3: Browser UI for General Users
 **Goal**: Web interface enables general users to see assigned channels and communicate via PTT
@@ -94,7 +101,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. WebRTC Audio Foundation | 8/8 | ✓ Complete | 2026-02-06 |
-| 2. User Management & Access Control | 0/TBD | Not started | - |
+| 2. User Management & Access Control | 0/8 | Planning complete | - |
 | 3. Browser UI for General Users | 0/TBD | Not started | - |
 | 4. Dispatch Multi-Channel Monitoring | 0/TBD | Not started | - |
 
