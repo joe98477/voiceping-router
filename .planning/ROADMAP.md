@@ -12,7 +12,7 @@ This roadmap rebuilds the broken Opus-over-WebSocket audio subsystem with WebRTC
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: WebRTC Audio Foundation** - Prove WebRTC + mediasoup works with PTT audio under 300ms latency
+- [x] **Phase 1: WebRTC Audio Foundation** - Prove WebRTC + mediasoup works with PTT audio under 300ms latency
 - [ ] **Phase 2: User Management & Access Control** - Role-based permissions and event/team/channel structure
 - [ ] **Phase 3: Browser UI for General Users** - Web interface for single-channel PTT communication
 - [ ] **Phase 4: Dispatch Multi-Channel Monitoring** - Advanced dispatch console with selective channel monitoring
@@ -32,14 +32,14 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 8 plans
 
 Plans:
-- [ ] 01-01-PLAN.md -- Project modernization: Node 20, TypeScript 5, mediasoup deps, shared types and protocol
-- [ ] 01-02-PLAN.md -- mediasoup SFU core: worker pool, router, transports, producers/consumers
-- [ ] 01-03-PLAN.md -- Redis state: speaker locks, channel state, session store
-- [ ] 01-04-PLAN.md -- Signaling server: WebSocket auth, message handlers, server entry point wiring
-- [ ] 01-05-PLAN.md -- Client audio pipeline: mediasoup-client device, transports, microphone, signaling client
-- [ ] 01-06-PLAN.md -- PTT UX: button (hold/toggle), audio feedback tones, busy state, PTT controller
-- [ ] 01-07-PLAN.md -- Reconnection: exponential backoff WebSocket, session recovery, connection manager
-- [ ] 01-08-PLAN.md -- Integration: Docker deployment, test demo page, cross-browser verification
+- [x] 01-01-PLAN.md -- Project modernization: Node 20, TypeScript 5, mediasoup deps, shared types and protocol
+- [x] 01-02-PLAN.md -- mediasoup SFU core: worker pool, router, transports, producers/consumers
+- [x] 01-03-PLAN.md -- Redis state: speaker locks, channel state, session store
+- [x] 01-04-PLAN.md -- Signaling server: WebSocket auth, message handlers, server entry point wiring
+- [x] 01-05-PLAN.md -- Client audio pipeline: mediasoup-client device, transports, microphone, signaling client
+- [x] 01-06-PLAN.md -- PTT UX: button (hold/toggle), audio feedback tones, busy state, PTT controller
+- [x] 01-07-PLAN.md -- Reconnection: exponential backoff WebSocket, session recovery, connection manager
+- [x] 01-08-PLAN.md -- Integration: Docker deployment, test demo page, cross-browser verification
 
 ### Phase 2: User Management & Access Control
 **Goal**: Role-based permissions and organizational hierarchy enable secure multi-user coordination
@@ -93,7 +93,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. WebRTC Audio Foundation | 0/8 | Planned | - |
+| 1. WebRTC Audio Foundation | 8/8 | ✓ Complete | 2026-02-06 |
 | 2. User Management & Access Control | 0/TBD | Not started | - |
 | 3. Browser UI for General Users | 0/TBD | Not started | - |
 | 4. Dispatch Multi-Channel Monitoring | 0/TBD | Not started | - |

@@ -9,21 +9,21 @@ Requirements for audio subsystem rebuild and feature parity with current system.
 
 ### WebRTC Audio Infrastructure
 
-- [ ] **AUDIO-01**: mediasoup v3 SFU server integrated with existing Node.js backend
-- [ ] **AUDIO-02**: WebRTC signaling flow (offer/answer/ICE candidates) via existing WebSocket connections
-- [ ] **AUDIO-03**: Opus audio codec configured for PTT use case (2.5-10ms frames, CBR mode, DTX disabled)
-- [ ] **AUDIO-04**: STUN server configured for NAT traversal
-- [ ] **AUDIO-05**: TURN server infrastructure for firewall-restricted clients
-- [ ] **AUDIO-06**: Cross-browser support (Chrome, Firefox, Safari desktop)
-- [ ] **AUDIO-07**: Audio stream quality below 300ms latency (press-to-talk to hearing)
+- [x] **AUDIO-01**: mediasoup v3 SFU server integrated with existing Node.js backend
+- [x] **AUDIO-02**: WebRTC signaling flow (offer/answer/ICE candidates) via existing WebSocket connections
+- [x] **AUDIO-03**: Opus audio codec configured for PTT use case (2.5-10ms frames, CBR mode, DTX disabled)
+- [x] **AUDIO-04**: STUN server configured for NAT traversal
+- [x] **AUDIO-05**: TURN server infrastructure for firewall-restricted clients
+- [x] **AUDIO-06**: Cross-browser support (Chrome, Firefox, Safari desktop)
+- [x] **AUDIO-07**: Audio stream quality below 300ms latency (press-to-talk to hearing)
 
 ### PTT Core Functionality
 
-- [ ] **PTT-01**: User can press-to-talk (activate audio transmission on button press)
-- [ ] **PTT-02**: User can release-to-stop (stop transmission on button release)
-- [ ] **PTT-03**: System prevents simultaneous talkers in same channel (busy state management)
-- [ ] **PTT-04**: User receives feedback when PTT is blocked (busy indicator)
-- [ ] **PTT-05**: Audio transmission starts within 100-300ms of PTT activation
+- [x] **PTT-01**: User can press-to-talk (activate audio transmission on button press)
+- [x] **PTT-02**: User can release-to-stop (stop transmission on button release)
+- [x] **PTT-03**: System prevents simultaneous talkers in same channel (busy state management)
+- [x] **PTT-04**: User receives feedback when PTT is blocked (busy indicator)
+- [x] **PTT-05**: Audio transmission starts within 100-300ms of PTT activation
 
 ### User Roles & Permissions
 
@@ -57,8 +57,8 @@ Requirements for audio subsystem rebuild and feature parity with current system.
 
 ### Security & Access Control
 
-- [ ] **SEC-01**: User authenticates with JWT token
-- [ ] **SEC-02**: WebSocket connections use WSS (TLS/SSL)
+- [x] **SEC-01**: User authenticates with JWT token
+- [x] **SEC-02**: WebSocket connections use WSS (TLS/SSL)
 - [ ] **SEC-03**: User authorization checked before channel access
 - [ ] **SEC-04**: Session persists across page refresh
 - [ ] **SEC-05**: Architecture supports future AES-256 media encryption (SRTP)
@@ -74,8 +74,8 @@ Requirements for audio subsystem rebuild and feature parity with current system.
 
 ### System Reliability
 
-- [ ] **SYS-01**: User can reconnect after temporary network loss
-- [ ] **SYS-02**: User's channel memberships restored on reconnection
+- [x] **SYS-01**: User can reconnect after temporary network loss
+- [x] **SYS-02**: User's channel memberships restored on reconnection
 - [ ] **SYS-03**: System handles 100 concurrent users in testing
 - [ ] **SYS-04**: Architecture supports scaling to 1000+ concurrent users (not stress-tested in v1)
 
