@@ -45,7 +45,7 @@ async function main() {
 
     const sessionStore = new SessionStore();
 
-    // 5. Create HTTP server with health endpoint
+    // 5. Create HTTP server with health endpoint and test page (dev only)
     const server = http.createServer((req, res) => {
       if (req.url === '/health' && req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -57,6 +57,36 @@ async function main() {
             connections: signalingServer?.getConnectedClients() || 0,
           })
         );
+      } else if (req.url === '/test' && req.method === 'GET' && process.env.NODE_ENV !== 'production') {
+        // Serve test demo page (development only)
+        const fs = require('fs');
+        const path = require('path');
+        const htmlPath = path.join(__dirname, '../client/test/pttDemo.html');
+
+        fs.readFile(htmlPath, 'utf8', (err: Error | null, data: string) => {
+          if (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Failed to load test page' }));
+            return;
+          }
+          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.end(data);
+        });
+      } else if (req.url === '/test/pttDemo.js' && req.method === 'GET' && process.env.NODE_ENV !== 'production') {
+        // Serve compiled test page JavaScript
+        const fs = require('fs');
+        const path = require('path');
+        const jsPath = path.join(__dirname, '../client/test/pttDemo.js');
+
+        fs.readFile(jsPath, 'utf8', (err: Error | null, data: string) => {
+          if (err) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Test page JavaScript not found. Run: npm run build' }));
+            return;
+          }
+          res.writeHead(200, { 'Content-Type': 'application/javascript' });
+          res.end(data);
+        });
       } else {
         res.writeHead(404, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Not Found' }));
