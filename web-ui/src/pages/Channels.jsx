@@ -3,12 +3,13 @@
  * Fetches router token, displays user's assigned channels with PTT controls
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { apiPost } from '../api.js';
 import { useAuth } from '../hooks/useAuth.js';
-import { ChannelProvider } from '../context/ChannelContext.jsx';
+import { ChannelProvider, useChannels } from '../context/ChannelContext.jsx';
 import ChannelList from '../components/ChannelList.jsx';
+import { usePermissionUpdates } from '../hooks/usePermissionUpdates.js';
 
 /**
  * Get WebSocket URL for router signaling (SIG-001)
@@ -25,6 +26,33 @@ const getWsUrl = () => {
   // Production: derive from window.location
   const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
   return `${protocol}://${window.location.host}/ws`;
+};
+
+/**
+ * Inner component that uses ChannelContext and usePermissionUpdates
+ * Must be rendered inside ChannelProvider to access setChannels
+ */
+const ChannelListWithPermissions = ({ wsUrl, token }) => {
+  const { setChannels } = useChannels();
+
+  // Handle permission updates from global WebSocket
+  const handlePermissionUpdate = useCallback(({ added, removed }) => {
+    setChannels((prevChannels) => {
+      // Remove revoked channels
+      const filtered = prevChannels.filter((ch) => !(removed || []).includes(ch.id));
+
+      // Add new channels (with channelId as name for MVP)
+      const newChannels = (added || []).map((id) => ({ id, name: id }));
+
+      return [...filtered, ...newChannels];
+    });
+  }, [setChannels]);
+
+  // Connect to permission update WebSocket
+  usePermissionUpdates(wsUrl, token, handlePermissionUpdate);
+
+  // Render channel list
+  return <ChannelList wsUrl={wsUrl} token={token} />;
 };
 
 /**
@@ -114,7 +142,7 @@ const Channels = ({ user, onLogout }) => {
       {/* Channel list (rendered when token and authUser available) */}
       {!loading && !error && token && authUser && (
         <ChannelProvider user={authUser}>
-          <ChannelList wsUrl={wsUrl} token={token} />
+          <ChannelListWithPermissions wsUrl={wsUrl} token={token} />
         </ChannelProvider>
       )}
     </div>

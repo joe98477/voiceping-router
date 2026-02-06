@@ -69,27 +69,35 @@ export const ChannelProvider = ({ user, children }) => {
 
   /**
    * Replace entire channel list (used when PERMISSION_UPDATE arrives)
-   * @param {Array<{id: string, name: string}>} channelList - New channel list
+   * Supports both direct value and function updater patterns
+   * @param {Array<{id: string, name: string}>|Function} channelListOrUpdater - New channel list or updater function
    */
-  const setChannels = useCallback((channelList) => {
-    if (!Array.isArray(channelList)) {
-      console.error('setChannels expects an array of { id, name } objects');
-      return;
-    }
+  const setChannels = useCallback((channelListOrUpdater) => {
+    setChannelsState((prevChannels) => {
+      // Resolve the new channel list (support function updater pattern)
+      const channelList = typeof channelListOrUpdater === 'function'
+        ? channelListOrUpdater(prevChannels)
+        : channelListOrUpdater;
 
-    setChannelsState(channelList);
+      if (!Array.isArray(channelList)) {
+        console.error('setChannels expects an array of { id, name } objects');
+        return prevChannels;
+      }
 
-    // Initialize states for new channels, preserve states for existing channels
-    setChannelStates((prev) => {
-      const newStates = {};
-      channelList.forEach((channel) => {
-        newStates[channel.id] = prev[channel.id] || {
-          isBusy: false,
-          speakerId: null,
-          speakerName: null,
-        };
+      // Update channel states for new list
+      setChannelStates((prev) => {
+        const newStates = {};
+        channelList.forEach((channel) => {
+          newStates[channel.id] = prev[channel.id] || {
+            isBusy: false,
+            speakerId: null,
+            speakerName: null,
+          };
+        });
+        return newStates;
       });
-      return newStates;
+
+      return channelList;
     });
   }, []);
 
