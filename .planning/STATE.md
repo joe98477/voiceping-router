@@ -10,27 +10,27 @@ See: .planning/PROJECT.md (updated 2026-02-06)
 ## Current Position
 
 Phase: 1 of 4 (WebRTC Audio Foundation)
-Plan: 1 of TBD in current phase
+Plan: 3 of TBD in current phase
 Status: In progress
-Last activity: 2026-02-06 — Completed 01-01-PLAN.md (Runtime Foundation)
+Last activity: 2026-02-06 — Completed 01-03-PLAN.md (Real-Time State Management)
 
-Progress: [█░░░░░░░░░] 10% (estimated based on phase scope)
+Progress: [███░░░░░░░] 30% (estimated based on phase scope)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
+- Total plans completed: 2
 - Average duration: 9 minutes
-- Total execution time: 0.15 hours
+- Total execution time: 0.3 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01 | 1 | 9 min | 9 min |
+| 01 | 2 | 18 min | 9 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (9 min)
+- Last 5 plans: 01-01 (9 min), 01-03 (9 min)
 - Trend: Not established (need 3+ plans)
 
 *Updated after each plan completion*
@@ -56,6 +56,16 @@ Recent decisions affecting current work:
 | CONFIG-001 | Configured Opus with 48kHz, 20ms ptime, usedtx=0 | Per research recommendations for real-time voice (can optimize to 10ms if needed) | Sets audio quality baseline for all channels |
 | BUILD-001 | Excluded legacy src/lib from TypeScript compilation | Legacy code uses Node 8 patterns incompatible with strict TypeScript 5 | Old code preserved but not compiled; new code in src/server and src/shared |
 
+**From 01-03 execution:**
+
+| ID | Decision | Rationale | Impact |
+|----|----------|-----------|--------|
+| STATE-001 | Redis v4 async/await API | Modern promise-based API replaces legacy callback pattern | All state operations use async/await, cleaner code |
+| STATE-002 | Dedicated pub/sub clients | Redis v4 requires separate client instances for pub/sub | ChannelStateManager creates dedicated clients for pub/sub notifications |
+| LOCK-001 | Fail-safe lock denial on Redis errors | When Redis operations fail, deny lock acquisition | Prevents multiple speakers if state management fails |
+| LOCK-002 | Speaker lock TTL of 30s | Balances preventing deadlocks vs allowing reasonable PTT hold | Auto-expiry prevents stuck locks on client crashes |
+| SESSION-001 | Session auto-expiry with 1-hour TTL | Automatic cleanup of stale sessions | Redis handles session cleanup without manual intervention |
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -72,6 +82,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-06
-Stopped at: Completed 01-01-PLAN.md execution
+Last session: 2026-02-06T06:50:11Z
+Stopped at: Completed 01-03-PLAN.md execution (Real-Time State Management)
 Resume file: None
