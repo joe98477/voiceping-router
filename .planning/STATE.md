@@ -12,26 +12,26 @@ See: .planning/PROJECT.md (updated 2026-02-06)
 Phase: 1 of 4 (WebRTC Audio Foundation)
 Plan: 3 of TBD in current phase
 Status: In progress
-Last activity: 2026-02-06 — Completed 01-03-PLAN.md (Real-Time State Management)
+Last activity: 2026-02-06 — Completed 01-02-PLAN.md (Mediasoup SFU Core)
 
 Progress: [███░░░░░░░] 30% (estimated based on phase scope)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
-- Average duration: 9 minutes
-- Total execution time: 0.3 hours
+- Total plans completed: 3
+- Average duration: 11 minutes
+- Total execution time: 0.5 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01 | 2 | 18 min | 9 min |
+| 01 | 3 | 32 min | 11 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (9 min), 01-03 (9 min)
-- Trend: Not established (need 3+ plans)
+- Last 5 plans: 01-01 (9 min), 01-02 (14 min), 01-03 (9 min)
+- Trend: Stable (11 min average)
 
 *Updated after each plan completion*
 
@@ -55,6 +55,15 @@ Recent decisions affecting current work:
 | ARCH-001 | Created src/shared/ directory for types shared between server and client | Signaling protocol must be identical on both sides | Establishes pattern for all future shared code |
 | CONFIG-001 | Configured Opus with 48kHz, 20ms ptime, usedtx=0 | Per research recommendations for real-time voice (can optimize to 10ms if needed) | Sets audio quality baseline for all channels |
 | BUILD-001 | Excluded legacy src/lib from TypeScript compilation | Legacy code uses Node 8 patterns incompatible with strict TypeScript 5 | Old code preserved but not compiled; new code in src/server and src/shared |
+
+**From 01-02 execution:**
+
+| ID | Decision | Rationale | Impact |
+|----|----------|-----------|--------|
+| DEP-003 | Added Winston logger module for structured logging | mediasoup operations need module-specific logging for debugging worker/router/transport lifecycle | All mediasoup modules use child loggers with labels |
+| ARCH-002 | Round-robin worker selection instead of random | Round-robin provides more even load distribution across workers | Worker selection is deterministic and balanced |
+| CONFIG-002 | Opus codec requires channels: 2 in codec capabilities | mediasoup's supported Opus format requires channels: 2, rtcpFeedback arrays | Mono configuration applied at producer level, not codec capability level |
+| PTT-001 | Producers and consumers start paused by default | PTT button not pressed = no audio transmission | Resume/pause methods control PTT state |
 
 **From 01-03 execution:**
 
@@ -82,6 +91,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-06T06:50:11Z
-Stopped at: Completed 01-03-PLAN.md execution (Real-Time State Management)
+Last session: 2026-02-06T06:55:12Z
+Stopped at: Completed 01-02-PLAN.md execution (Mediasoup SFU Core)
 Resume file: None
