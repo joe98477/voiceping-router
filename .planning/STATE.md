@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-02-06)
 ## Current Position
 
 Phase: 1 of 4 (WebRTC Audio Foundation)
-Plan: 4 of TBD in current phase
+Plan: 5 of TBD in current phase
 Status: In progress
-Last activity: 2026-02-06 — Completed 01-04-PLAN.md (WebSocket Signaling Server)
+Last activity: 2026-02-06 — Completed 01-05-PLAN.md (Client-Side WebRTC Audio Pipeline)
 
-Progress: [████░░░░░░] 40% (estimated based on phase scope)
+Progress: [█████░░░░░] 50% (estimated based on phase scope)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: 10 minutes
-- Total execution time: 0.7 hours
+- Total plans completed: 5
+- Average duration: 9 minutes
+- Total execution time: 0.8 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01 | 4 | 39 min | 10 min |
+| 01 | 5 | 47 min | 9 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (9 min), 01-02 (14 min), 01-03 (9 min), 01-04 (7 min)
-- Trend: Improving (10 min average, last plan 7 min)
+- Last 5 plans: 01-01 (9 min), 01-02 (14 min), 01-03 (9 min), 01-04 (7 min), 01-05 (8 min)
+- Trend: Stable (9 min average)
 
 *Updated after each plan completion*
 
@@ -86,6 +86,17 @@ Recent decisions affecting current work:
 | PTT-002 | PTT_DENIED message sent to blocked clients with current speaker info | Per plan requirement to show "visual message showing [username] is speaking" when PTT denied | Clients receive denial reason with speaker identity for user feedback |
 | SHUTDOWN-001 | Graceful shutdown closes resources in reverse initialization order | WebSocket → HTTP → ChannelState → Workers → Redis ensures clean teardown | SIGTERM/SIGINT handled gracefully, proper cleanup on deployment/restart |
 
+**From 01-05 execution:**
+
+| ID | Decision | Rationale | Impact |
+|----|----------|-----------|--------|
+| CODEC-001 | Disable Opus DTX (opusDtx: false) in audio production | Per research recommendations: DTX causes first-word cutoff in PTT scenarios by cutting silent packets | Critical for PTT audio quality; ensures all audio transmitted immediately on PTT press |
+| CODEC-002 | Enable Opus FEC (opusFec: true) in audio production | Forward Error Correction improves audio quality over lossy networks | Better audio quality at cost of slightly higher bandwidth |
+| CODEC-003 | Mono 48kHz audio with echo cancellation, noise suppression, AGC | PTT voice communication doesn't benefit from stereo; 48kHz is Opus native sample rate | Optimal quality/bandwidth balance for real-time voice; processing improves audio clarity |
+| CLIENT-001 | Request-response correlation with 10-second timeout | WebSocket signaling needs to match responses to requests; 10s balances network delays vs UX | Enables async request/response pattern over WebSocket; prevents indefinite hangs |
+| CLIENT-002 | Permission API with Safari fallback for microphone access | navigator.permissions.query not supported in Safari; check permission before getUserMedia for better UX | Graceful degradation across browsers; better UX by showing permission state early |
+| CLIENT-003 | Track mute via track.enabled instead of stop() | PTT toggle needs fast enable/disable without re-requesting microphone permission | Efficient PTT toggle; no permission prompts on each press |
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -102,6 +113,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-06T07:06:25Z
-Stopped at: Completed 01-04-PLAN.md execution (WebSocket Signaling Server)
+Last session: 2026-02-06T18:07:45Z
+Stopped at: Completed 01-05-PLAN.md execution (Client-Side WebRTC Audio Pipeline)
 Resume file: None
