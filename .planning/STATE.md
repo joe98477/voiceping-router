@@ -10,17 +10,17 @@ See: .planning/PROJECT.md (updated 2026-02-06)
 ## Current Position
 
 Phase: 3 of 4 (Browser UI for General Users)
-Plan: 01 of 05 complete
+Plan: 02 of 05 complete
 Status: In progress
-Last activity: 2026-02-06 — Completed 03-01-PLAN.md (Session Management Foundation)
+Last activity: 2026-02-06 — Completed 03-02-PLAN.md (Connection Management Hooks)
 
-Progress: [█████▓░░░░] 52% (17 plans complete)
+Progress: [█████▓░░░░] 55% (18 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 17
-- Average duration: 7.7 minutes
+- Total plans completed: 18
+- Average duration: 7.4 minutes
 - Total execution time: 2.2 hours
 
 **By Phase:**
@@ -29,11 +29,11 @@ Progress: [█████▓░░░░] 52% (17 plans complete)
 |-------|-------|-------|----------|
 | 01 | 8 | 93 min | 11.6 min |
 | 02 | 8 | 38 min | 4.8 min |
-| 03 | 1 | 4 min | 4.0 min |
+| 03 | 2 | 6 min | 3.0 min |
 
 **Recent Trend:**
-- Last 5 plans: 02-05 (3 min), 02-06 (8 min), 02-07 (4 min), 02-08 (5 min), 03-01 (4 min)
-- Trend: Consistently fast execution for focused technical tasks with clear specifications
+- Last 5 plans: 02-06 (8 min), 02-07 (4 min), 02-08 (5 min), 03-01 (4 min), 03-02 (2 min)
+- Trend: Accelerating execution with clear specifications and established patterns
 
 *Updated after each plan completion*
 
@@ -220,6 +220,14 @@ Recent decisions affecting current work:
 | UI-02 | sessionStorage (not localStorage) for router token | SEC-04 requires session persistence across page refresh but automatic clear on tab close | User stays logged in during page refresh but session auto-clears when browser tab closes |
 | UI-03 | useAuth manages router JWT, not control-plane cookie auth | Existing app uses cookie-based auth (/api/auth/login); router JWT is separate token from /api/router/token containing channelIds for WebSocket auth | Cookie auth flow remains untouched; useAuth stores router token for mediasoup signaling connections |
 
+**From 03-02 execution:**
+
+| ID | Decision | Rationale | Impact |
+|----|----------|-----------|--------|
+| ARCH-004 | ConnectionManager built-in PTT methods replace PttController integration | ConnectionManager evolved to include complete PTT logic; PttController constructor requires SignalingClient, but ConnectionManager only exposes getMicrophoneManager() and getTransportClient() getters, not signaling client | Simpler architecture with fewer components; ChannelCard manages UI and calls ConnectionManager for audio/PTT logic directly |
+| UX-006 | Hold-to-talk PTT via native React event handlers | PttButton was designed for PttController integration (creates button DOM element dynamically); without PttController, cleaner to use React-native button with event handlers | Simpler React component, no DOM manipulation, easier to test; button behavior fully managed in React lifecycle |
+| UX-007 | Optimistic PTT UI with error revert pattern | Instant visual feedback (physical walkie-talkie feel) requires optimistic UI; if PTT denied (channel busy), button shows "Channel Busy" state for 3 seconds then reverts | Better UX with no perceived lag, simple error recovery via auto-revert, minimal code complexity |
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -237,12 +245,13 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-06T22:25:01Z
-Stopped at: Completed 03-01-PLAN.md (Session Management Foundation)
+Last session: 2026-02-06T22:30:28Z
+Stopped at: Completed 03-02-PLAN.md (Connection Management Hooks)
 Resume file: None
 
 **Phase 2 (User Management & Access Control) COMPLETE WITH VERIFICATION.**
 
 **Phase 3 (Browser UI for General Users) IN PROGRESS:**
 - ✓ 03-01: Session Management Foundation complete (Vite config, tokenStorage, useAuth, ChannelContext)
-- Next: 03-02: Connection Management Hooks
+- ✓ 03-02: Connection Management Hooks complete (useChannelConnection, ChannelCard with PTT)
+- Next: 03-03: Channels Page
