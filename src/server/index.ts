@@ -10,11 +10,13 @@ import { workerPool } from './mediasoup/workerPool';
 import { RouterManager } from './mediasoup/routerManager';
 import { TransportManager } from './mediasoup/transportManager';
 import { ProducerConsumerManager } from './mediasoup/producerConsumerManager';
-import { connectRedis, disconnectRedis } from './state/redisClient';
+import { connectRedis, disconnectRedis, getRedisClient } from './state/redisClient';
 import { ChannelStateManager } from './state/channelState';
 import { SessionStore } from './state/sessionStore';
 import { SignalingServer } from './signaling/websocketServer';
 import { SignalingHandlers } from './signaling/handlers';
+import { PermissionManager } from './auth/permissionManager';
+import { AuditLogger } from './auth/auditLogger';
 
 /**
  * Main server initialization and startup
@@ -45,7 +47,12 @@ async function main() {
 
     const sessionStore = new SessionStore();
 
-    // 5. Create HTTP server with health endpoint and test page (dev only)
+    // 5. Create auth managers
+    const permissionManager = new PermissionManager(getRedisClient);
+    const auditLogger = new AuditLogger(getRedisClient);
+    logger.info('Auth managers initialized');
+
+    // 6. Create HTTP server with health endpoint and test page (dev only)
     const server = http.createServer((req, res) => {
       if (req.url === '/health' && req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -93,19 +100,21 @@ async function main() {
       }
     });
 
-    // 6. Create signaling handlers and WebSocket server
+    // 7. Create signaling handlers and WebSocket server
     const handlers = new SignalingHandlers(
       routerManager,
       transportManager,
       producerConsumerManager,
       channelStateManager,
       sessionStore,
-      (channelId, msg, excludeUserId) => signalingServer.broadcastToChannel(channelId, msg, excludeUserId)
+      (channelId, msg, excludeUserId) => signalingServer.broadcastToChannel(channelId, msg, excludeUserId),
+      permissionManager,
+      auditLogger
     );
 
-    const signalingServer = new SignalingServer(server, handlers);
+    const signalingServer = new SignalingServer(server, handlers, permissionManager, auditLogger);
 
-    // 7. Start HTTP server
+    // 8. Start HTTP server
     server.listen(config.server.port, config.server.host, () => {
       logger.info(`VoicePing audio server listening on ${config.server.host}:${config.server.port}`);
       logger.info(`mediasoup workers: ${workerPool.getWorkerCount()}`);
@@ -113,7 +122,7 @@ async function main() {
       logger.info(`Health check: http://${config.server.host}:${config.server.port}/health`);
     });
 
-    // 8. Graceful shutdown handlers
+    // 9. Graceful shutdown handlers
     const shutdown = async (signal: string) => {
       logger.info(`${signal} received, shutting down gracefully...`);
 

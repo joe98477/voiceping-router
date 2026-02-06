@@ -6,10 +6,14 @@
 import * as http from 'http';
 import * as ws from 'ws';
 import * as jwt from 'jsonwebtoken';
-import { SignalingMessage, SignalingType } from '../../shared/protocol';
+import { SignalingMessage, SignalingType, createMessage } from '../../shared/protocol';
+import { UserRole } from '../../shared/types';
 import { config } from '../config';
 import { createLogger } from '../logger';
 import { SignalingHandlers } from './handlers';
+import { PermissionManager } from '../auth/permissionManager';
+import { AuditLogger, AuditAction } from '../auth/auditLogger';
+import { rateLimiter } from '../auth/rateLimiter';
 
 const logger = createLogger('SignalingServer');
 
@@ -23,6 +27,10 @@ export interface ClientContext {
   channels: Set<string>;
   connectionId: string;
   isAlive: boolean;
+  role: UserRole;
+  eventId: string;
+  authorizedChannels: Set<string>;
+  globalRole: string;
 }
 
 /**
@@ -31,6 +39,11 @@ export interface ClientContext {
 interface JwtPayload {
   userId: string;
   userName: string;
+  eventId: string;
+  channelIds: string[];
+  globalRole: string;
+  eventRole?: string;
+  role?: string;
   [key: string]: unknown;
 }
 
@@ -42,9 +55,18 @@ export class SignalingServer {
   private clients = new Map<string, ClientContext>();
   private handlers: SignalingHandlers;
   private heartbeatInterval: NodeJS.Timeout | null = null;
+  private permissionManager: PermissionManager;
+  private auditLogger: AuditLogger;
 
-  constructor(server: http.Server, handlers: SignalingHandlers) {
+  constructor(
+    server: http.Server,
+    handlers: SignalingHandlers,
+    permissionManager: PermissionManager,
+    auditLogger: AuditLogger
+  ) {
     this.handlers = handlers;
+    this.permissionManager = permissionManager;
+    this.auditLogger = auditLogger;
 
     // Create WebSocket server at /ws path
     this.wss = new ws.WebSocketServer({
@@ -64,11 +86,37 @@ export class SignalingServer {
   /**
    * Verify JWT token from client connection
    * Supports three token locations: Authorization header, query param, sec-websocket-protocol
+   * Includes rate limiting and role extraction
    */
   private verifyClient(
     info: { origin: string; secure: boolean; req: http.IncomingMessage },
     callback: (result: boolean, code?: number, message?: string) => void
   ): void {
+    // Run async verification
+    this.verifyClientAsync(info, callback).catch((err) => {
+      logger.error(`Error in verifyClient: ${err instanceof Error ? err.message : String(err)}`);
+      callback(false, 500, 'Internal server error');
+    });
+  }
+
+  /**
+   * Async implementation of client verification
+   */
+  private async verifyClientAsync(
+    info: { origin: string; secure: boolean; req: http.IncomingMessage },
+    callback: (result: boolean, code?: number, message?: string) => void
+  ): Promise<void> {
+    // Extract client IP for rate limiting
+    const ip = info.req.socket.remoteAddress || 'unknown';
+
+    // Check connection rate limit
+    const connectionLimit = await rateLimiter.consumeConnection(ip);
+    if (!connectionLimit.allowed) {
+      logger.warn(`Connection rate limit exceeded for IP ${ip}`);
+      callback(false, 429, 'Too many connection attempts');
+      return;
+    }
+
     let token: string | undefined;
 
     // 1. Check Authorization header (Bearer token)
@@ -104,23 +152,51 @@ export class SignalingServer {
       return;
     }
 
+    // Check auth rate limit with progressive slowdown
+    const authLimit = await rateLimiter.consumeAuth(ip);
+    if (!authLimit.allowed) {
+      logger.warn(`Auth rate limit exceeded for IP ${ip}, slowdown: ${authLimit.penalty}ms`);
+      callback(false, 429, `Too many authentication attempts, retry after ${authLimit.retryAfterMs}ms`);
+      return;
+    }
+
     try {
       const decoded = jwt.verify(token, config.auth.jwtSecret) as JwtPayload;
 
       if (!decoded.userId || !decoded.userName) {
         logger.warn('Connection rejected: Invalid JWT payload (missing userId or userName)');
+        await rateLimiter.recordAuthFailure(ip);
         callback(false, 401, 'Unauthorized: Invalid token payload');
         return;
       }
 
+      // Parse role from JWT
+      const user = this.permissionManager.parseJwtClaims({
+        userId: decoded.userId,
+        userName: decoded.userName,
+        eventId: decoded.eventId || '',
+        channelIds: decoded.channelIds || [],
+        globalRole: decoded.globalRole || 'USER',
+        eventRole: decoded.eventRole,
+        role: decoded.role,
+      });
+
       // Attach user info to request for connection handler
       (info.req as any).userId = decoded.userId;
       (info.req as any).userName = decoded.userName;
+      (info.req as any).eventId = user.eventId;
+      (info.req as any).role = user.role;
+      (info.req as any).channelIds = user.channelIds;
+      (info.req as any).globalRole = user.globalRole;
 
-      logger.info(`JWT verified for user ${decoded.userId} (${decoded.userName})`);
+      // Record successful auth
+      await rateLimiter.recordAuthSuccess(ip);
+
+      logger.info(`JWT verified for user ${decoded.userId} (${decoded.userName}) with role ${user.role}`);
       callback(true);
     } catch (err) {
       logger.warn(`Connection rejected: JWT verification failed: ${err instanceof Error ? err.message : String(err)}`);
+      await rateLimiter.recordAuthFailure(ip);
       callback(false, 401, 'Unauthorized: Invalid or expired token');
     }
   }
@@ -131,6 +207,10 @@ export class SignalingServer {
   private handleConnection(socket: ws.WebSocket, req: http.IncomingMessage): void {
     const userId = (req as any).userId;
     const userName = (req as any).userName;
+    const eventId = (req as any).eventId;
+    const role = (req as any).role as UserRole;
+    const channelIds = (req as any).channelIds as string[];
+    const globalRole = (req as any).globalRole;
     const connectionId = `${userId}:${Date.now()}`;
 
     const clientContext: ClientContext = {
@@ -140,11 +220,37 @@ export class SignalingServer {
       channels: new Set(),
       connectionId,
       isAlive: true,
+      role,
+      eventId,
+      authorizedChannels: new Set(channelIds || []),
+      globalRole,
     };
 
     this.clients.set(connectionId, clientContext);
 
-    logger.info(`User ${userId} (${userName}) connected [${connectionId}]`);
+    logger.info(`User ${userId} (${userName}) connected [${connectionId}] with role ${role}`);
+
+    // Audit log AUTH_LOGIN
+    this.auditLogger.log({
+      action: AuditAction.AUTH_LOGIN,
+      actorId: userId,
+      eventId,
+      metadata: {
+        userName,
+        role,
+        globalRole,
+        connectionId,
+        channelCount: channelIds.length,
+      },
+    });
+
+    // Send CHANNEL_LIST message with authorized channels
+    const channelListMessage = createMessage(SignalingType.CHANNEL_LIST, {
+      channels: Array.from(clientContext.authorizedChannels),
+      role,
+      globalRole,
+    });
+    this.sendToClient(socket, channelListMessage);
 
     // Handle pong responses for heartbeat
     socket.on('pong', () => {
@@ -313,7 +419,7 @@ export class SignalingServer {
   }
 
   /**
-   * Start heartbeat interval for dead connection detection
+   * Start heartbeat interval for dead connection detection and permission refresh
    */
   private startHeartbeat(): void {
     this.heartbeatInterval = setInterval(() => {
@@ -327,10 +433,88 @@ export class SignalingServer {
 
         ctx.isAlive = false;
         ctx.ws.ping();
+
+        // Heartbeat-based permission refresh
+        this.refreshClientPermissions(ctx).catch((err) => {
+          logger.error(`Error refreshing permissions for ${ctx.userId}: ${err instanceof Error ? err.message : String(err)}`);
+        });
       }
     }, 30000); // 30 second interval
 
-    logger.info('WebSocket heartbeat started (30s interval)');
+    logger.info('WebSocket heartbeat started (30s interval with permission refresh)');
+  }
+
+  /**
+   * Refresh permissions for a client during heartbeat
+   * Compares with current authorizedChannels and handles additions/removals
+   */
+  private async refreshClientPermissions(ctx: ClientContext): Promise<void> {
+    try {
+      // Get fresh permissions from Redis
+      const freshChannelIds = await this.permissionManager.refreshPermissions(ctx.userId, ctx.eventId);
+      const freshChannels = new Set(freshChannelIds);
+
+      // Find added channels
+      const addedChannels: string[] = [];
+      for (const channelId of freshChannels) {
+        if (!ctx.authorizedChannels.has(channelId)) {
+          addedChannels.push(channelId);
+        }
+      }
+
+      // Find removed channels
+      const removedChannels: string[] = [];
+      for (const channelId of ctx.authorizedChannels) {
+        if (!freshChannels.has(channelId)) {
+          removedChannels.push(channelId);
+        }
+      }
+
+      // If no changes, return early
+      if (addedChannels.length === 0 && removedChannels.length === 0) {
+        return;
+      }
+
+      // Update authorized channels
+      ctx.authorizedChannels = freshChannels;
+
+      // Handle added channels
+      if (addedChannels.length > 0) {
+        logger.info(`User ${ctx.userId} gained access to ${addedChannels.length} channels`);
+
+        // Send PERMISSION_UPDATE for additions
+        const updateMessage = createMessage(SignalingType.PERMISSION_UPDATE, {
+          added: addedChannels,
+          removed: [],
+          channels: Array.from(freshChannels),
+        });
+        this.sendToClient(ctx.ws, updateMessage);
+      }
+
+      // Handle removed channels
+      if (removedChannels.length > 0) {
+        logger.info(`User ${ctx.userId} lost access to ${removedChannels.length} channels`);
+
+        // Check if user is currently in any of the removed channels
+        for (const channelId of removedChannels) {
+          if (ctx.channels.has(channelId)) {
+            // User is in this channel - need to remove them
+            // Check if they're transmitting (handled by handlers via pendingRemoval)
+            await this.handlers.handlePermissionRevocation(ctx, channelId, false);
+          }
+        }
+
+        // Send PERMISSION_UPDATE for removals
+        const updateMessage = createMessage(SignalingType.PERMISSION_UPDATE, {
+          added: [],
+          removed: removedChannels,
+          channels: Array.from(freshChannels),
+        });
+        this.sendToClient(ctx.ws, updateMessage);
+      }
+    } catch (err) {
+      logger.error(`Failed to refresh permissions for ${ctx.userId}: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   /**

@@ -5,13 +5,16 @@
 
 import { types as mediasoupTypes } from 'mediasoup';
 import { SignalingMessage, SignalingType, createMessage } from '../../shared/protocol';
-import { ChannelState } from '../../shared/types';
+import { ChannelState, UserRole } from '../../shared/types';
 import { RouterManager } from '../mediasoup/routerManager';
 import { TransportManager } from '../mediasoup/transportManager';
 import { ProducerConsumerManager } from '../mediasoup/producerConsumerManager';
 import { ChannelStateManager } from '../state/channelState';
 import { SessionStore } from '../state/sessionStore';
+import { PermissionManager } from '../auth/permissionManager';
+import { AuditLogger, AuditAction } from '../auth/auditLogger';
 import { createLogger } from '../logger';
+import { config } from '../config';
 import { ClientContext } from './websocketServer';
 
 const logger = createLogger('SignalingHandlers');
@@ -31,9 +34,14 @@ export class SignalingHandlers {
   private channelStateManager: ChannelStateManager;
   private sessionStore: SessionStore;
   private broadcastToChannel: BroadcastFunction;
+  private permissionManager: PermissionManager;
+  private auditLogger: AuditLogger;
 
   // Track user's producer IDs for PTT operations
   private userProducers = new Map<string, string>(); // userId:channelId -> producerId
+
+  // Track pending channel removals for users transmitting when permission revoked
+  private pendingChannelRemovals = new Map<string, Set<string>>(); // userId -> Set<channelId>
 
   constructor(
     routerManager: RouterManager,
@@ -41,7 +49,9 @@ export class SignalingHandlers {
     producerConsumerManager: ProducerConsumerManager,
     channelStateManager: ChannelStateManager,
     sessionStore: SessionStore,
-    broadcastToChannel: BroadcastFunction
+    broadcastToChannel: BroadcastFunction,
+    permissionManager: PermissionManager,
+    auditLogger: AuditLogger
   ) {
     this.routerManager = routerManager;
     this.transportManager = transportManager;
@@ -49,6 +59,8 @@ export class SignalingHandlers {
     this.channelStateManager = channelStateManager;
     this.sessionStore = sessionStore;
     this.broadcastToChannel = broadcastToChannel;
+    this.permissionManager = permissionManager;
+    this.auditLogger = auditLogger;
   }
 
   /**
@@ -60,6 +72,77 @@ export class SignalingHandlers {
 
       if (!channelId) {
         throw new Error('channelId is required');
+      }
+
+      // Permission check: Admin bypasses, others must have channel in authorizedChannels
+      const isAdmin = ctx.globalRole === 'ADMIN';
+      const hasPermission = isAdmin || ctx.authorizedChannels.has(channelId);
+
+      if (!hasPermission) {
+        logger.warn(`User ${ctx.userId} denied access to channel ${channelId} (not authorized)`);
+
+        // Audit log denial
+        this.auditLogger.log({
+          action: AuditAction.CHANNEL_JOIN_DENIED,
+          actorId: ctx.userId,
+          eventId: ctx.eventId,
+          targetId: channelId,
+          metadata: {
+            userName: ctx.userName,
+            role: ctx.role,
+            reason: 'not_authorized',
+          },
+        });
+
+        this.sendError(ctx, message.id, 'Permission denied: Not authorized for this channel');
+        return;
+      }
+
+      // Enforce simultaneous channel limit (not applicable to Admin)
+      if (!isAdmin && ctx.channels.size >= config.channels.defaultSimultaneousChannelLimit) {
+        logger.warn(`User ${ctx.userId} denied access to channel ${channelId} (simultaneous channel limit)`);
+
+        // Audit log denial
+        this.auditLogger.log({
+          action: AuditAction.CHANNEL_JOIN_DENIED,
+          actorId: ctx.userId,
+          eventId: ctx.eventId,
+          targetId: channelId,
+          metadata: {
+            userName: ctx.userName,
+            role: ctx.role,
+            reason: 'simultaneous_channel_limit',
+            currentChannelCount: ctx.channels.size,
+            limit: config.channels.defaultSimultaneousChannelLimit,
+          },
+        });
+
+        this.sendError(ctx, message.id, `Cannot join more than ${config.channels.defaultSimultaneousChannelLimit} channels simultaneously`);
+        return;
+      }
+
+      // Check channel user limit
+      const channelUserCount = await this.sessionStore.getChannelUserCount(channelId);
+      if (channelUserCount >= config.channels.defaultMaxUsersPerChannel) {
+        logger.warn(`User ${ctx.userId} denied access to channel ${channelId} (channel full)`);
+
+        // Audit log denial
+        this.auditLogger.log({
+          action: AuditAction.CHANNEL_JOIN_DENIED,
+          actorId: ctx.userId,
+          eventId: ctx.eventId,
+          targetId: channelId,
+          metadata: {
+            userName: ctx.userName,
+            role: ctx.role,
+            reason: 'channel_full',
+            currentUserCount: channelUserCount,
+            limit: config.channels.defaultMaxUsersPerChannel,
+          },
+        });
+
+        this.sendError(ctx, message.id, 'Channel is full');
+        return;
       }
 
       // Add user to channel in session store
@@ -82,6 +165,18 @@ export class SignalingHandlers {
 
       // Get current channel state
       const currentState = await this.channelStateManager.getChannelState(channelId);
+
+      // Audit log successful join
+      this.auditLogger.log({
+        action: AuditAction.CHANNEL_JOIN,
+        actorId: ctx.userId,
+        eventId: ctx.eventId,
+        targetId: channelId,
+        metadata: {
+          userName: ctx.userName,
+          role: ctx.role,
+        },
+      });
 
       // Send response to requesting client
       this.sendResponse(ctx, message.id, {
@@ -137,6 +232,18 @@ export class SignalingHandlers {
 
       // Unsubscribe from channel events
       await this.channelStateManager.unsubscribeFromChannel(channelId);
+
+      // Audit log channel leave
+      this.auditLogger.log({
+        action: AuditAction.CHANNEL_LEAVE,
+        actorId: ctx.userId,
+        eventId: ctx.eventId,
+        targetId: channelId,
+        metadata: {
+          userName: ctx.userName,
+          role: ctx.role,
+        },
+      });
 
       // Send response
       this.sendResponse(ctx, message.id, { channelId, success: true });
@@ -343,6 +450,18 @@ export class SignalingHandlers {
           logger.warn(`No producer found for ${ctx.userId} in channel ${channelId}`);
         }
 
+        // Audit log PTT start
+        this.auditLogger.log({
+          action: AuditAction.PTT_START,
+          actorId: ctx.userId,
+          eventId: ctx.eventId,
+          targetId: channelId,
+          metadata: {
+            userName: ctx.userName,
+            role: ctx.role,
+          },
+        });
+
         // Send success response
         this.sendResponse(ctx, message.id, { success: true, state: result.state });
 
@@ -364,6 +483,20 @@ export class SignalingHandlers {
         if (message.id) {
           deniedMessage.id = message.id;
         }
+
+        // Audit log PTT denial
+        this.auditLogger.log({
+          action: AuditAction.PTT_DENIED,
+          actorId: ctx.userId,
+          eventId: ctx.eventId,
+          targetId: channelId,
+          metadata: {
+            userName: ctx.userName,
+            role: ctx.role,
+            currentSpeaker: result.state.currentSpeaker,
+            currentSpeakerName: result.state.speakerName,
+          },
+        });
 
         this.sendResponse(ctx, message.id, {
           success: false,
@@ -402,6 +535,31 @@ export class SignalingHandlers {
       // Release speaker lock
       const state = await this.channelStateManager.stopPtt(channelId, ctx.userId);
 
+      // Audit log PTT stop
+      this.auditLogger.log({
+        action: AuditAction.PTT_STOP,
+        actorId: ctx.userId,
+        eventId: ctx.eventId,
+        targetId: channelId,
+        metadata: {
+          userName: ctx.userName,
+          role: ctx.role,
+        },
+      });
+
+      // Check for pending channel removals after PTT stop
+      const pendingRemovals = this.pendingChannelRemovals.get(ctx.userId);
+      if (pendingRemovals && pendingRemovals.has(channelId)) {
+        logger.info(`Executing deferred channel removal for ${ctx.userId} from channel ${channelId}`);
+        pendingRemovals.delete(channelId);
+        if (pendingRemovals.size === 0) {
+          this.pendingChannelRemovals.delete(ctx.userId);
+        }
+
+        // Execute the deferred removal
+        await this.handlePermissionRevocation(ctx, channelId, true);
+      }
+
       // Send response
       this.sendResponse(ctx, message.id, { success: true, state });
 
@@ -432,6 +590,19 @@ export class SignalingHandlers {
   async handleDisconnect(ctx: ClientContext): Promise<void> {
     try {
       logger.info(`Cleaning up resources for disconnected user ${ctx.userId}`);
+
+      // Audit log disconnect (AUTH_LOGOUT)
+      this.auditLogger.log({
+        action: AuditAction.AUTH_LOGOUT,
+        actorId: ctx.userId,
+        eventId: ctx.eventId,
+        metadata: {
+          userName: ctx.userName,
+          role: ctx.role,
+          connectionId: ctx.connectionId,
+          channelCount: ctx.channels.size,
+        },
+      });
 
       // Release speaker locks in all channels user was in
       for (const channelId of ctx.channels) {
@@ -475,9 +646,96 @@ export class SignalingHandlers {
         this.userProducers.delete(producerKey);
       }
 
+      // Clear pending channel removals
+      this.pendingChannelRemovals.delete(ctx.userId);
+
       logger.info(`Cleanup complete for user ${ctx.userId}`);
     } catch (err) {
       logger.error(`Error during disconnect cleanup for ${ctx.userId}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  /**
+   * Handle permission revocation for a channel
+   * If user is transmitting, defer removal until PTT stop
+   * If user is not transmitting (or force=true), remove immediately
+   *
+   * @param ctx - Client context
+   * @param channelId - Channel to revoke access to
+   * @param force - Force immediate removal even if transmitting
+   */
+  async handlePermissionRevocation(ctx: ClientContext, channelId: string, force: boolean): Promise<void> {
+    try {
+      // Check if user is currently in this channel
+      if (!ctx.channels.has(channelId)) {
+        logger.debug(`User ${ctx.userId} not in channel ${channelId}, no revocation needed`);
+        return;
+      }
+
+      // Check if user is currently transmitting in this channel
+      const currentState = await this.channelStateManager.getChannelState(channelId);
+      const isTransmitting = currentState.currentSpeaker === ctx.userId;
+
+      if (force || !isTransmitting) {
+        // Remove immediately
+        logger.info(`Immediately removing ${ctx.userId} from channel ${channelId} (force=${force}, transmitting=${isTransmitting})`);
+
+        // Synthesize a LEAVE_CHANNEL message for internal handling
+        const leaveMessage: SignalingMessage = {
+          type: SignalingType.LEAVE_CHANNEL,
+          data: { channelId },
+        };
+
+        await this.handleLeaveChannel(ctx, leaveMessage);
+
+        // Audit log permission revocation
+        this.auditLogger.log({
+          action: AuditAction.PERMISSION_REVOKED,
+          actorId: ctx.userId,
+          eventId: ctx.eventId,
+          targetId: channelId,
+          metadata: {
+            userName: ctx.userName,
+            role: ctx.role,
+            force,
+            wasTransmitting: isTransmitting,
+          },
+        });
+      } else {
+        // User is transmitting - defer removal until PTT stop
+        logger.info(`Deferring removal of ${ctx.userId} from channel ${channelId} (currently transmitting)`);
+
+        // Add to pending removals
+        let pendingRemovals = this.pendingChannelRemovals.get(ctx.userId);
+        if (!pendingRemovals) {
+          pendingRemovals = new Set();
+          this.pendingChannelRemovals.set(ctx.userId, pendingRemovals);
+        }
+        pendingRemovals.add(channelId);
+
+        // Audit log deferred revocation
+        this.auditLogger.log({
+          action: AuditAction.PERMISSION_REVOCATION_DEFERRED,
+          actorId: ctx.userId,
+          eventId: ctx.eventId,
+          targetId: channelId,
+          metadata: {
+            userName: ctx.userName,
+            role: ctx.role,
+            reason: 'user_transmitting',
+          },
+        });
+
+        // Send PERMISSION_UPDATE to notify client (UI can show warning)
+        const updateMessage = createMessage(SignalingType.PERMISSION_UPDATE, {
+          removed: [channelId],
+          pendingRemoval: true,
+          message: 'Access to this channel will be revoked when you stop transmitting',
+        });
+        this.sendResponse(ctx, undefined, updateMessage);
+      }
+    } catch (err) {
+      logger.error(`Error handling permission revocation for ${ctx.userId} in channel ${channelId}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

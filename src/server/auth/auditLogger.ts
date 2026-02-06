@@ -56,6 +56,10 @@ export enum AuditAction {
   // Security events
   SECURITY_BAN = 'security.ban',
   SECURITY_UNBAN = 'security.unban',
+
+  // Permission revocation events
+  PERMISSION_REVOKED = 'permission.revoked',
+  PERMISSION_REVOCATION_DEFERRED = 'permission.revocation_deferred',
 }
 
 /**
