@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-02-06)
 ## Current Position
 
 Phase: 1 of 4 (WebRTC Audio Foundation)
-Plan: 5 of TBD in current phase
+Plan: 6 of 8 in current phase
 Status: In progress
-Last activity: 2026-02-06 — Completed 01-05-PLAN.md (Client-Side WebRTC Audio Pipeline)
+Last activity: 2026-02-06 — Completed 01-07-PLAN.md (WebSocket Reconnection and Session Recovery)
 
-Progress: [█████░░░░░] 50% (estimated based on phase scope)
+Progress: [███████░░░] 75% (6 of 8 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5
-- Average duration: 9 minutes
-- Total execution time: 0.8 hours
+- Total plans completed: 6
+- Average duration: 8.7 minutes
+- Total execution time: 0.9 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01 | 5 | 47 min | 9 min |
+| 01 | 6 | 52 min | 8.7 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (9 min), 01-02 (14 min), 01-03 (9 min), 01-04 (7 min), 01-05 (8 min)
-- Trend: Stable (9 min average)
+- Last 5 plans: 01-02 (14 min), 01-03 (9 min), 01-04 (7 min), 01-05 (8 min), 01-07 (5 min)
+- Trend: Improving (getting faster)
 
 *Updated after each plan completion*
 
@@ -97,6 +97,17 @@ Recent decisions affecting current work:
 | CLIENT-002 | Permission API with Safari fallback for microphone access | navigator.permissions.query not supported in Safari; check permission before getUserMedia for better UX | Graceful degradation across browsers; better UX by showing permission state early |
 | CLIENT-003 | Track mute via track.enabled instead of stop() | PTT toggle needs fast enable/disable without re-requesting microphone permission | Efficient PTT toggle; no permission prompts on each press |
 
+**From 01-07 execution:**
+
+| ID | Decision | Rationale | Impact |
+|----|----------|-----------|--------|
+| RECONNECT-001 | Exponential backoff with 30s max delay and 0-500ms jitter | Fast recovery (1s initial) balanced with preventing server overload during outages; jitter prevents thundering herd when many clients reconnect simultaneously | Reconnection delays: 1s, 2s, 4s, 8s, 16s, 30s (cap); prevents coordinated reconnection storms |
+| RECONNECT-002 | Message queue during reconnection (max 100 messages) | Ensures no lost PTT requests when users press button during brief network disruption | Seamless UX during reconnection; prevents memory issues with queue size limit |
+| RECONNECT-003 | Stale PTT message filtering (>2s threshold) | PTT messages older than 2 seconds represent outdated button state (user likely released button) | Prevents replaying stale actions after reconnection; maintains button state accuracy |
+| RECONNECT-004 | Clean disconnect does NOT trigger reconnection | User-initiated disconnect (e.g., leaving channel) should NOT auto-reconnect | Only unclean closes (network loss, server crash) trigger automatic reconnection |
+| ARCH-003 | ISignalingClient interface for type compatibility | Enables ReconnectingSignalingClient to be drop-in replacement for SignalingClient in existing code | Type-safe wrapper pattern; no changes needed to MediasoupDevice or TransportClient consumers |
+| RECONNECT-005 | Session recovery restores PTT lock if user was transmitting | If user was pressing PTT button when network disconnected, re-acquire speaker lock after reconnection | Maintains seamless UX; user doesn't need to release and re-press button after brief network blip |
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -113,6 +124,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-06T18:07:45Z
-Stopped at: Completed 01-05-PLAN.md execution (Client-Side WebRTC Audio Pipeline)
+Last session: 2026-02-06T18:18:01Z
+Stopped at: Completed 01-07-PLAN.md execution (WebSocket Reconnection and Session Recovery)
 Resume file: None
