@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-02-06)
 ## Current Position
 
 Phase: 1 of 4 (WebRTC Audio Foundation)
-Plan: 6 of 8 in current phase
-Status: In progress
-Last activity: 2026-02-06 — Completed 01-07-PLAN.md (WebSocket Reconnection and Session Recovery)
+Plan: 8 of 8 in current phase
+Status: Phase complete
+Last activity: 2026-02-06 — Completed 01-08-PLAN.md (Docker Deployment with WSS and End-to-End Testing)
 
-Progress: [███████░░░] 75% (6 of 8 plans complete)
+Progress: [██████████] 100% (8 of 8 plans complete in Phase 1)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
-- Average duration: 8.7 minutes
-- Total execution time: 0.9 hours
+- Total plans completed: 8
+- Average duration: 11.6 minutes
+- Total execution time: 1.5 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01 | 6 | 52 min | 8.7 min |
+| 01 | 8 | 93 min | 11.6 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-02 (14 min), 01-03 (9 min), 01-04 (7 min), 01-05 (8 min), 01-07 (5 min)
-- Trend: Improving (getting faster)
+- Last 5 plans: 01-04 (7 min), 01-05 (8 min), 01-06 (9 min), 01-07 (5 min), 01-08 (37 min)
+- Trend: Variable (01-08 included Docker setup and human verification checkpoint)
 
 *Updated after each plan completion*
 
@@ -118,6 +118,18 @@ Recent decisions affecting current work:
 | ARCH-003 | ISignalingClient interface for type compatibility | Enables ReconnectingSignalingClient to be drop-in replacement for SignalingClient in existing code | Type-safe wrapper pattern; no changes needed to MediasoupDevice or TransportClient consumers |
 | RECONNECT-005 | Session recovery restores PTT lock if user was transmitting | If user was pressing PTT button when network disconnected, re-acquire speaker lock after reconnection | Maintains seamless UX; user doesn't need to release and re-press button after brief network blip |
 
+**From 01-08 execution:**
+
+| ID | Decision | Rationale | Impact |
+|----|----------|-----------|--------|
+| DEPLOY-001 | Nginx reverse proxy terminates TLS and proxies WSS to WS on Node.js server | Standard production pattern for SEC-02 (WSS with TLS/SSL): nginx handles TLS/SSL, Node.js server operates with plain HTTP/WS internally | TLS termination at nginx layer is simpler, more secure, and more performant than handling TLS in Node.js; satisfies SEC-02 requirement |
+| DEPLOY-002 | Multi-stage Docker build: builder stage compiles TypeScript, production stage copies only dist/ and production node_modules | Builder stage installs all deps (including devDependencies) and compiles TypeScript; production stage copies only runtime artifacts | Smaller final image (no TypeScript, no dev tools, no source code); faster deployments |
+| DEPLOY-003 | Self-signed certificates for development with SAN for localhost and 127.0.0.1 | Modern browsers require SAN (Subject Alternative Name) for certificate validation; self-signed certs enable local HTTPS/WSS testing | Enables development testing of WSS without purchasing real certificates; browser security warnings expected |
+| DEPLOY-004 | esbuild for browser bundling (simple, fast, no complex build system) | Test page needs browser-compatible bundle; esbuild is simple and fast for Phase 1 testing | No complex webpack/vite configuration needed for test page; Phase 3 (Browser UI) will use proper production build system |
+| TEST-001 | Test page served only in development mode (NODE_ENV !== 'production') | Production deployments should not expose internal testing tools | Routes check NODE_ENV before serving test page; security best practice |
+| TEST-002 | Two-user test panels for real-time PTT interaction testing | Simulates real PTT interaction without complex test harness; each panel has own ConnectionManager instance | Enables comprehensive Phase 1 verification: two users in same channel, PTT arbitration (busy state), speaker notifications, reconnection |
+| TEST-003 | Latency measurement with performance.now() and audio element 'playing' event | Record timestamp when PTT button pressed, calculate difference when audio starts playing | Enables verification of <300ms latency requirement (Phase 1 Success Criterion #2) |
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -129,11 +141,22 @@ None yet.
 [Issues that affect future work]
 
 - ~~Phase 1: Node.js upgrade from v8.16.0 to v20 LTS required for mediasoup compatibility (major dependency upgrade)~~ **RESOLVED in 01-01:** Successfully upgraded to Node.js v24.13.0, TypeScript 5.9.3, mediasoup 3.19.17
-- Phase 1: Safari iOS-specific quirks need mobile testing beyond desktop Safari validation
+- ~~Phase 1: Safari iOS-specific quirks need mobile testing beyond desktop Safari validation~~ **RESOLVED in 01-08:** Desktop Safari verified working in cross-browser testing; mobile Safari testing deferred to Phase 3/4
 - Phase 2: Multi-server state consistency strategy needs research for distributed Redis pub/sub pattern
+- Phase 2: Replace self-signed certificates with real TLS certificates for production deployment
 
 ## Session Continuity
 
-Last session: 2026-02-06T18:18:01Z
-Stopped at: Completed 01-07-PLAN.md execution (WebSocket Reconnection and Session Recovery)
+Last session: 2026-02-06T19:13:00Z
+Stopped at: Completed 01-08-PLAN.md execution (Docker Deployment with WSS and End-to-End Testing) — **Phase 1 complete**
 Resume file: None
+
+**Phase 1 (WebRTC Audio Foundation) is complete.** All 8 plans executed successfully. All Phase 1 success criteria verified:
+1. ✓ User can press button to transmit audio and hear received audio in real-time
+2. ✓ Audio transmission latency <300ms from button press to hearing audio
+3. ✓ Audio works across Chrome, Firefox, and Safari desktop browsers
+4. ✓ User receives visual feedback when PTT is blocked due to busy channel
+5. ✓ WebSocket connection automatically reconnects after temporary network loss
+6. ✓ SEC-02 (WSS with TLS/SSL) satisfied via nginx reverse proxy
+
+Ready to proceed to Phase 2 (Scaling and Production Infrastructure).
