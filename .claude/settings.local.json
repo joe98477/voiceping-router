@@ -9,7 +9,9 @@
       "WebSearch",
       "WebFetch(domain:www.npmjs.com)",
       "WebFetch(domain:www.forasoft.com)",
-      "WebFetch(domain:blog.logrocket.com)"
+      "WebFetch(domain:blog.logrocket.com)",
+      "Bash(cat:*)",
+      "Bash([ -f \".planning/REQUIREMENTS.md\" ])"
     ]
   }
 }
