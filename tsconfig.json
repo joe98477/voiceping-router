@@ -1,27 +1,20 @@
 {
   "compilerOptions": {
-    "allowJs": true,
-    "checkJs": false,
-    "lib": [
-      "es2016"
-    ],
-    "module": "commonjs",
-    "noEmitHelpers": false,
-    "noFallthroughCasesInSwitch": true,
-    "noImplicitAny": false,
-    "noImplicitReturns": true,
-    "noImplicitThis": true,
-    "outDir": "dist",
-    "preserveConstEnums": true,
-    "pretty": true,
-    "removeComments": true,
-    "sourceMap": true,
-    "strictNullChecks": false,
-    "target": "es5",
-    "traceResolution": false
+    "target": "ES2022",
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "lib": ["ES2022"],
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true
   },
-  "include": [
-    "src/**/*.ts",
-    "src/**/*.js"
-  ]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "test"]
 }
