@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-06)
 
 **Core value:** Reliable, secure real-time audio communication for coordinating 1000+ distributed team members during high-profile events where security and uptime are critical
-**Current focus:** Phase 2 - User Management & Access Control
+**Current focus:** Phase 3 - Browser UI for General Users
 
 ## Current Position
 
-Phase: 2 of 4 (User Management & Access Control)
-Plan: 08 of 08 complete
-Status: Phase complete with verification
-Last activity: 2026-02-06 — Completed 02-08-PLAN.md (Load Testing & E2E Verification)
+Phase: 3 of 4 (Browser UI for General Users)
+Plan: 01 of 05 complete
+Status: In progress
+Last activity: 2026-02-06 — Completed 03-01-PLAN.md (Session Management Foundation)
 
-Progress: [█████░░░░░] 50% (2 phases complete)
+Progress: [█████▓░░░░] 52% (17 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 16
-- Average duration: 7.9 minutes
-- Total execution time: 2.1 hours
+- Total plans completed: 17
+- Average duration: 7.7 minutes
+- Total execution time: 2.2 hours
 
 **By Phase:**
 
@@ -29,9 +29,10 @@ Progress: [█████░░░░░] 50% (2 phases complete)
 |-------|-------|-------|----------|
 | 01 | 8 | 93 min | 11.6 min |
 | 02 | 8 | 38 min | 4.8 min |
+| 03 | 1 | 4 min | 4.0 min |
 
 **Recent Trend:**
-- Last 5 plans: 02-04 (3 min), 02-05 (3 min), 02-06 (8 min), 02-07 (4 min), 02-08 (5 min)
+- Last 5 plans: 02-05 (3 min), 02-06 (8 min), 02-07 (4 min), 02-08 (5 min), 03-01 (4 min)
 - Trend: Consistently fast execution for focused technical tasks with clear specifications
 
 *Updated after each plan completion*
@@ -211,6 +212,14 @@ Recent decisions affecting current work:
 | TEST-002 | E2E test page uses simple token generation on client for demo purposes | Dev-only test page doesn't need production-grade token security; simplifies testing workflow | Test page can generate tokens without backend call; prod tokens still come from control-plane |
 | TEST-003 | Redis seeding endpoint is dev-only with NODE_ENV check | Production deployments should never expose test data seeding | Test page functional in dev mode only; prod servers return 404 for /dev/* routes |
 
+**From 03-01 execution:**
+
+| ID | Decision | Rationale | Impact |
+|----|----------|-----------|--------|
+| UI-01 | Channel names default to channelId for MVP (no lightweight name API for general users) | JWT from /api/router/token only contains channelIds; /api/events/:eventId/overview has names but is role-restricted (DISPATCH/ADMIN only) | General users see "channel-abc123" instead of "Security Team"; ChannelContext ready for enhancement when name API becomes available |
+| UI-02 | sessionStorage (not localStorage) for router token | SEC-04 requires session persistence across page refresh but automatic clear on tab close | User stays logged in during page refresh but session auto-clears when browser tab closes |
+| UI-03 | useAuth manages router JWT, not control-plane cookie auth | Existing app uses cookie-based auth (/api/auth/login); router JWT is separate token from /api/router/token containing channelIds for WebSocket auth | Cookie auth flow remains untouched; useAuth stores router token for mediasoup signaling connections |
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -228,17 +237,12 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-06T11:31:01Z
-Stopped at: Completed 02-08-PLAN.md (Load Testing & E2E Verification)
+Last session: 2026-02-06T22:25:01Z
+Stopped at: Completed 03-01-PLAN.md (Session Management Foundation)
 Resume file: None
 
 **Phase 2 (User Management & Access Control) COMPLETE WITH VERIFICATION.**
-- ✓ 02-01: Authorization Foundation complete (audit logging, security events backend)
-- ✓ 02-02: Rate Limiting & Worker Optimization complete (progressive rate limiting, load-aware worker pool)
-- ✓ 02-03: Channel Authorization Enforcement complete (role-aware JWT, permission refresh, graceful revocation)
-- ✓ 02-04: Permission Sync & Event Mapping complete (Redis pub/sub for permission updates, event-to-channel mapping)
-- ✓ 02-05: Dispatch PTT Priority & Emergency Broadcast complete (priority override, multi-channel broadcast)
-- ✓ 02-06: Force-Disconnect & Security Events Backend complete (admin handlers, ban/unban)
-- ✓ 02-07: Integration Wiring complete (all Phase 2 modules wired and operational)
-- ✓ 02-08: Load Testing & E2E Verification complete (100-user load test, browser-based E2E test page)
-- Next: Phase 3 (Browser UI)
+
+**Phase 3 (Browser UI for General Users) IN PROGRESS:**
+- ✓ 03-01: Session Management Foundation complete (Vite config, tokenStorage, useAuth, ChannelContext)
+- Next: 03-02: Connection Management Hooks
