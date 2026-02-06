@@ -17,6 +17,10 @@ import { SignalingServer } from './signaling/websocketServer';
 import { SignalingHandlers } from './signaling/handlers';
 import { PermissionManager } from './auth/permissionManager';
 import { AuditLogger } from './auth/auditLogger';
+import { SecurityEventsManager } from './auth/securityEvents';
+import { DispatchHandlers } from './signaling/dispatchHandlers';
+import { AdminHandlers } from './signaling/adminHandlers';
+import { PermissionSyncManager } from './state/permissionSync';
 
 /**
  * Main server initialization and startup
@@ -114,6 +118,48 @@ async function main() {
 
     const signalingServer = new SignalingServer(server, handlers, permissionManager, auditLogger);
 
+    // 7.5. Create and wire Phase 2 modules
+    // SecurityEventsManager
+    const securityEventsManager = new SecurityEventsManager(getRedisClient, auditLogger);
+    signalingServer.setSecurityEventsManager(securityEventsManager);
+    logger.info('SecurityEventsManager initialized');
+
+    // DispatchHandlers
+    const dispatchHandlers = new DispatchHandlers(
+      channelStateManager,
+      producerConsumerManager,
+      sessionStore,
+      (channelId, msg, excludeUserId) => signalingServer.broadcastToChannel(channelId, msg, excludeUserId),
+      (userId, msg) => signalingServer.sendToUser(userId, msg),
+      auditLogger,
+      handlers
+    );
+    handlers.setDispatchHandlers(dispatchHandlers);
+    logger.info('DispatchHandlers initialized');
+
+    // AdminHandlers
+    const adminHandlers = new AdminHandlers(
+      auditLogger,
+      (userId, reason) => signalingServer.disconnectUser(userId, reason),
+      securityEventsManager
+    );
+    handlers.setAdminHandlers(adminHandlers);
+    logger.info('AdminHandlers initialized');
+
+    // Wire SecurityEventsManager to handlers
+    handlers.setSecurityEventsManager(securityEventsManager);
+
+    // PermissionSyncManager
+    const permissionSyncManager = new PermissionSyncManager(
+      (userId, eventId, newChannelIds, action) => {
+        signalingServer.pushPermissionUpdate(userId, newChannelIds, action);
+      }
+    );
+    await permissionSyncManager.start();
+    logger.info('PermissionSyncManager started');
+
+    logger.info('Phase 2 modules initialized: PermissionManager, AuditLogger, RateLimiter, SecurityEvents, PermissionSync');
+
     // 8. Start HTTP server
     server.listen(config.server.port, config.server.host, () => {
       logger.info(`VoicePing audio server listening on ${config.server.host}:${config.server.port}`);
@@ -139,6 +185,10 @@ async function main() {
             else resolve();
           });
         });
+
+        // Shutdown permission sync manager
+        logger.info('Shutting down permission sync manager...');
+        await permissionSyncManager.stop();
 
         // Shutdown channel state manager
         logger.info('Shutting down channel state manager...');
