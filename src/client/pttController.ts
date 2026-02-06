@@ -345,12 +345,12 @@ export class PttController {
       }
 
       // Close all consumers and audio elements
-      for (const [producerId, { consumer, audioElement }] of this.activeConsumers) {
+      this.activeConsumers.forEach(({ consumer, audioElement }, producerId) => {
         consumer.close();
         audioElement.pause();
         audioElement.srcObject = null;
         audioElement.remove();
-      }
+      });
       this.activeConsumers.clear();
 
       // Close transports
