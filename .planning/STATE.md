@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-02-06)
 ## Current Position
 
 Phase: 2 of 4 (User Management & Access Control)
-Plan: 05 of 07 complete
+Plan: 06 of 07 complete
 Status: In progress
-Last activity: 2026-02-06 — Completed 02-05-PLAN.md (Dispatch PTT Priority & Emergency Broadcast)
+Last activity: 2026-02-06 — Completed 02-06-PLAN.md (Force-Disconnect & Security Events Backend)
 
-Progress: [████░░░░░░] 37% (1 phase complete + 5 of 7 plans in phase 2)
+Progress: [████░░░░░░] 40% (1 phase complete + 6 of 7 plans in phase 2)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 13
-- Average duration: 8.8 minutes
-- Total execution time: 1.9 hours
+- Total plans completed: 14
+- Average duration: 8.6 minutes
+- Total execution time: 2.0 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01 | 8 | 93 min | 11.6 min |
-| 02 | 5 | 21 min | 4.2 min |
+| 02 | 6 | 29 min | 4.8 min |
 
 **Recent Trend:**
-- Last 5 plans: 02-01 (6 min), 02-02 (6 min), 02-03 (6 min), 02-04 (3 min - estimated), 02-05 (3 min)
+- Last 5 plans: 02-02 (6 min), 02-03 (6 min), 02-04 (3 min), 02-05 (3 min), 02-06 (8 min)
 - Trend: Extremely fast execution for focused technical tasks with clear specifications
 
 *Updated after each plan completion*
@@ -184,6 +184,17 @@ Recent decisions affecting current work:
 | DISPATCH-004 | getUserProducerId public method in SignalingHandlers | DispatchHandlers needs to pause/resume producers for interrupted speakers and Dispatch user | Exposes producer lookup without exposing entire userProducers map; clean encapsulation |
 | DISPATCH-005 | Delegation methods with role validation | Defense in depth - role check at entry point plus in handler implementation | Audit logs PERMISSION_DENIED at SignalingHandlers level for unauthorized attempts |
 
+**From 02-06 execution:**
+
+| ID | Decision | Rationale | Impact |
+|----|----------|-----------|--------|
+| ADMIN-001 | AdminHandlers uses disconnectUser callback pattern | Decouples admin operations from WebSocket server lifecycle, callback provided by Plan 07 | Clean separation of concerns, testable admin handlers |
+| ADMIN-002 | Admin and Dispatch both have force-disconnect, ban, unban privileges | Both roles need admin capabilities for event management | Role check validates DISPATCH or ADMIN (not just ADMIN) |
+| BAN-001 | Bans stored in Redis sorted set with score=expiresAt | Enables efficient expiry checking and auto-cleanup of expired bans | isUserBanned checks score >= now, permanent bans use MAX_SAFE_INTEGER score |
+| BAN-002 | Ban details stored in separate hash with TTL for temporary bans | Rich ban metadata (bannedBy, reason) separate from membership set | Hash expires automatically for temporary bans, permanent bans have no TTL |
+| SECURITY-001 | Security events trimmed to 5000 entries in Redis | Prevents unbounded growth while keeping recent history for queries | Older events exported to control-plane database via audit log |
+| RATE-001 | Rate limit status read from existing rl:conn, rl:auth, rl:fail keys | Leverage rate limiting infrastructure from Plan 02-02 | Admin dashboard can query active rate limits and monitor abuse |
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -201,8 +212,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-06T11:08:58Z
-Stopped at: Completed 02-05-PLAN.md (Dispatch PTT Priority & Emergency Broadcast)
+Last session: 2026-02-06T22:05:47Z
+Stopped at: Completed 02-06-PLAN.md (Force-Disconnect & Security Events Backend)
 Resume file: None
 
 **Phase 2 (User Management & Access Control) in progress.**
@@ -211,4 +222,5 @@ Resume file: None
 - ✓ 02-03: Channel Authorization Enforcement complete (role-aware JWT, permission refresh, graceful revocation)
 - ✓ 02-04: Permission Sync & Event Mapping complete (Redis pub/sub for permission updates, event-to-channel mapping)
 - ✓ 02-05: Dispatch PTT Priority & Emergency Broadcast complete (priority override, multi-channel broadcast)
-- Next: 02-06 onwards (force disconnect, admin tools)
+- ✓ 02-06: Force-Disconnect & Security Events Backend complete (admin handlers, ban/unban)
+- Next: 02-07 (Index.ts Integration & Phase Verification)
