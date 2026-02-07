@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-08)
 ## Current Position
 
 Phase: 5 of 10 (Android Project Setup & WebRTC Foundation)
-Plan: Ready to plan Phase 5
-Status: Ready to plan
-Last activity: 2026-02-08 — v2.0 roadmap created with 6 Android phases
+Plan: 1 of 5 complete
+Status: In progress
+Last activity: 2026-02-08 — Completed 05-01-PLAN.md (Android project foundation)
 
 Progress: [████████░░] 40% (Milestone 1 complete: 4/10 phases shipped)
 
@@ -48,6 +48,14 @@ Key decisions carrying forward to Milestone 2:
 - Max 5 simultaneous channels for general users (bandwidth constraint on mobile, sufficient for field worker use case)
 - No server changes for Android client (existing WebSocket/mediasoup protocol is client-agnostic)
 
+**Phase 5 Plan 01 Decisions:**
+
+| Decision | Rationale | Phase | Plan |
+|----------|-----------|-------|------|
+| Use libmediasoup-android 0.7.0 (Maven Central) | Latest stable version, actively maintained, will validate compatibility in Plan 02 acceptance test | 05 | 01 |
+| Dark theme cyan accent (#00BCD4) | Radio-app feel, high visibility against dark background, WCAG AAA compliance | 05 | 01 |
+| Minimum SDK 26 (Android 8.0) | 89% device coverage, enables EncryptedSharedPreferences, stable WebRTC support | 05 | 01 |
+
 ### Pending Todos
 
 None yet.
@@ -61,7 +69,7 @@ Deferred to future milestones:
 ## Session Continuity
 
 Last session: 2026-02-08
-Stopped at: v2.0 roadmap created, ready to plan Phase 5
+Stopped at: Completed 05-01-PLAN.md (Android project foundation)
 Resume file: None
 
 **Milestone 1 (WebRTC Audio Rebuild + Web UI) COMPLETE:**
@@ -72,7 +80,8 @@ Resume file: None
 - Total: 26 plans, ~4.2 hours execution time
 
 **Milestone 2 (Android Client App) IN PROGRESS:**
-- Phase 5: Android Project Setup & WebRTC Foundation (ready to plan)
+- Phase 5: Android Project Setup & WebRTC Foundation (1/5 plans complete)
+  - 05-01: Android project foundation ✓
 - Phase 6: Single-Channel PTT & Audio Transmission (pending)
 - Phase 7: Foreground Service & Background Audio (pending)
 - Phase 8: Multi-Channel Monitoring & Scan Mode (pending)
