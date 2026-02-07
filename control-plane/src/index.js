@@ -226,7 +226,7 @@ app.use(
     store: new RedisStore({ client: redisClient }),
     secret: SESSION_SECRET,
     resave: false,
-    saveUninitialized: true,
+    saveUninitialized: false,
     cookie: { httpOnly: true, sameSite: "lax", secure: sessionCookieSecure }
   })
 );
@@ -364,7 +364,6 @@ const bootstrapAdmin = async () => {
 };
 
 const requireAuth = async (req, res, next) => {
-  console.log("[auth]", req.method, req.path, "sid:", req.sessionID, "cookie:", req.headers.cookie ? "present" : "MISSING", "userId:", req.session && req.session.userId);
   if (!req.session || !req.session.userId) {
     return res.status(401).json({ error: "Unauthorized" });
   }
@@ -538,9 +537,7 @@ app.post("/api/auth/login", async (req, res) => {
   if (!valid) {
     return res.status(401).json({ error: "Invalid credentials" });
   }
-  console.log("[login] session BEFORE modify:", JSON.stringify(req.session), "cookie.secure:", req.session.cookie.secure);
   req.session.userId = user.id;
-  console.log("[login] session AFTER modify:", JSON.stringify(req.session));
   const updated = await prisma.user.update({
     where: { id: user.id },
     data: { lastLoginAt: new Date() }
