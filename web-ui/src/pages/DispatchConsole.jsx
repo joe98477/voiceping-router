@@ -5,7 +5,7 @@
 
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { apiGet, apiPost } from '../api.js';
+import { apiFetch, apiGet, apiPost } from '../api.js';
 import { useAuth } from '../hooks/useAuth.js';
 import { ChannelProvider, useChannels } from '../context/ChannelContext.jsx';
 import ChannelGrid from '../components/ChannelGrid.jsx';
@@ -116,11 +116,13 @@ const DispatchConsole = ({ user, onLogout }) => {
       setError('');
 
       try {
-        // Fetch overview (teams, channels, roster, event info)
-        const overviewData = await apiGet(`/api/events/${eventId}/overview`);
+        // Fetch overview and router token in parallel (reduces total wait time)
+        // Use 30s timeout for overview — Prisma connection pool can be slow on cold start
+        const [overviewData, tokenResponse] = await Promise.all([
+          apiFetch(`/api/events/${eventId}/overview`, { method: 'GET', timeout: 30000 }),
+          apiPost('/api/router/token', { eventId }),
+        ]);
 
-        // Fetch router token
-        const tokenResponse = await apiPost('/api/router/token', { eventId });
         if (!tokenResponse || !tokenResponse.token) {
           throw new Error('Invalid token response');
         }
@@ -190,10 +192,27 @@ const DispatchConsole = ({ user, onLogout }) => {
     return <div className="screen screen--center">Loading dispatch console...</div>;
   }
 
+  // Retry handler
+  const handleRetry = () => {
+    setError('');
+    setLoading(true);
+    setOverview(null);
+    setToken(null);
+    // Re-trigger the useEffect by updating a dependency
+    window.location.reload();
+  };
+
   if (error) {
     return (
       <div className="screen screen--center">
-        <div className="alert">{error}</div>
+        <div>
+          <div className="alert">
+            {error}
+            <button className="btn btn--secondary" onClick={handleRetry} style={{ marginLeft: '12px' }}>
+              Retry
+            </button>
+          </div>
+        </div>
       </div>
     );
   }

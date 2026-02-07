@@ -4,7 +4,8 @@ const API_BASE =
 
 export const apiFetch = async (path, options = {}) => {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
+  const timeoutMs = options.timeout || 10000;
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   let response;
   try {
     response = await fetch(`${API_BASE}${path}`, {
