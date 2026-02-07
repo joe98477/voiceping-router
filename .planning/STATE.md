@@ -10,17 +10,17 @@ See: .planning/PROJECT.md (updated 2026-02-06)
 ## Current Position
 
 Phase: 4 of 4 (Dispatch Multi-Channel Monitoring) — IN PROGRESS
-Plan: 01 of 04 complete
+Plan: 02 of 04 complete
 Status: In progress
-Last activity: 2026-02-07 — Completed 04-01-PLAN.md (Dispatch channel limit bypass + DispatchChannelCard component)
+Last activity: 2026-02-07 — Completed 04-02-PLAN.md (DispatchConsole page with team-grouped grid and channel name API)
 
-Progress: [████████░░] 84% (22 plans complete)
+Progress: [█████████░] 88% (23 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 22
-- Average duration: 9.5 minutes
+- Total plans completed: 23
+- Average duration: 9.1 minutes
 - Total execution time: 3.5 hours
 
 **By Phase:**
@@ -30,11 +30,11 @@ Progress: [████████░░] 84% (22 plans complete)
 | 01 | 8 | 93 min | 11.6 min |
 | 02 | 8 | 38 min | 4.8 min |
 | 03 | 5 | 73 min | 14.6 min |
-| 04 | 1 | 4 min | 4.0 min |
+| 04 | 2 | 9 min | 4.5 min |
 
 **Recent Trend:**
-- Last 5 plans: 03-02 (2 min), 03-03 (3 min), 03-04 (4 min), 03-05 (~60 min), 04-01 (4 min)
-- Trend: 03-05 was interactive Docker debugging with human checkpoint; non-interactive plans consistently fast (2-4 min)
+- Last 5 plans: 03-03 (3 min), 03-04 (4 min), 03-05 (~60 min), 04-01 (4 min), 04-02 (5 min)
+- Trend: Non-interactive plans consistently fast (3-5 min); 03-05 was interactive Docker debugging outlier (~60 min)
 
 *Updated after each plan completion*
 
@@ -244,6 +244,11 @@ Recent decisions affecting current work:
 | UI-009 | Consumer track-level muting (consumer.track.enabled = false) instead of HTMLAudioElement.muted | Per RESEARCH.md: track.enabled works at WebRTC transport level, silences instantly, keeps connection alive; HTMLAudioElement.muted only affects playback | Muted channels receive audio data but don't play it; faster unmute response, no reconnection overhead |
 | UI-010 | Activity indicators (pulsing dot + speaker name) visible on muted cards | Per LOCKED decision in 04-02 RESEARCH.md: dispatch users need to see activity even when audio muted for situational awareness | Muted cards dimmed to 0.6 opacity but activity pulse and speaker name still visible; CSS uses dispatch-card--muted and dispatch-card--active classes |
 | UI-011 | PTT button functional on muted channels | Per LOCKED decision: mute only affects incoming audio, not outgoing PTT; dispatch user can transmit to muted channel | isMuted prop does not affect PTT button disabled state; button remains enabled on muted cards |
+| UI-012 | Team-grouped channel grid with collapsible sections | Dispatch users monitor 10-50 channels; team grouping provides organizational structure | All team sections start expanded by default; collapse state not persisted |
+| UI-013 | localStorage for mute state persistence (key: cv.dispatch.muted.{eventId}) | Dispatch users want mute preferences to persist across page refreshes | Mute state is per-event, stored in localStorage, survives browser restarts |
+| UI-014 | Per-team mute toggle buttons in team section headers | Allows bulk muting/unmuting of all channels in a team with one click | Team mute button shows 'Muted' when ALL channels muted, else 'Unmuted' |
+| UI-015 | AdminDrawer slides from right (not center modal like SettingsDrawer) | Side drawer preserves context (channels visible) while accessing admin features | New UI pattern for dispatch console; SettingsDrawer remains center modal for other pages |
+| API-001 | Enhanced /api/router/token endpoint to include channelNames map | General users need channel names (not IDs); existing JWT only contains channelIds | All users (general + dispatch/admin) get channel names; lightweight solution (no new endpoint) |
 
 ### Pending Todos
 
@@ -262,8 +267,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-07T07:08:00Z
-Stopped at: Completed 04-01-PLAN.md (Dispatch channel limit bypass + DispatchChannelCard component)
+Last session: 2026-02-07T07:13:00Z
+Stopped at: Completed 04-02-PLAN.md (DispatchConsole page with team-grouped grid and channel name API)
 Resume file: None
 
 **Phase 2 (User Management & Access Control) COMPLETE WITH VERIFICATION.**
@@ -277,6 +282,7 @@ Resume file: None
 
 **Phase 4 (Dispatch Multi-Channel Monitoring) IN PROGRESS:**
 - ✓ 04-01: Dispatch channel limit bypass + DispatchChannelCard component with mute toggle
-- Next: 04-02, 04-03, 04-04 (remaining plans in Phase 4)
+- ✓ 04-02: DispatchConsole page with team-grouped grid, stats bar, AdminDrawer, mute persistence, channel name API
+- Next: 04-03, 04-04 (remaining plans in Phase 4)
 
 **Known issue:** Request timeouts after ~5 minutes of runtime (likely Prisma connection pool or Redis). Infrastructure concern, not blocker for Phase 4.
