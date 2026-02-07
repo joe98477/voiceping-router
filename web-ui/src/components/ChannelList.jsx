@@ -3,8 +3,8 @@
  */
 
 import React from 'react';
-import { useChannels } from '../context/ChannelContext';
-import ChannelCard from './ChannelCard';
+import { useChannels } from '../context/ChannelContext.jsx';
+import ChannelCard from './ChannelCard.jsx';
 
 /**
  * ChannelList component

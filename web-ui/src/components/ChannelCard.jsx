@@ -4,8 +4,8 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { useChannelConnection } from '../hooks/useChannelConnection';
-import { useChannels } from '../context/ChannelContext';
+import { useChannelConnection } from '../hooks/useChannelConnection.js';
+import { useChannels } from '../context/ChannelContext.jsx';
 
 /**
  * ChannelCard component
