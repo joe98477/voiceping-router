@@ -1,237 +1,246 @@
 # Project Research Summary
 
-**Project:** VoicePing Router - WebRTC PTT Audio Subsystem Rebuild
-**Domain:** Enterprise Push-to-Talk over Cellular (PoC) Communications Platform
-**Researched:** 2026-02-06
-**Confidence:** HIGH
+**Project:** VoicePing Android Native PTT Client
+**Domain:** Mobile PTT communications (Android native client for existing mediasoup WebRTC server)
+**Researched:** 2026-02-08
+**Confidence:** MEDIUM
 
 ## Executive Summary
 
-The VoicePing platform is an enterprise-grade push-to-talk (PTT) communications system for large event coordination (1000+ concurrent users). The current audio implementation using raw Opus packets over WebSocket is fundamentally broken and cannot be salvaged—browsers encode Opus for RTP transport within WebRTC, not raw frame transmission. The research conclusively points to **mediasoup 3.x as the SFU (Selective Forwarding Unit)** as the correct architecture, integrating cleanly with existing WebSocket signaling infrastructure while providing production-grade performance.
+Building an Android native PTT client for the existing mediasoup-based VoicePing server requires a hybrid stack combining JNI-wrapped C++ libraries (libmediasoup-android) with modern Kotlin/Jetpack Compose for UI. The client will integrate with the existing WebSocket signaling protocol and WebRTC infrastructure without requiring any server changes. The recommended approach uses crow-misia/libmediasoup-android (most actively maintained wrapper), OkHttp for WebSocket connectivity, and a foreground service architecture to enable "pocket radio" functionality with lock-screen PTT operation.
 
-The recommended approach centers on a hybrid architecture: preserve all existing infrastructure (WebSocket server, Redis state management, Express REST API, PostgreSQL database, JWT authentication) while adding mediasoup as a dedicated media routing layer. WebSocket becomes the signaling channel for WebRTC offer/answer/ICE exchange, while actual audio flows via properly encapsulated WebRTC connections. This SFU architecture is the only viable option for PTT at scale—MCU adds unnecessary mixing overhead, and P2P mesh fails beyond 4 users.
+The critical path focuses on three high-value features: (1) lock screen PTT operation for hands-free field use, (2) scan mode with automatic channel switching for dispatcher workflow, and (3) hardware button mapping for true walkie-talkie experience. These differentiators require careful audio pipeline management, with multiple concurrent WebRTC connections (one per monitored channel) coordinated through a state machine that handles priority-based audio routing.
 
-Critical risks include: (1) Opus codec misconfiguration leading to latency >300ms, (2) memory leaks in long-running 8-12 hour event sessions, (3) TURN server costs exploding with dispatch users monitoring 10-50 channels, and (4) state synchronization complexity at 1000+ users. All risks have clear mitigation strategies documented in research and must be addressed during specific phases—codec configuration in Phase 1, architecture decisions in Phase 2, memory management in Phase 3.
+The largest deployment risk is OEM battery optimization killing foreground services despite proper configuration (Xiaomi, Samsung, Huawei are notorious). Even with correct implementation, users must manually whitelist the app in device-specific battery settings. The second critical risk is mediasoup-client native library compatibility — third-party Android wrappers have known ABI fragmentation issues that require early validation with physical devices. Other key risks include Bluetooth SCO audio routing race conditions (2-3 second connection latency cuts off first words), WebRTC native object memory leaks in multi-channel scenarios, and cellular NAT traversal failures requiring TURN relay.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The research identifies **mediasoup v3.19.16+** as the clear choice for WebRTC media routing. It's a mature, Node.js-native SFU with proven 1000+ user scalability, averaging 120ms latency under load. The existing tech stack remains largely intact but requires critical upgrades: Node.js must upgrade from EOL v8.16.0 to v20 LTS (mediasoup requires Node 16+), TypeScript from 3.5.1 to 5.x, and the router's Redis client from deprecated 2.8.0 to async-first 4.7.0.
+The Android client uses a proven stack of industry-standard libraries with one critical dependency: libmediasoup-android (JNI wrapper for mediasoup C++ client). Core networking uses OkHttp 4.12.0 for WebSocket signaling and Retrofit 2.11.0 for REST API authentication. WebRTC is provided by GetStream's webrtc-android 1.3.9 (maintained builds of Google's WebRTC library, which Google stopped publishing for Android in 2018). UI layer uses Jetpack Compose 1.10.0 with Material 3 for declarative reactive interfaces. Background operation relies on Media3 MediaSessionService for foreground service lifecycle and audio focus management.
 
 **Core technologies:**
-- **mediasoup 3.19.16+**: WebRTC SFU for server-side media routing—industry standard with 19,744 weekly downloads, handles 500-1000 users per server without transcoding overhead
-- **Opus codec (built into WebRTC)**: Mandatory WebRTC codec (RFC 7874) with 16-32kbps for PTT speech, 5-26.5ms algorithmic delay, FEC for packet loss recovery
-- **Node.js 20 LTS**: Runtime upgrade required (current v8 EOL'd in 2019)—mediasoup needs modern native bindings
-- **WebSocket (ws 8.x)**: Existing signaling infrastructure reused for WebRTC SDP/ICE exchange—no architectural change needed
-- **Redis 4.7.0+**: Continue using for distributed state with mediasoup worker/router state added for multi-server coordination
+- **libmediasoup-android 0.21.0** (crow-misia): JNI wrapper for mediasoup C++ client — most actively maintained with Maven Central publishing, 610 commits, last updated May 2025
+- **OkHttp 4.12.0**: WebSocket client for signaling protocol — industry standard, fixes memory leaks from 4.11, powers Retrofit
+- **GetStream webrtc-android 1.3.9**: Pre-compiled WebRTC library — maintained builds with Jetpack Compose integration, avoids 50GB+ build-from-source requirement
+- **Jetpack Compose 1.10.0**: UI framework — declarative reactive UI better suited for dynamic PTT states than XML layouts
+- **Media3 MediaSessionService 1.5.0**: Foreground service audio — replaces deprecated MediaSession, handles notifications/audio focus/lifecycle automatically
+- **Hilt 2.51.1**: Dependency injection — Google-recommended DI with compile-time safety for ViewModels and singleton services
 
-**Critical decision:** SFU architecture is non-negotiable. PTT characteristics (one speaker → many listeners, dispatch monitoring 10-50 channels) require selective forwarding without mixing. MCU adds 100-150ms latency for unnecessary mixing; P2P mesh scales O(n²) and fails beyond 4 users.
+**Build system:** Android Gradle Plugin 9.0.0 + Kotlin 2.3.10, min SDK 26 (Android 8.0, 89% coverage), target SDK 35 (Android 15, Google Play requirement Feb 2026).
+
+**Critical decision:** Use crow-misia/libmediasoup-android over haiyangwu fork (last updated 2021, unmaintained, known arm64-v8a crashes on Android 10+). Acceptance criteria: must successfully connect to existing server and work on 3+ physical devices before proceeding past Phase 1.
 
 ### Expected Features
 
-Research into enterprise PTT systems (Motorola WAVE PTX, Zello Enterprise) and MCPTT standards reveals clear table stakes vs differentiators.
+The Android client delivers feature parity with the web client for core PTT functionality, plus Android-specific enhancements for field worker use cases. Research identified clear categories: table stakes (expected by users), differentiators (competitive advantages), and anti-features (explicit scope exclusions).
 
 **Must have (table stakes):**
-- Press-to-talk audio transmission with floor control—core functionality currently broken
-- Low latency audio (100-300ms mouth-to-ear)—3GPP/ETSI define 200ms as critical threshold
-- Opus codec (16-32kbps) with noise suppression and echo cancellation—industrial environments demand this
-- Multi-channel monitoring with selective mute—dispatch users monitor 10-50 channels simultaneously
-- Jitter buffer management—critical for quality in variable networks
-- Role-based access control (Admin/Dispatch/General)—already implemented
-- Presence status (Available/Busy/Offline)—prevents failed calls
-- Architecture supports future recording and AES-256 encryption—design for it now even if not implemented in v1
+- Hardware PTT button mapping (volume keys, Bluetooth headset buttons, dedicated PTT buttons on rugged phones) — industry standard for PTT apps
+- Lock screen PTT operation (foreground service with wake lock, screen-off audio) — critical for "pocket radio" use case where device stays in pocket
+- Foreground service for background audio — required for PTT audio playback when app backgrounded or screen off
+- Channel list with activity indicators — visual feedback showing who's talking on which channel
+- Audio routing control (speaker vs earpiece vs Bluetooth) — default to speaker for walkie-talkie convention, auto-switch to Bluetooth when connected
+- Auto-reconnect with session recovery — cellular network drops common in field environments, must recover gracefully
+- Per-channel volume control — different channels need different volume (noisy warehouse vs quiet office)
+- Busy state indicators — visual feedback when channel busy (someone else talking), disable PTT button
 
-**Should have (competitive):**
-- GPS location tracking and mapping—situational awareness for distributed teams at large venues
-- Emergency alert button with priority calling—life-safety feature for high-stakes events
-- Text messaging and photo sharing—async communication when voice is inappropriate
-- Playback/replay (7-day message history)—Zello provides this; valuable for shift changes
-- Usage analytics and reporting—post-event analysis and staffing optimization
-- Broadcast/all-call to 500-3000 users—mass announcements for evacuations/security alerts
+**Should have (competitive differentiators):**
+- **Scan mode with auto-switch** — monitor up to 5 channels simultaneously, auto-switch to active channel, drop back to primary when transmission ends (killer feature for dispatch/field coordination, like two-way radio scan mode)
+- **Scan mode visual bottom bar** — persistent UI showing all monitored channels with real-time activity indicators, tap to manually switch
+- **Bluetooth headset PTT with dual-button support** — map primary/secondary buttons to different channels/functions (competitive advantage over Zello)
+- Instant channel monitoring (no manual join flow) — add channel to scan list with one tap, reduces friction
+- Network quality indicator — real-time latency/jitter/packet loss display, helps troubleshoot connectivity
+- Haptic feedback for PTT events — vibrate on press/release/busy state, improves tactile UX for lock-screen use
+- Emergency broadcast override — dispatch force-transmit to all monitored channels (server already supports this)
 
 **Defer (v2+):**
-- Native mobile apps (Android/iOS)—web-first strategy, validate before platform investment
-- Video clip sharing—bandwidth-intensive, assess demand after launch
-- Message transcription (voice-to-text)—AI feature, nice-to-have for accessibility
-- LMR radio interoperability—niche requirement, complex integration
-- End-to-end encryption implementation—architecture ready, defer actual implementation
-
-**Anti-features identified:** End-to-end encryption in v1 (breaks recording/compliance), native apps in v1 (delays market), full video conferencing (scope creep, bandwidth explosion), custom codec implementation (maintenance burden).
+- Persistent transmission history — storage bloat, privacy concerns, not core PTT use case (keep only recent 10-20 in memory, clear on restart)
+- In-app messaging/chat — feature creep, VoicePing is voice-first (link to external chat if needed)
+- GPS tracking/location sharing — privacy nightmare, battery drain, regulatory complexity (integrate with external MDM instead)
+- Recording/playback — legal liability, storage complexity, privacy concerns (server-side with compliance framework if needed)
 
 ### Architecture Approach
 
-The standard WebRTC PTT architecture employs clean separation of concerns: **signaling plane** (WebSocket for SDP/ICE exchange), **media plane** (SFU for audio routing), and **control plane** (REST API + Redis for state). This maps perfectly to VoicePing's existing infrastructure.
+The Android client implements clean architecture with three layers (data/domain/presentation) and a foreground service boundary separating lifecycle-independent operations from UI. The service manages multiple ConnectionManager instances (one per monitored channel), each maintaining an independent WebSocket connection and mediasoup WebRTC transport pair. This mirrors the web client architecture but scales to support dispatcher workflow (5+ simultaneous channels).
 
 **Major components:**
-1. **WebSocket Server (existing)** — Handles WebRTC signaling transport, PTT floor control, session management; add WebRTC message handlers to existing implementation
-2. **SFU Media Server (new - mediasoup)** — Audio stream routing via selective forwarding; runs as separate process/container with C++ worker threads
-3. **Redis (existing)** — Room membership, routing tables, pub/sub for state sync; SFU subscribes to `vp:membership_updates` channel
-4. **Control Plane API (existing)** — Event/team/channel CRUD unchanged; REST API continues managing users/authorization
-5. **TURN/STUN Server (new)** — NAT traversal for 15-20% of connections (corporate firewalls); start with Twilio managed service for MVP
+1. **SignalingClient (data/network/)** — WebSocket connection to `/ws`, JSON message send/receive with request-response correlation using pending requests map. Uses OkHttp WebSocket with exponential backoff reconnection (ReconnectingSignalingClient wrapper).
+2. **ConnectionManager (data/network/)** — Orchestrates signaling + media for ONE channel. Lifecycle: init → loadDevice → joinChannel → createTransports → ready for PTT. Handles SPEAKER_CHANGED broadcasts to create/pause/resume consumers based on active speaker.
+3. **MediasoupDevice (data/network/)** — Wrapper around libmediasoupclient Device, creates Transports/Producers/Consumers. Shared singleton instance across all ConnectionManagers (one Device, multiple Transports).
+4. **PttService (service/)** — Foreground service holding Map<channelId, ConnectionManager>, scan mode state machine, hardware PTT button receiver. Exposes state via Binder to UI ViewModels. Runs independently of Activity lifecycle for background operation.
+5. **ScanModeManager (service/)** — State machine (Off/Monitoring/Active) coordinating multi-channel audio switching. Monitors all channels for speaker changes, auto-switches to active channel, returns to primary after timeout. Implements priority-based audio routing.
+6. **AudioPlaybackManager (data/audio/)** — Manages WebRTC Consumer → AudioTrack playback. Handles pause/resume for scan mode channel switching. Android automatically mixes up to 5 AudioTrack instances (no manual mixing required for scan mode).
 
-**Key integration pattern:** WebSocket becomes WebRTC signaling channel while continuing current control flow. Client authenticates via JWT, requests channel join, server creates mediasoup router/producer/consumer, sends WebRTC offer via WebSocket, client responds with answer, ICE candidates exchanged, then media flows directly via UDP (DTLS-SRTP), not through WebSocket. Existing floor control (START/STOP messages) integrates with WebRTC producer lifecycle.
+**Integration with existing server:** NO server changes required. Uses existing WebSocket protocol at `/ws`, same JSON message format (JOIN_CHANNEL, PTT_START, SPEAKER_CHANGED, etc.), existing mediasoup 3.19 RTP capabilities negotiation. Each monitored channel = separate WebSocket connection with separate ClientContext on server (matches dispatcher web client pattern).
 
-**Data flow for dispatch multi-channel monitoring:** Single WebRTC connection to SFU with multiple paused consumers (one per subscribed channel). User selectively resumes/pauses consumers for mute/unmute without server-side mixing—this is the critical insight enabling 10-50 channel monitoring without bandwidth explosion.
+**Key pattern:** Service-bound architecture keeps network/media in foreground service, UI observes state via StateFlow. Hardware PTT button broadcasts forward to service via Intent. ViewModels never directly manage WebRTC objects (lifecycle mismatch with Activity).
 
 ### Critical Pitfalls
 
-Research identifies 8 critical pitfalls with phase-specific prevention strategies. Top 5 by impact:
+Research identified 13 pitfalls across severity levels. Top 5 by impact:
 
-1. **Opus codec misconfiguration for PTT workloads** — Default WebRTC settings optimize for conversational audio (20ms frames, adaptive bitrate), but PTT needs lower latency. Configure 2.5-10ms frames, CBR at 32-64kbps, VOIP mode not AUDIO mode, disable DTX (causes transmission start delays), enable FEC for packet loss. Current "invalid packet" errors indicate raw Opus without proper RTP encapsulation. **Address in Phase 1—foundational.**
+1. **mediasoup-client Native Build Fragmentation** — Third-party wrappers (haiyangwu, crow-misia) have known crashes on specific ABIs (arm64-v8a on Android 10+), version mismatches between libwebrtc and libmediasoupclient cause build failures or runtime crashes. PREVENTION: Phase 1 acceptance gate with physical device testing (3+ devices, different OEMs, API levels). Pin NDK/WebRTC/wrapper versions together, never upgrade independently. Fallback: WebView hybrid approach if no stable wrapper exists.
 
-2. **SFU selection without PTT-specific requirements** — Most WebRTC servers optimize for video conferencing. Single server limits: 200-500 users typical, 1000+ requires clustering. Wrong choice (MCU, mesh topology) makes scaling impossible. Use SFU for forwarding without transcoding, plan multi-server architecture from day one, test with PTT patterns (1 speaker → N listeners). **Address in Phase 2—changing media servers mid-project requires rewrite.**
+2. **OEM Battery Optimization Kills Foreground Services** — Despite proper foreground service implementation, OEM battery savers (Xiaomi MIUI, Samsung "Sleeping Apps", Huawei PowerGenie) kill apps after 5-10 minutes screen-off regardless of foreground service status. Field workers miss critical PTT messages. PREVENTION: OEM-specific battery optimization detection and mandatory whitelist setup wizard on first launch (Xiaomi: Autostart + Battery Optimization + App Pinning; Samsung: remove from Sleeping Apps; Huawei: App Launch Manager manual control). Document device-specific steps with screenshots.
 
-3. **Memory leaks in long-running sessions** — WebRTC connections and MediaRecorder instances accumulate over 8-12 hour events, causing browser crashes. Explicitly close RTCPeerConnection, stop MediaStream tracks, avoid MediaRecorder timeslice, use WeakMap for references, test with realistic 8-12 hour durations. Dispatch users monitoring 50 channels are most affected. **Address in Phase 3—during dispatch multi-channel implementation.**
+3. **Bluetooth SCO Audio Routing Race Conditions** — Bluetooth SCO connection takes 500ms-2s to establish. If PTT transmission starts before SCO ready, audio routes to phone speaker instead of headset. First 1-2 seconds of transmission cut off. PREVENTION: Wait for SCO_AUDIO_STATE_CONNECTED before transmitting, add 200ms pre-roll countdown ("Connecting to headset..."). Alternative: pre-start SCO when Bluetooth headset connects and keep alive for session duration (trades battery for zero-latency).
 
-4. **TURN server cost explosion at scale** — 15-20% of connections typically require TURN relay (corporate NATs), but dispatch multi-channel can push this to 50%+. At 1000 users with 15% TURN: ~2.71TB per session. Use SFU to minimize connection count (1 to SFU vs N peer connections), configure ICE to prioritize STUN-first, deploy regional TURN servers. **Address in Phase 2—architecture must minimize TURN dependency.**
+4. **WebRTC Native Object Memory Leaks** — PeerConnection/MediaStream/MediaStreamTrack backed by C++ objects not freed by Java GC. Must explicitly call .dispose() in correct order. Multi-channel context: 5 channels × 10 reconnects = 50+ leaked PeerConnections if not disposed. App crashes after 30-60 minutes with OutOfMemoryError. PREVENTION: Strict lifecycle management with disposal order: peerConnection.close() → stream.dispose() → track.dispose() → peerConnection.dispose(). Track created vs disposed count in debug builds, use LeakCanary for native leak detection.
 
-5. **Jitter buffer misconfiguration for PTT latency** — Default adaptive jitter buffer (40-120ms) creates unacceptable latency for PTT. Configure `setJitterBufferMinDelay(15)` for 15ms minimum, reduce max packets to 25 from default 50, rely on Opus FEC instead of large buffers. Total PTT latency target: 100-300ms includes jitter buffer. **Address in Phase 1—impacts latency validation.**
+5. **Multi-Channel Audio Mixing Thread Contention** — 5 simultaneous PeerConnections delivering audio buffers every 20ms. Naive mixing (separate AudioTrack per channel) causes stuttering/glitches. Manual mixing in callback adds latency (50-200ms) and CPU overhead (40%+ on low-end devices). PREVENTION: Use priority-based selective playback (only play ONE channel at a time) for MVP simplicity. Advanced: custom AudioTrack mixer with Oboe for low-latency mixing, or single PeerConnection with multiplexed tracks (requires server-side mixer or client track multiplexing).
 
-**Other critical pitfalls:** Browser compatibility (Safari requires adapter.js, stricter HTTPS enforcement)—Phase 1; state synchronization complexity at 1000+ users (Redis distributed state with eventual consistency)—Phase 2; audio feedback loops in dispatch monitoring (require headphones, detect feedback patterns)—Phase 3.
+**Additional moderate risks:** Android API fragmentation for foreground services (API 26/28/31/34 have different permission requirements), WebSocket heartbeat timing in Doze mode (timers get deferred, connection drops), cellular NAT traversal failures (requires TURN relay for Carrier-Grade NAT), volume button capture conflicts with system volume (Select to Speak accessibility feature breaks PTT).
 
 ## Implications for Roadmap
 
-Based on research findings, the natural phase structure follows technical dependencies and risk mitigation priorities. The broken audio subsystem must be proven in isolation (Phase 1) before scaling architecture (Phase 2), and architecture must be solid before adding complex features like dispatch multi-channel (Phase 3).
+Based on research, recommended 6-phase build order prioritizing technical de-risking (mediasoup integration validation) followed by core PTT functionality, then advanced features. Each phase has clear deliverables and avoids specific pitfalls.
 
-### Phase 1: Proof of Concept (WebRTC Audio Foundation)
-**Rationale:** Validate core technology decisions before investing in architecture. Current Opus-over-WebSocket is fundamentally broken and unfixable—WebRTC with mediasoup is the only viable path. Must prove latency targets achievable and cross-browser compatibility before building on this foundation.
+### Phase 1: WebRTC Foundation (Week 1-2)
+**Rationale:** Validate mediasoup-client Android wrapper compatibility BEFORE building features on top. De-risk critical technical assumption (third-party JNI wrapper works with existing server).
+**Delivers:** Minimal console app connects to server, joins channel, receives audio via Consumer, logs all signaling messages.
+**Uses:** libmediasoup-android 0.21.0, OkHttp WebSocket, MediasoupDevice wrapper
+**Addresses:** Pitfall #1 (native build fragmentation), #4 (memory leaks — establish disposal patterns early), #13 (Opus config)
+**Acceptance criteria:** Successful build + connection to existing server + tested on 3+ physical devices (Samsung, Google Pixel, OnePlus/Oppo) with different API levels (26, 31, 34).
+**Research flag:** LOW — if wrapper fails acceptance criteria, need deeper research on alternatives (haiyangwu fork, custom JNI, WebView hybrid).
 
-**Delivers:** Working WebRTC audio in single channel between 2 users, latency measurement <300ms, cross-browser validation (Chrome, Firefox, Safari desktop + iOS).
+### Phase 2: PTT Transmission (Week 2-3)
+**Rationale:** Complete bidirectional audio pipeline (transmit + receive) for single-channel use case. Establishes core PTT flow.
+**Delivers:** App can transmit PTT (mic → server) and receive PTT (server → speaker) in single channel. Basic Compose UI with PTT button, speaker indicator.
+**Uses:** WebRTC PeerConnectionFactory for audio capture, AudioCaptureManager, Producer/Consumer lifecycle
+**Addresses:** Table stakes features (PTT transmission, busy state indicators), Pitfall #6 (API fragmentation — implement foreground service type early)
+**Research flag:** NONE — standard WebRTC patterns, well-documented.
 
-**Addresses:**
-- Press-to-talk audio transmission (currently broken)
-- Opus codec with proper RTP encapsulation
-- Jitter buffer configuration for PTT latency
-- Noise suppression and echo cancellation
+### Phase 3: Foreground Service & Background Operation (Week 3-4)
+**Rationale:** Enable "pocket radio" functionality (lock screen PTT, background audio). Critical for field worker use case.
+**Delivers:** App runs in background with foreground service notification, WebSocket stays alive when screen off, hardware PTT button (intent-based) triggers transmission.
+**Uses:** Media3 MediaSessionService, PttService with Binder pattern, HardwareButtonReceiver broadcast receiver
+**Addresses:** Table stakes (lock screen PTT, foreground service, hardware button mapping), Pitfall #2 (OEM battery killers — implement detection + whitelist wizard), #7 (WebSocket Doze — use AlarmManager for heartbeat)
+**Research flag:** MEDIUM — OEM-specific battery optimization requires testing on Xiaomi/Samsung/Huawei devices to validate setup steps.
 
-**Avoids:**
-- Pitfall 1: Opus codec misconfiguration—configure frame size 2.5-10ms, CBR mode, disable DTX
-- Pitfall 5: Jitter buffer latency—configure minimum delay 15ms, test under network jitter
-- Pitfall 3 (partial): Browser compatibility—test Safari early with adapter.js
+### Phase 4: Multi-Channel Support (Week 4-5)
+**Rationale:** Foundation for scan mode. Multiple simultaneous connections required for dispatcher workflow.
+**Delivers:** App monitors 3 channels simultaneously, receives audio from all, shows per-channel connection state.
+**Uses:** Map<channelId, ConnectionManager>, shared MediasoupDevice instance, channel list UI (Compose)
+**Addresses:** Differentiator (instant channel monitoring), Pitfall #4 (memory leaks — test repeated join/leave cycles), #5 (audio mixing — validate Android's automatic mixing with 3 streams)
+**Research flag:** MEDIUM — Multi-channel audio mixing behavior needs validation. If Android mixing fails with 3+ streams, need research on custom mixer or Oboe.
 
-**Features:** Core PTT audio only. No multi-channel, no dispatch monitoring, no advanced features. Simple 2-person channel proves technology.
+### Phase 5: Scan Mode & Auto-Switch (Week 5-6)
+**Rationale:** Killer feature differentiator. Enables dispatcher workflow (monitor 5 channels, auto-switch to active).
+**Delivers:** Scan mode with primary channel, auto-switch to active channel, return to primary after timeout. Bottom bar UI with monitored channel indicators.
+**Uses:** ScanModeManager state machine, AudioPlaybackManager pause/resume coordination
+**Addresses:** Differentiators (scan mode auto-switch, visual bottom bar), Pitfall #5 (multi-channel mixing — priority-based selective playback reduces complexity)
+**Research flag:** LOW — State machine pattern is straightforward, audio switching leverages Phase 4 foundation.
 
-### Phase 2: Architecture & Scaling Foundation
-**Rationale:** Single-channel PoC from Phase 1 cannot scale to 1000 users. Must implement distributed architecture, multi-channel support, and state synchronization before adding complex features. Architecture changes are expensive to retrofit—get it right before feature development.
+### Phase 6: Bluetooth & Hardware Integration (Week 6-7)
+**Rationale:** Advanced hardware integration after core audio works. Bluetooth is complex and device-specific.
+**Delivers:** Bluetooth SCO audio routing, Bluetooth headset PTT button support, volume key PTT mapping (with accessibility detection).
+**Uses:** AudioManager.startBluetoothSco(), SCO_AUDIO_STATE_UPDATED receiver, KeyEvent interception
+**Addresses:** Table stakes (audio routing control, Bluetooth button mapping), Differentiator (dual-button support), Pitfall #3 (Bluetooth SCO race — implement pre-roll countdown), #9 (volume button conflicts)
+**Research flag:** HIGH — Bluetooth PTT button event handling is manufacturer-specific (Plantronics vs Jabra vs cheap AliExpress headsets send different KeyCodes). Need physical device testing to build compatibility mapping.
 
-**Delivers:** Multi-channel support, distributed state management via Redis, SFU clustering architecture (tested to 500+ simulated users), TURN/STUN infrastructure.
-
-**Uses:**
-- mediasoup SFU with worker pool (one per CPU core)
-- Redis pub/sub for state synchronization across servers
-- TURN server (Twilio managed service for MVP)
-
-**Implements:**
-- SFU selective subscription pattern (foundation for dispatch monitoring)
-- State replication (Redis → SFU) with eventual consistency
-- Floor control via signaling integrated with WebRTC producer lifecycle
-- Authorization enforcement at media level (SFU validates membership)
-
-**Avoids:**
-- Pitfall 2: Wrong SFU architecture—validate mediasoup handles 500+ users, plan horizontal scaling
-- Pitfall 4: TURN cost explosion—SFU minimizes connections, configure ICE for STUN-first
-- Pitfall 7: State synchronization complexity—Redis distributed state with atomic operations, test race conditions
-
-**Features:** Users can join multiple channels, PTT in any channel, floor control enforced. Dispatch monitoring architecture in place but not full UI (Phase 3).
-
-### Phase 3: Dispatch Multi-Channel & Production Hardening
-**Rationale:** Architecture from Phase 2 enables selective subscription for dispatch monitoring. Now implement full dispatch features (10-50 channel monitoring with selective mute) and harden for production 8-12 hour sessions.
-
-**Delivers:** Dispatch console with 10-50 channel selective monitoring, memory leak testing/fixes, production monitoring, graceful reconnection.
-
-**Addresses:**
-- Multi-channel monitoring with selective mute/unmute
-- Channel scanning with priority
-- Production-grade connection lifecycle management
-- Memory profiling and leak prevention
-
-**Avoids:**
-- Pitfall 6: Memory leaks in long sessions—explicit cleanup, 8-12 hour session testing
-- Pitfall 8: Audio feedback in dispatch mode—headphone enforcement, feedback detection
-
-**Features:** Full dispatch UI, connection quality indicators, presence status, graceful error recovery, production monitoring dashboard.
-
-### Phase 4: Enhanced Communication & Location (Post-MVP)
-**Rationale:** Core PTT is production-ready after Phase 3. Now add competitive differentiators that require solid foundation: GPS tracking, emergency alerts, text/photo sharing.
-
-**Delivers:** GPS location tracking and mapping, emergency alert button with priority calling, text messaging, photo sharing, usage analytics.
-
-**Features:** Location-based coordination, emergency/priority features, multimedia communication, post-event analytics.
-
-### Phase 5: Recording, Compliance & Advanced Features (v2)
-**Rationale:** Architecture supports recording from Phase 1 design decisions. Now implement actual recording pipeline, playback/replay, audit logs, broadcast/all-call.
-
-**Delivers:** Call recording with retention policies, 7-day replay, audit logs, broadcast to 500-3000 users, message transcription (AI).
-
-**Features:** Compliance features, historical playback, mass announcements, voice-to-text.
+### Phase 7: Network Resilience & Polish (Week 7-8)
+**Rationale:** Production readiness after core features proven. Address cellular edge cases and error handling.
+**Delivers:** Cellular NAT traversal (TURN), network change handling (WiFi ↔ cellular), error states (PTT denied, reconnecting), settings screen, battery usage profiling.
+**Addresses:** Pitfall #8 (cellular NAT — verify TURN server configured), #11 (audio focus loss during phone calls), #12 (wake lock battery drain — release during idle)
+**Research flag:** MEDIUM — Cellular NAT behavior requires testing on AT&T/Verizon/T-Mobile SIM cards. TURN server capacity needs verification for production load.
 
 ### Phase Ordering Rationale
 
-**Why PoC before Architecture:** Cannot validate technology choice (WebRTC + mediasoup) without working prototype. PoC proves Opus latency achievable, Safari works, WebRTC integration viable. Discovering fundamental issues in Phase 2 wastes architecture work.
+**Technical de-risking first:** Phase 1 validates the riskiest assumption (third-party mediasoup wrapper compatibility) before investing in UI/features. If wrapper fails, pivot to WebView hybrid or custom JNI is possible at minimal cost.
 
-**Why Architecture before Features:** Dispatch multi-channel monitoring (Phase 3) depends on selective subscription pattern (Phase 2). Adding channels to PoC architecture causes redesign—1 connection per channel instead of 1 connection with N subscriptions. Recording (Phase 5) depends on SFU architecture decisions (Phase 2).
+**Sequential dependency chain:** Each phase builds on previous foundation:
+- Phase 1 (WebRTC) → Phase 2 (PTT) → Phase 3 (Background) → Phase 4 (Multi-channel) → Phase 5 (Scan mode)
+- Cannot implement scan mode without multi-channel, cannot have multi-channel without PTT working, cannot have PTT without WebRTC foundation.
 
-**Why defer GPS/Emergency to Phase 4:** GPS tracking is independent of audio subsystem rebuild. Adding in Phase 1-3 distracts from core audio risk. Emergency alerts need priority calling (complex audio preemption), which needs stable multi-channel foundation (Phase 2-3).
+**Bluetooth deferred:** Phase 6 (Bluetooth) parallelizes risk — core app works with on-screen PTT button even if Bluetooth integration proves difficult. Bluetooth is device-specific and can iterate based on field testing.
 
-**Why defer Recording to Phase 5:** Architecture supports recording (mediasoup RTP stream access), but implementation is complex (ffmpeg pipeline, storage, retention policies). Not needed for MVP validation. Can be added cleanly after audio/architecture proven.
+**Polish last:** Phase 7 addresses edge cases and production hardening after core features proven. Cellular testing requires physical SIM cards and real-world field conditions.
+
+**Pitfall avoidance:** Early phases establish patterns that prevent later pitfalls:
+- Phase 1: Memory leak disposal patterns, Opus config
+- Phase 2: Foreground service type (API fragmentation)
+- Phase 3: OEM battery optimization detection
+- Phase 4: Multi-channel memory leak testing
+- Phase 5: Priority-based audio (simpler than full mixing)
+- Phase 6: Bluetooth SCO pre-roll (race condition)
+- Phase 7: TURN relay (cellular NAT)
 
 ### Research Flags
 
 **Phases needing deeper research during planning:**
-- **Phase 2:** mediasoup clustering architecture for 1000+ users across multiple servers—need to research specific deployment topology, load balancing strategies, and Redis cluster configuration
-- **Phase 4:** GPS location tracking APIs and mapping libraries—need to research browser geolocation APIs, map rendering performance with 1000+ markers
-- **Phase 5:** ffmpeg recording pipeline and storage architecture—need to research RTP → ffmpeg integration, storage formats, retention automation
+- **Phase 1:** If crow-misia wrapper fails acceptance testing → research alternatives (haiyangwu fork stability, custom JNI feasibility, WebView hybrid trade-offs)
+- **Phase 4:** If Android audio mixing glitches with 3+ streams → research custom mixer (Oboe library, manual AudioTrack mixing, buffer management)
+- **Phase 6:** Bluetooth PTT button event mapping → research manufacturer-specific SDKs (Pryme, Flic, Seecode), HID protocol variations, KeyCode compatibility matrix
+- **Phase 7:** Cellular NAT traversal failures → research TURN server capacity planning, carrier-specific NAT policies, ICE timeout tuning
 
 **Phases with standard patterns (skip research-phase):**
-- **Phase 1:** WebRTC basics and mediasoup setup—well-documented in official docs, demo projects available
-- **Phase 3:** Dispatch UI patterns—established UX patterns from competitor analysis (Motorola WAVE, Zello)
-- **Phase 4:** Text/photo messaging—standard web features, no domain-specific complexity
+- **Phase 2:** WebRTC audio capture/playback — official WebRTC documentation comprehensive
+- **Phase 3:** Foreground service — official Android docs cover all API versions
+- **Phase 5:** State machine — standard pattern, no domain-specific complexity
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | mediasoup is proven for Node.js WebRTC at scale (19,744 weekly downloads, production deployments documented); Opus codec is mandatory WebRTC standard (RFC 7874); integration strategy verified by multiple sources |
-| Features | MEDIUM | Table stakes identified from MCPTT standards and competitor analysis (Motorola WAVE PTX, Zello), but VoicePing-specific priorities inferred from existing codebase and user roles |
-| Architecture | HIGH | SFU pattern for PTT is industry consensus; signaling-media separation is WebRTC standard; selective subscription pattern documented in mediasoup/LiveKit official docs; integration with existing infrastructure is straightforward |
-| Pitfalls | HIGH | Opus misconfiguration, memory leaks, TURN costs, jitter buffer issues are well-documented with clear solutions; pitfall-to-phase mapping is logical based on dependencies |
+| Stack | MEDIUM | WebRTC/OkHttp/Compose verified with official sources. libmediasoup-android wrapper actively maintained (May 2025) but requires acceptance testing to confirm compatibility with server. ABI coverage and version pinning critical. |
+| Features | HIGH | Table stakes/differentiators validated against competitor analysis (Zello, WAVE PTX). Scan mode pattern verified with two-way radio documentation. Anti-features clear from PTT domain research. |
+| Architecture | MEDIUM | Clean architecture + service-bound pattern is proven Android approach. Multi-ConnectionManager design mirrors web client dispatcher pattern. Audio mixing behavior needs validation (Android's automatic AudioTrack mixing with 5 streams unconfirmed). |
+| Pitfalls | HIGH | OEM battery killers, WebRTC memory leaks, Bluetooth SCO races confirmed across multiple issue trackers (Signal, flutter-webrtc, WebRTC Chromium bugs). Cellular NAT traversal is well-known WebRTC challenge. Volume button conflicts confirmed by Google. |
 
-**Overall confidence:** HIGH
+**Overall confidence: MEDIUM**
+
+Stack and architecture are sound, but two critical dependencies require validation:
+1. libmediasoup-android wrapper compatibility (mitigate with Phase 1 acceptance gate)
+2. OEM battery optimization behavior (mitigate with mandatory whitelist setup wizard)
 
 ### Gaps to Address
 
-**Node.js upgrade impact:** Upgrading from Node 8.16.0 to Node 20 LTS is significant—must validate all existing dependencies for compatibility. Redis client upgrade from 2.8.0 to 4.7.0 changes callback pattern to async/await (major refactor). This should be a dedicated task in Phase 1 or pre-phase dependency upgrade.
+**Multi-channel audio mixing behavior:** Research assumes Android automatically mixes multiple AudioTrack instances without glitches. This needs validation in Phase 4. If mixing fails:
+- **Fallback A:** Priority-based selective playback (only play one channel at a time) — simpler but loses multi-channel awareness
+- **Fallback B:** Implement custom mixer with Oboe library — adds complexity but enables true simultaneous playback
+- **Decision point:** Phase 4 acceptance criteria should include audio quality test with 3+ simultaneous streams
 
-**TURN server cost validation:** Research provides estimates (2.71TB per 1000-user session at 15% TURN usage), but actual costs depend on dispatch user behavior (10-50 channels monitored). Should instrument TURN usage percentage in Phase 2 testing to validate cost projections before production.
+**Bluetooth PTT button compatibility:** Research found evidence of HID protocol support but manufacturer-specific variations (Plantronics vs Jabra vs cheap headsets). Phase 6 needs physical device procurement for testing.
+- **Approach:** Build flexible button mapping system (detect any KeyCode), provide "Capture Button" UI for user configuration
+- **Document:** Compatibility matrix of tested headsets (Bluetooth HID buttons, Motorola/Zebra rugged phone buttons)
 
-**Safari iOS-specific quirks:** While Safari compatibility is flagged for Phase 1 testing, iOS Safari has additional constraints (memory limits, background tab suspension, permissions model). Needs specific mobile testing beyond desktop Safari—potentially add mobile testing task to Phase 1.
+**TURN server capacity:** Research assumes existing server has TURN configured, but capacity for 30%+ of Android clients on cellular is unknown.
+- **Validation:** Phase 7 should include TURN server capacity planning (concurrent relays, bandwidth budget)
+- **Monitoring:** Track ICE candidate types in production (relay % indicates cellular penetration)
 
-**Multi-server state consistency:** Redis pub/sub for state synchronization introduces eventual consistency challenges. Research mentions this but doesn't provide detailed conflict resolution strategies. Phase 2 should include specific research task for distributed state patterns (CRDTs, last-write-wins, etc.).
-
-**Recording storage costs:** Phase 5 recording implementation will generate significant storage: 1000 users × 5% active × 32kbps × 8 hours = ~55GB per event. Storage strategy (S3, retention policies, compression) needs cost modeling before Phase 5.
+**Cellular carrier NAT diversity:** AT&T/Verizon/T-Mobile have different NAT policies. Research found evidence of Dual-SIM STUN storms.
+- **Testing:** Phase 7 requires physical SIM cards from multiple carriers for real-world validation
+- **Configuration:** May need per-carrier ICE timeout tuning based on field data
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- [mediasoup official documentation](https://mediasoup.org/documentation/v3/) — Architecture patterns, API reference, production deployment guidance
-- [mediasoup npm package](https://www.npmjs.com/package/mediasoup) — Version compatibility, download statistics (19,744 weekly), changelog
-- [Opus Recommended Settings - XiphWiki](https://wiki.xiph.org/Opus_Recommended_Settings) — Codec configuration for VoIP/PTT use cases
-- [RFC 7874 - WebRTC Audio Codec Requirements](https://datatracker.ietf.org/doc/html/rfc7874) — Opus mandate for WebRTC
-- [RFC 8827 - WebRTC Security Architecture](https://datatracker.ietf.org/doc/html/rfc8827) — DTLS-SRTP encryption requirements
+- [libmediasoup-android GitHub](https://github.com/crow-misia/libmediasoup-android) — wrapper maintenance status, commit history, issue tracker
+- [mediasoup Official Documentation](https://mediasoup.org/documentation/v3/mediasoup-client/api/) — client API reference, RTP capabilities negotiation
+- [Android Developers: Foreground Services](https://developer.android.com/develop/background-work/services/foreground-services) — official API requirements per Android version
+- [Android Developers: Media3 MediaSessionService](https://developer.android.com/media/media3/session/background-playback) — foreground service audio patterns
+- [WebRTC Native Code Android](https://webrtc.github.io/webrtc-org/native-code/android/) — official WebRTC Android integration guide
+- [Jetpack Compose December 2025 release](https://android-developers.googleblog.com/2025/12/whats-new-in-jetpack-compose-december.html) — Compose 1.10 + Material 3 1.4 stability
+- [Android Gradle Plugin 9.0 release notes](https://developer.android.com/build/releases/agp-9-0-0-release-notes) — build system requirements
 
 ### Secondary (MEDIUM confidence)
-- [P2P, SFU, MCU, Hybrid: Which WebRTC Architecture Fits Your 2026 Roadmap?](https://www.forasoft.com/blog/article/webrtc-architecture-guide-for-business-2026) — Architecture comparison and scaling analysis (January 2026 publication)
-- [WebRTC Tech Stack Guide: Architecture for Scalable Real-Time Applications](https://webrtc.ventures/2026/01/webrtc-tech-stack-guide-architecture-for-scalable-real-time-applications/) — Scalability patterns and infrastructure recommendations
-- [WebRTC signaling with WebSocket and Node.js - LogRocket](https://blog.logrocket.com/webrtc-signaling-websocket-node-js/) — WebSocket integration patterns
-- [Motorola WAVE PTX product documentation](https://www.motorolasolutions.com/en_us/products/command-center-software/broadband-ptt-and-lmr-interoperability/wave.html) — Competitive feature analysis, enterprise PTT standards
-- [Zello Enterprise Server documentation](https://zello.com/enterprise/) — Competitive feature analysis, 7-day replay patterns
-- [MCPTT Standards: Mouth-to-Ear Latency](https://teraquant.com/measuring-mouth-to-ear-latency-as-required/) — 3GPP/ETSI latency requirements (200ms threshold)
+- [Zello PTT Android Options Guide](https://support.zello.com/hc/en-us/articles/230749107-Android-Options-Guide) — competitor feature reference, UX patterns
+- [WAVE PTX Mobile App documentation](https://www.airwavecommunication.com/wave-ptx-ptt/wave-ptx-mobile-app.htm) — dispatcher workflow patterns
+- [Signal Android Bluetooth issue #6184](https://github.com/signalapp/Signal-Android/issues/6184) — Bluetooth SCO race condition evidence
+- [flutter-webrtc audio routing issue #811](https://github.com/flutter-webrtc/flutter-webrtc/issues/811) — WebRTC audio routing challenges
+- [WebRTC Chromium bug: MediaStream dispose fails](https://bugs.chromium.org/p/webrtc/issues/detail?id=5128) — memory leak evidence
+- [Don't kill my app! (Xiaomi/Samsung/Huawei)](https://dontkillmyapp.com/) — OEM battery optimization documentation
+- [100ms.live: Local Audio Streaming in Android](https://www.100ms.live/blog/webrtc-audio-streaming-android) — multi-channel audio mixing approach
+- [Tait Radio Academy: How Scanning Works](https://www.taitradioacademy.com/topic/how-scanning-works-1/) — two-way radio scan mode reference
+- [mediasoup Discourse: Multiple consumers in single RecvTransport](https://mediasoup.discourse.group/t/using-multiple-consumers-in-a-single-recvtransport/375) — architecture pattern validation
 
-### Tertiary (LOW confidence - needs validation)
-- Various blog posts on WebRTC scaling and TURN costs — Cost estimates and scalability numbers vary widely; should validate in Phase 2 testing
-- Community forum discussions on memory leaks — Anecdotal reports; should validate with profiling in Phase 3
+### Tertiary (LOW confidence, needs validation)
+- Android AudioTrack mixing behavior with 5 simultaneous streams — no official documentation found, needs Phase 4 testing
+- Battery consumption with 5 concurrent WebSocket connections — no benchmarks found, needs profiling
+- Bluetooth PTT button KeyCodes on non-Zebra devices — vendor-specific, needs Phase 6 hardware testing
+- TURN server capacity for production load — depends on deployment, needs Phase 7 validation
 
 ---
-*Research completed: 2026-02-06*
+*Research completed: 2026-02-08*
 *Ready for roadmap: yes*

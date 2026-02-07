@@ -1,617 +1,644 @@
-# Technology Stack Research
+# Stack Research: Android PTT Client
 
-**Domain:** WebRTC-based Push-to-Talk Communications Platform
-**Researched:** 2026-02-06
-**Overall Confidence:** MEDIUM-HIGH
+**Project:** VoicePing Android Native Client
+**Researched:** 2026-02-08
+**Confidence:** MEDIUM (WebRTC libraries verified, mediasoup wrapper needs validation)
 
 ## Executive Summary
 
-For adding WebRTC PTT audio to your existing Node.js/WebSocket platform, the recommended stack centers around **mediasoup 3.x** as the WebRTC SFU (Selective Forwarding Unit), which integrates cleanly with your current architecture while providing production-grade performance for 1000+ concurrent users. The existing WebSocket infrastructure becomes the signaling layer, Redis continues handling distributed state, and Opus codec (already attempted in your broken implementation) remains the correct choice but delivered via proper WebRTC transport instead of raw packets.
+The Android native PTT client requires a hybrid stack combining JNI-wrapped C++ libraries for WebRTC/mediasoup with modern Kotlin/Jetpack Compose for UI and business logic. The key architectural challenge is integrating libmediasoupclient (C++) with Android's Java/Kotlin ecosystem while maintaining low-latency audio performance for enterprise PTT use cases.
 
-**Key Decision:** Use mediasoup v3 SFU architecture, NOT mesh topology or MCU. Server-side media routing is essential for PTT scalability.
+**Critical decision:** Use crow-misia/libmediasoup-android (0.21.0) as the mediasoup client wrapper. This is the most actively maintained, Maven-published wrapper with proper JNI bindings.
 
----
+**Integration point:** The Android client connects to the EXISTING mediasoup 3.19 server via the EXISTING WebSocket signaling protocol at `/ws`. No server changes needed.
 
 ## Recommended Stack
 
-### Core WebRTC Media Server
+### Core WebRTC & Media
 
-| Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| **mediasoup** | 3.19.16+ | WebRTC SFU (Selective Forwarding Unit) for server-side media routing | Industry standard for Node.js WebRTC with proven 1000+ user scalability. Native Node.js integration, low-latency architecture (120ms avg), and active maintenance. Handles media routing without re-encoding (unlike MCU). |
-| **mediasoup-client** | 3.16.0+ | Browser-side WebRTC client library | Official client library for mediasoup. Supports Chrome 111+, Firefox 120+, Safari 12+, meeting your browser-first requirement. Handles device detection and compatibility automatically. |
+| Technology | Version | Purpose | Rationale |
+|------------|---------|---------|-----------|
+| **libmediasoup-android** | 0.21.0 | mediasoup client wrapper | Most actively maintained JNI wrapper (May 2025 release), published to Maven Central, proper lifecycle management. Wraps libmediasoupclient C++ library. |
+| **io.getstream:stream-webrtc-android** | 1.3.9+ | WebRTC core library | Pre-compiled WebRTC library reflecting recent Google WebRTC commits. Google stopped publishing official Android WebRTC binaries in 2018. GetStream maintains up-to-date builds compatible with modern Android. |
 
-**Confidence:** HIGH - mediasoup is the de facto standard for Node.js WebRTC at scale, with 19,744 weekly npm downloads and widespread production use.
+**Why NOT Google's libwebrtc directly:**
+- Google discontinued pre-compiled Android/iOS distribution
+- Building from source requires Linux, 8GB+ RAM, 50GB+ storage
+- GetStream provides maintained, tested builds with Jetpack Compose integration
 
-### Audio Codec Stack
+**Why crow-misia over alternatives:**
+- haiyangwu/mediasoup-client-android: Last updated 2021, unmaintained
+- chenjim fork: Inconsistent updates
+- crow-misia: Active maintenance (610 commits), Maven Central publishing, GitHub Actions CI
 
-| Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| **Opus** | (built into WebRTC) | Primary audio codec for PTT | Mandatory WebRTC codec (RFC 7874). Variable bitrate 6-510 kbps, algorithmic delay 5-26.5ms configurable, adaptive quality for poor networks. Superior to G.711 for bandwidth efficiency while maintaining PTT-grade latency. |
+### WebSocket & Networking
 
-**Configuration for PTT:**
-- Frame size: 10-20ms (balance latency vs packet overhead)
-- Bitrate: 16-32 kbps for speech (PTT doesn't need music quality)
-- FEC (Forward Error Correction): Enable for lossy networks
-- DTX (Discontinuous Transmission): Enable to save bandwidth during silence
+| Technology | Version | Purpose | Rationale |
+|------------|---------|---------|-----------|
+| **OkHttp** | 4.12.0 | WebSocket + HTTP client | Industry standard. Fixes memory leaks from 4.11. Native WebSocket support with connection pooling. Powers Retrofit. |
+| **Retrofit** | 2.11.0 | REST API client | Type-safe HTTP client for login/auth endpoints. Built on OkHttp, automatic JSON parsing with Gson. |
+| **Gson** | 2.11.0 | JSON serialization | Matches server's JSON protocol. Simpler than Moshi for straightforward DTO mapping. |
 
-**Confidence:** HIGH - Opus is the industry standard for WebRTC audio, specifically designed for low-latency VoIP.
+**WebSocket pattern:**
+- OkHttp WebSocketListener for signaling protocol
+- Manual reconnection with exponential backoff (existing server has /ws endpoint)
+- Background thread for message handling (OkHttp callbacks run on worker threads)
 
-### Integration with Existing Stack
+### Android Framework
 
-| Technology | Current Version | Target Version | Purpose | Integration Strategy |
-|------------|-----------------|----------------|---------|----------------------|
-| **Node.js** | 8.16.0 (2018) | **18.x LTS or 20.x LTS** | Runtime environment | **UPGRADE REQUIRED** - Node 8 EOL'd in 2019. Mediasoup requires Node 16+. Recommend Node 20 LTS for production. |
-| **TypeScript** | 3.5.1 | **5.x** | Type safety | Upgrade alongside Node.js. Mediasoup has excellent TypeScript definitions. |
-| **WebSocket (ws)** | 5.2.0 | **8.x** | Signaling channel (reuse existing) | Keep existing WebSocket infrastructure for signaling. WebRTC doesn't mandate signaling protocol - your current ws layer handles SDP/ICE exchange. |
-| **Redis** | 2.8.0 / 4.7.0 (control-plane) | **4.7.0+** | Distributed state management | Continue using Redis for room/user state. Add mediasoup worker/router state for multi-server deployments. |
-| **Express** | 4.18.2 | **4.x** (keep current) | REST API for control plane | No change needed. Control plane remains on Express. |
+| Technology | Version | Purpose | Rationale |
+|------------|---------|---------|-----------|
+| **Jetpack Compose** | 1.10.0 (Dec 2025) | UI framework | Material 3 stable. Declarative UI, better than XML for dynamic channel lists. State hoisting for reactive PTT indicators. |
+| **Compose Material 3** | 1.4.0 | Material Design 3 | Stable as of Dec 2025. Modern components (SegmentedButton, NavigationBar, Surface containers). |
+| **Kotlin Coroutines** | 1.10.1+ | Async operations | Structured concurrency for WebSocket, WebRTC callbacks. Flow/StateFlow for reactive state. |
+| **Hilt** | 2.51.1+ | Dependency injection | Dagger-based DI. Standard for Android. ViewModels, repositories, singleton services (WebSocket, mediasoup Device). |
+| **Media3 MediaSessionService** | 1.5.0+ | Foreground service audio | Replaces deprecated MediaSession. Automatic notification handling, audio focus management, foreground service lifecycle. |
 
-**Confidence:** HIGH - This integration strategy preserves your working infrastructure while adding WebRTC capabilities.
+**Why Compose over XML:**
+- Dynamic channel list with Material 3 cards/chips
+- Reactive PTT states (pressed, transmitting, receiving) with less boilerplate
+- Modern team preference (server is TypeScript, Compose is declarative like React)
 
-### Supporting Libraries
+### Audio Management
 
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| **@types/mediasoup** | Latest | TypeScript definitions for mediasoup | Always (using TypeScript) |
-| **@types/mediasoup-client** | Latest | TypeScript definitions for client library | Always (web UI in TypeScript/React) |
-| **eventemitter3** | 5.x | Event handling (if not using Node.js EventEmitter) | Optional - mediasoup uses events heavily |
-| **uuid** | 9.x | Generate unique IDs for peers/rooms | Always (for tracking WebRTC participants) |
-| **debug** | Already installed | Logging for mediasoup (uses debug internally) | Already in your stack |
+| Technology | Version | Purpose | Rationale |
+|------------|---------|---------|-----------|
+| **AudioManager** | Android SDK | Audio routing, focus | SCO routing for Bluetooth headsets. AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK for PTT interrupts. |
+| **MediaSessionService** | Media3 1.5.0+ | Background playback | Foreground service type `mediaPlayback`. Auto-cleanup after 10min pause. Notification controls. |
 
-### Recording & Storage (Architecture Support)
+**Audio routing priorities:**
+1. Bluetooth SCO (if connected, startBluetoothSco() or setCommunicationDevice() for API 31+)
+2. Wired headset (automatic via AudioManager)
+3. Speaker (fallback)
 
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| **ffmpeg** | 6.x (binary) | Audio recording/transcoding | Phase 2+ when implementing recording. Mediasoup can pipe RTP to ffmpeg for recording. |
-| **fluent-ffmpeg** | 2.x | Node.js wrapper for ffmpeg | Phase 2+ for programmatic recording control |
-| **@aws-sdk/client-s3** or equivalent | 3.x | Store recorded audio files | Phase 2+ for cloud storage of recordings |
+**Audio focus strategy:**
+- Request AUDIOFOCUS_GAIN_TRANSIENT when transmitting (PTT press)
+- Request AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK when receiving (allow music to continue ducked)
+- Automatic ducking available on Android 8+ (API 26, matches min SDK)
 
-**Note:** Your requirement states "architecture supports future recording" - mediasoup's RTP stream access makes recording straightforward when needed. Don't implement in v1.
+### State Management & Storage
 
-**Confidence:** MEDIUM - Recording architecture is well-understood, but implementation details depend on future requirements.
+| Technology | Version | Purpose | Rationale |
+|------------|---------|---------|-----------|
+| **EncryptedSharedPreferences** | Security 1.1.0-alpha06+ | JWT storage | Secure token persistence. Uses Android Keystore, AES256-GCM encryption. Simpler than manual DataStore + crypto. |
+| **StateFlow / SharedFlow** | Coroutines 1.10.1+ | Reactive state | StateFlow for UI state (channel list, connection status). SharedFlow for events (PTT press, audio received). |
 
-### Development Tools
+**JWT handling:**
+- Store access token (1h TTL) in EncryptedSharedPreferences
+- Retrofit Authenticator for automatic refresh on 401
+- OkHttp Interceptor adds "Authorization: Bearer {token}" header
 
-| Tool | Purpose | Notes |
-|------|---------|-------|
-| **mediasoup-demo** | Reference implementation | Clone from GitHub to study production patterns. Shows signaling, router management, multi-worker setup. |
-| **Chrome DevTools** | WebRTC debugging | chrome://webrtc-internals for diagnosing connection issues |
-| **Wireshark** | Network packet analysis | Verify DTLS-SRTP encryption, diagnose packet loss |
-| **Docker** | Deployment (already in use) | Mediasoup runs in Docker but requires UDP port range configuration |
+### Hardware Integration
 
----
+| Technology | Version | Purpose | Rationale |
+|------------|---------|---------|-----------|
+| **KeyEvent API** | Android SDK | Volume/PTT button capture | onKeyDown/onKeyUp for KEYCODE_VOLUME_UP/DOWN. Bluetooth HID buttons appear as standard KeyEvents. |
+| **BluetoothHeadset** | Android SDK | Bluetooth SCO audio | HSP/HFP profile for headset microphone. SCO connection for 8/16kHz mono audio routing. |
 
-## Installation
-
-```bash
-# Upgrade Node.js first (outside npm)
-# Use nvm or download Node 20 LTS from nodejs.org
-
-# Core dependencies (in main voiceping-router package.json)
-npm install mediasoup@^3.19.16
-npm install uuid@^9.0.0
-
-# TypeScript definitions
-npm install -D @types/mediasoup
-
-# Client-side (in web-ui package.json)
-npm install mediasoup-client@^3.16.0
-npm install -D @types/mediasoup-client
-
-# Upgrade existing dependencies
-npm install ws@^8.17.0
-npm install redis@^4.7.0
-npm install typescript@^5.0.0
-
-# Update devDependencies
-npm install -D @types/node@^20.0.0
-npm install -D @types/ws@^8.5.0
+**Button capture pattern:**
+```kotlin
+override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+    return when (keyCode) {
+        KeyEvent.KEYCODE_VOLUME_DOWN -> {
+            // PTT pressed
+            viewModel.startPtt()
+            true // consume event
+        }
+        else -> super.onKeyDown(keyCode, event)
+    }
+}
 ```
 
----
+**Bluetooth PTT compatibility:**
+- Bluetooth HID buttons send KeyEvent (no special code needed)
+- Headset call button (KEYCODE_HEADSETHOOK) can trigger PTT in toggle mode
+- Third-party PTT buttons (Pryme, Flic, Seecode) work via HID or manufacturer SDKs
 
-## Architecture Decision: SFU vs MCU vs Mesh
+### Build System
 
-### Why SFU (Recommended)
+| Technology | Version | Purpose | Rationale |
+|------------|---------|---------|-----------|
+| **Gradle** | 9.0.0 | Build system | Gradle 9 released Jan 2026. Embeds Kotlin 2.2.x runtime. |
+| **Android Gradle Plugin** | 9.0.0 | Android build | AGP 9.0 includes built-in Kotlin support (KGP 2.2.10 bundled). |
+| **Kotlin** | 2.3.10 | Language | Current stable (2.3.20 planned Mar-Apr 2026). AGP 9.0 requires KGP 2.2.10 minimum. |
+| **Min SDK** | 26 (Android 8.0) | Minimum version | Matches project spec. Supports automatic audio ducking, Notification channels, EncryptedSharedPreferences. 89% device coverage. |
+| **Target SDK** | 35 (Android 15) | Target version | Google Play requirement (Feb 2026). Apps must target API 35 for new submissions. |
+| **Compile SDK** | 35 | Compile version | Match target SDK for latest APIs. |
 
-**For PTT with 1000+ users, SFU is the ONLY viable architecture.**
+## Integration Points with Existing Server
 
-| Criterion | SFU | MCU | Mesh |
-|-----------|-----|-----|------|
-| **Scalability** | ✅ 500-1000 per server, 10K+ in cluster | ❌ ~300 max per server | ❌ 2-4 users max |
-| **Latency** | ✅ ~120ms average | ❌ ~280ms (re-encoding overhead) | ✅ ~50ms (but unusable at scale) |
-| **Server CPU** | ✅ Low (forwarding only, no transcoding) | ❌ Very high (re-encodes all streams) | ✅ Minimal (no server routing) |
-| **Client Bandwidth** | ✅ One upload stream | ✅ One upload stream | ❌ N-1 upload streams (kills mobile) |
-| **Selective Listening** | ✅ Server drops streams for muted channels | ❌ Server must mix all audio | ❌ Client receives everything |
-| **PTT Suitability** | ✅ Perfect - one speaker, many listeners | ❌ Overkill for PTT | ❌ Impossible at scale |
+### 1. WebSocket Signaling Protocol
 
-**SFU Architecture for PTT:**
-- When user presses PTT, their audio goes to mediasoup router
-- Router forwards to all participants in that channel
-- Dispatch users subscribed to multiple channels receive multiple streams
-- Muted channels = server stops forwarding those streams (bandwidth savings)
-- No audio mixing, no transcoding = low latency + low CPU
+**Server endpoint:** `wss://{domain}/ws`
 
-**Confidence:** HIGH - This is industry consensus for 100+ user real-time audio.
+**Client implementation:**
+```kotlin
+val client = OkHttpClient.Builder()
+    .readTimeout(0, TimeUnit.MILLISECONDS) // WebSocket needs infinite read timeout
+    .build()
 
----
+val request = Request.Builder()
+    .url("wss://domain/ws")
+    .addHeader("Authorization", "Bearer $jwtToken")
+    .build()
+
+val listener = object : WebSocketListener() {
+    override fun onMessage(webSocket: WebSocket, text: String) {
+        // Parse JSON message, route to handler
+        val message = gson.fromJson(text, SignalingMessage::class.java)
+        handleMessage(message)
+    }
+}
+
+client.newWebSocket(request, listener)
+```
+
+**Message format:** Same JSON protocol as web client
+- `{ type: "join", channel: "channel-uuid" }`
+- `{ type: "ptt-request", channel: "channel-uuid" }`
+- Server responds with RTP capabilities, transport parameters, consumer data
+
+### 2. mediasoup Device Initialization
+
+**Pattern:**
+1. WebSocket connects, client sends "join" for channel
+2. Server responds with `routerRtpCapabilities`
+3. Client creates mediasoup Device, loads capabilities
+4. Client creates send/recv transports
+5. Client produces audio track, consumes remote tracks
+
+**libmediasoup-android API:**
+```kotlin
+// Device creation
+val device = Device()
+device.load(routerRtpCapabilities) // from server
+
+// Transport creation
+val sendTransport = device.createSendTransport(
+    listener = transportListener,
+    id = transportId, // from server
+    iceParameters = iceParams,
+    iceCandidates = iceCandidates,
+    dtlsParameters = dtlsParams
+)
+
+// Audio production
+val audioTrack = createAudioTrack() // WebRTC API
+val producer = sendTransport.produce(
+    listener = producerListener,
+    track = audioTrack,
+    encodings = null,
+    codecOptions = null
+)
+
+// Audio consumption
+val consumer = recvTransport.consume(
+    listener = consumerListener,
+    id = consumerId, // from server
+    producerId = producerId,
+    kind = "audio",
+    rtpParameters = rtpParams
+)
+```
+
+### 3. JWT Authentication
+
+**Flow:**
+1. Android client POSTs to `/api/auth/login` with credentials (Retrofit)
+2. Server returns `{ token: "jwt", expiresIn: 3600 }`
+3. Client stores token in EncryptedSharedPreferences
+4. WebSocket connection adds `Authorization: Bearer {token}` header
+5. Heartbeat every 30s refreshes permissions (handled by server)
+
+**Retrofit interceptor:**
+```kotlin
+class AuthInterceptor(private val tokenProvider: () -> String?) : Interceptor {
+    override fun intercept(chain: Interceptor.Chain): Response {
+        val token = tokenProvider() ?: return chain.proceed(chain.request())
+        val request = chain.request().newBuilder()
+            .addHeader("Authorization", "Bearer $token")
+            .build()
+        return chain.proceed(request)
+    }
+}
+```
+
+### 4. Audio Codec Configuration
+
+**Server configuration (from MEMORY.md):**
+- Opus codec, 48kHz, CBR
+- DTX disabled, FEC enabled
+- mediasoup 3.19
+
+**Android WebRTC audio:**
+- GetStream webrtc-android supports Opus natively
+- Configure AudioTrack with 48kHz, mono
+- Disable software echo cancellation (causes latency)
+- Enable hardware AEC if available
+
+```kotlin
+val audioConstraints = MediaConstraints().apply {
+    mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation", "false"))
+    mandatory.add(MediaConstraints.KeyValuePair("googAutoGainControl", "false"))
+    mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression", "false"))
+    mandatory.add(MediaConstraints.KeyValuePair("googHighpassFilter", "false"))
+}
+```
 
 ## Alternatives Considered
 
-| Category | Recommended | Alternative | Why Not Alternative |
-|----------|-------------|-------------|---------------------|
-| **Media Server** | mediasoup | **Janus Gateway** | Janus is C-based with plugin architecture. Requires more expertise, harder to integrate with Node.js. Good choice IF you need SIP/RTSP/other protocols, but PTT doesn't. |
-| **Media Server** | mediasoup | **Kurento** | Inactive since Twilio acquisition. Avoid. |
-| **Media Server** | mediasoup | **Jitsi** | Full conferencing app, not a library. Overkill for PTT. Use if you want turnkey solution, not custom integration. |
-| **Node.js WebRTC Bindings** | mediasoup (pure Node API) | **node-webrtc** | Inactive/deprecated. Last update 2023. Alternative @roamhq/wrtc exists but immature. |
-| **Node.js WebRTC Library** | mediasoup | **werift** | Pure TypeScript WebRTC implementation (0.22.2). Immature (29 dependents vs mediasoup's thousands). Consider for experimental projects, not production. |
-| **Client Library** | mediasoup-client | **simple-peer / PeerJS** | Designed for P2P mesh, not SFU architecture. Good for 2-4 users, unusable for PTT at scale. |
-| **Audio Codec** | Opus | **G.711** | Fixed 64kbps (vs Opus 6-510kbps adaptive). No FEC, no DTX. Use G.711 only for legacy telecom interop. |
-| **Topology** | SFU | **Mesh (P2P)** | Bandwidth grows O(n²). With 10 users, speaker uploads 1.5Mbps × 9 = 13.5Mbps. Mobile networks can't handle this. Only viable for 2-4 users. |
-| **Topology** | SFU | **MCU** | Server re-encodes/mixes all streams. High CPU cost, adds 100-150ms latency. Use only if clients are extremely low-power devices OR you need server-side layout composition. PTT doesn't need mixing. |
+| Category | Recommended | Alternative | Why Not |
+|----------|-------------|-------------|---------|
+| **mediasoup wrapper** | crow-misia/libmediasoup-android 0.21.0 | haiyangwu/mediasoup-client-android | Unmaintained since 2021. No Maven Central publishing. Harder to integrate. |
+| **WebRTC library** | GetStream webrtc-android 1.3.9 | Build Google libwebrtc from source | Requires Linux build machine, 50GB+ storage, complex build process. GetStream provides maintained binaries. |
+| **UI framework** | Jetpack Compose 1.10 | XML layouts | Compose is modern standard. Better for reactive PTT states. Material 3 components. Team familiarity (React-like). |
+| **WebSocket client** | OkHttp 4.12.0 | Ktor WebSocket | Ktor is overkill for client-only usage. OkHttp is lighter, better Android integration, powers Retrofit anyway. |
+| **DI framework** | Hilt 2.51.1 | Koin | Hilt is Google-recommended, compile-time safety. Koin is runtime, easier but less safe. Hilt standard for new projects. |
+| **Foreground service** | Media3 MediaSessionService | Manual Service + MediaSession | Media3 automates notification, audio focus, lifecycle. Deprecated MediaSession APIs harder to manage. |
+| **JSON parser** | Gson 2.11.0 | Moshi or kotlinx.serialization | Moshi adds reflection overhead. kotlinx.serialization needs compiler plugin. Gson is proven, matches server's approach. |
+| **Secure storage** | EncryptedSharedPreferences | DataStore + manual AES | EncryptedSharedPreferences handles Keystore, encryption automatically. DataStore + crypto is more code for same result. |
 
-### When to Choose Alternatives
+## Dependencies (build.gradle.kts)
 
-**Choose Janus if:**
-- You need SIP integration (connecting to legacy phone systems)
-- You want maximum flexibility with plugins
-- You have C/C++ expertise on team
+### Module-level build.gradle.kts
 
-**Choose MCU if:**
-- Target devices are extremely underpowered (can't decode multiple streams)
-- You need server-side audio mixing (not typical for PTT)
-- Latency is less important than client CPU savings
+```kotlin
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+    id("com.google.dagger.hilt.android")
+    id("kotlin-kapt")
+}
 
-**Choose mesh if:**
-- Literally only 2-4 concurrent users ever
-- Zero server cost is critical
-- You can tolerate complete failure as group grows
+android {
+    namespace = "com.voiceping.android"
+    compileSdk = 35
 
-**Confidence:** HIGH - These alternatives are well-documented, the decision criteria are clear.
+    defaultConfig {
+        applicationId = "com.voiceping.android"
+        minSdk = 26
+        targetSdk = 35
+        versionCode = 1
+        versionName = "1.0.0"
 
----
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        vectorDrawables {
+            useSupportLibrary = true
+        }
+    }
 
-## What NOT to Use
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+    }
 
-| Avoid | Why | Use Instead |
-|-------|-----|-------------|
-| **Raw Opus packets over WebSocket** | Your current broken implementation. Browser-native Opus encoding produces packets incompatible with direct WebSocket transport. Requires proper RTP/SRTP framing, which WebRTC provides. | WebRTC with mediasoup (Opus delivered via SRTP) |
-| **node-webrtc** | Inactive project. Last real update 2020. Node version compatibility issues. | mediasoup (doesn't need native WebRTC bindings - it's a standalone SFU) |
-| **Kurento** | Abandoned after Twilio acquisition. No meaningful updates since 2020. | mediasoup or Janus |
-| **Node.js 8.x** | End-of-life since 2019. Security vulnerabilities, incompatible with modern libraries. | Node.js 20 LTS (current as of 2026) |
-| **TypeScript 3.x** | Missing modern features, poor error messages. | TypeScript 5.x |
-| **Mesh topology for >4 users** | Exponential bandwidth growth. 10 users = each speaker uploads to 9 peers. Mobile networks fail. | SFU (mediasoup) |
-| **Custom WebRTC signaling (rolling your own SDP parser)** | Complex, error-prone. WebRTC SDP is 200+ line text format with strict semantics. | Use existing WebSocket for transport, but let mediasoup-client handle SDP generation/parsing |
-| **Unencrypted RTP** | WebRTC mandates DTLS-SRTP. Browsers refuse unencrypted connections. | DTLS-SRTP (automatic in WebRTC/mediasoup) |
-| **DTLS 1.0/1.1** | Deprecated. Modern browsers phasing out. | DTLS 1.2+ (mediasoup default) |
-| **Synchronous Redis operations** | Blocks event loop in Node.js. Your control-plane uses redis@4.7.0 (async/await), but router uses redis@2.8.0 (callback hell). | Upgrade router to redis@4.x with async/await |
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
 
-**Critical Avoidance: Don't try to fix raw Opus WebSocket approach.** Your instinct to move to WebRTC is correct. The broken Opus implementation isn't salvageable - browsers encode Opus for RTP transport, not raw frames.
+    kotlinOptions {
+        jvmTarget = "17"
+    }
 
-**Confidence:** HIGH - These are known pitfalls with clear documentation.
+    buildFeatures {
+        compose = true
+    }
 
----
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.15" // Matches Kotlin 2.3.10
+    }
 
-## Encryption & Security
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
+}
 
-| Component | Technology | Details | Confidence |
-|-----------|-----------|---------|------------|
-| **Media Encryption** | DTLS-SRTP (automatic) | All WebRTC media is encrypted by default. DTLS 1.2+ for key exchange, SRTP for media packets. Browsers enforce this - no way to disable. | HIGH |
-| **Signaling Encryption** | WSS (WebSocket Secure) | Your existing JWT authentication continues. Upgrade ws connections to wss:// in production. | HIGH |
-| **Future E2E Encryption** | Insertable Streams API + AES-GCM | For post-v1 E2E encryption where server can't decrypt. Use Insertable Streams (browser API) to encrypt frames before WebRTC, decrypt after. Not in v1 scope. | MEDIUM |
-| **AES-256 Requirement** | DTLS-SRTP cipher suite | SRTP uses AES-128 or AES-256 depending on negotiated cipher. Mediasoup supports both. For compliance, configure to require AES-256 suites. | MEDIUM |
+dependencies {
+    // Core Android
+    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
 
-**Note:** Your requirement states "architecture supports AES-256 encryption." DTLS-SRTP provides this, but it's transport encryption (server can decrypt for recording). True E2E encryption requires Insertable Streams API - defer to v2.
+    // Compose
+    val composeBom = platform("androidx.compose:compose-bom:2026.01.00")
+    implementation(composeBom)
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-graphics")
+    implementation("androidx.compose.ui:ui-tooling-preview")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.activity:activity-compose:1.9.3")
+    implementation("androidx.navigation:navigation-compose:2.8.5")
+    debugImplementation("androidx.compose.ui:ui-tooling")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 
-**WebRTC Security Updates (2025-2026):**
-- Migration to DTLS 1.3 (RFC 9147-bis) in progress
-- Post-quantum DTLS hybrids in research phase
-- Browsers tightening cipher suites (deprecating weak ciphers)
+    // Hilt Dependency Injection
+    implementation("com.google.dagger:hilt-android:2.51.1")
+    kapt("com.google.dagger:hilt-compiler:2.51.1")
+    implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
 
-**Sources:**
-- [WebRTC Security Guide: Encryption, SRTP & DTLS Explained](https://antmedia.io/webrtc-security/)
-- [WebRTC Encryption and Security - 2026](https://www.mirrorfly.com/blog/webrtc-encryption-and-security/)
+    // Kotlin Coroutines
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1")
 
-**Confidence:** HIGH for DTLS-SRTP, MEDIUM for future E2E requirements.
+    // Networking
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+    implementation("com.squareup.retrofit2:retrofit:2.11.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.11.0")
+    implementation("com.google.code.gson:gson:2.11.0")
 
----
+    // WebRTC
+    implementation("io.getstream:stream-webrtc-android:1.3.9")
 
-## Integration Strategy with Existing Infrastructure
+    // mediasoup client
+    implementation("io.github.crow-misia.libmediasoup-android:libmediasoup-android:0.21.0")
 
-### WebSocket Signaling (Keep & Reuse)
+    // Media3 for foreground service
+    implementation("androidx.media3:media3-session:1.5.0")
+    implementation("androidx.media3:media3-common:1.5.0")
 
-Your existing WebSocket infrastructure (`ws@5.2.0` → upgrade to `ws@8.x`) becomes the WebRTC signaling channel. WebRTC doesn't mandate a signaling protocol - you're free to use your current architecture.
+    // Security
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
-**How it works:**
-1. Client authenticates via existing JWT WebSocket connection
-2. Client requests to join channel (existing flow)
-3. Server creates mediasoup router/producer/consumer
-4. Server sends WebRTC offer (SDP) to client via WebSocket
-5. Client responds with answer via WebSocket
-6. ICE candidates exchanged via WebSocket
-7. **WebRTC media flows directly via UDP (separate from WebSocket)**
-
-**Key insight:** WebSocket is only for signaling (SDP/ICE exchange). Audio flows via WebRTC (UDP + DTLS-SRTP), not through WebSocket.
-
-**Confidence:** HIGH - This is the standard pattern. Your existing WebSocket handles control plane, WebRTC handles media plane.
-
-### Redis State Management (Extend)
-
-Your existing Redis setup continues for user/channel/event state. Add WebRTC-specific state:
-
-**Current Redis usage (keep):**
-- User sessions
-- Channel membership
-- Busy/idle state
-- Event/team/channel hierarchy
-
-**Add for WebRTC:**
-- Mediasoup worker assignments (which server handles which room)
-- Router IDs for each channel
-- Producer/consumer mappings
-- Active speaker tracking per channel
-
-**Multi-server deployment:**
-- Each server runs mediasoup workers (one per CPU core)
-- Redis tracks which server owns which channel
-- New users joining channel get routed to correct server
-- For 1000+ users, distribute channels across servers
-
-**Pattern:**
-```
-Redis key structure:
-  channel:{channelId}:server → server IP
-  channel:{channelId}:router → mediasoup router ID
-  channel:{channelId}:producers → set of producer IDs
-  user:{userId}:consumers → set of consumer IDs (for dispatch multi-channel)
-```
-
-**Confidence:** MEDIUM - Pattern is clear, but implementation details depend on your specific scaling strategy.
-
-### Docker Deployment (Adjust)
-
-Mediasoup requires UDP port range for WebRTC. Your existing Docker setup needs port mapping.
-
-**Docker configuration:**
-```dockerfile
-# In Dockerfile / docker-compose.yml
-EXPOSE 3000          # Existing HTTPS/WSS
-EXPOSE 40000-40100/udp   # Mediasoup RTP ports (100 concurrent connections)
+    // Testing
+    testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    androidTestImplementation(composeBom)
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+}
 ```
 
-**Port calculation:** ~1 port per WebRTC transport. For 1000 users, allocate 1000-2000 UDP ports.
+### Project-level build.gradle.kts
 
-**Network mode:** Bridge mode works, but host mode simpler for port mapping. Configure announced IP for container networking.
-
-**Confidence:** MEDIUM - Mediasoup Docker deployment is well-documented, but requires network planning.
-
----
-
-## Version Compatibility Matrix
-
-| Package | Version | Compatible With | Notes |
-|---------|---------|-----------------|-------|
-| Node.js | 20.x LTS | mediasoup 3.x, TypeScript 5.x | Required minimum: Node 16+ |
-| mediasoup | 3.19.16 | Node.js 16-20 | C++ worker prebuilt since 3.12.0 |
-| mediasoup-client | 3.16.0 | Chrome 111+, Firefox 120+, Safari 12+ | Auto-detects browser capabilities |
-| TypeScript | 5.x | All modern packages | Upgrade from 3.5.1 required |
-| ws | 8.x | Node.js 16+ | Upgrade from 5.2.0 for security |
-| redis | 4.7.0 | Node.js 16+ | Control-plane already on 4.x, router needs upgrade from 2.8.0 |
-
-**Breaking changes when upgrading:**
-- Redis 2.x → 4.x: Callbacks → Promises/async-await (significant refactor)
-- ws 5.x → 8.x: Minor API changes, mostly compatible
-- TypeScript 3.x → 5.x: Stricter type checking (will surface existing type errors)
-
-**Migration strategy:** Upgrade Node.js first, then dependencies incrementally. Test after each upgrade.
-
-**Confidence:** HIGH - Version compatibility is well-documented by package maintainers.
-
----
-
-## Scalability Architecture
-
-### Single Server Capacity
-
-Based on mediasoup benchmarks and production deployments:
-
-| Metric | Single Server (8 cores, 16GB RAM) |
-|--------|-----------------------------------|
-| **Concurrent users** | 500-1000 (assuming not all talking simultaneously) |
-| **Concurrent speakers** | 50-100 (active audio streams) |
-| **Bandwidth** | ~1 Gbps for 500 concurrent 1080p video streams (audio-only requires ~10-20% of this) |
-| **Memory** | ~2GB for 1000 audio streams (per-peer buffers) |
-| **Latency** | 120ms average with 1000 HD streams |
-
-**PTT-specific:** In PTT, typically <5% of users speak simultaneously. With 1000 users, expect 10-50 concurrent speakers. Single mediasoup server handles this easily.
-
-**Sources:**
-- [WebRTC SFU architecture 1000 concurrent users scaling](https://antmedia.io/webrtc-network-topology/)
-- [P2P, SFU, MCU, Hybrid: Which WebRTC Architecture Fits Your 2026 Roadmap?](https://www.forasoft.com/blog/article/webrtc-architecture-guide-for-business-2026)
-
-### Multi-Server Architecture (1000+ Users)
-
-**Horizontal scaling pattern:**
-
-```
-                    Load Balancer (WebSocket/HTTPS)
-                           |
-        +------------------+------------------+
-        |                  |                  |
-    Server 1           Server 2           Server 3
-    (channels 1-10)   (channels 11-20)   (channels 21-30)
-        |                  |                  |
-        +------------------+------------------+
-                           |
-                       Redis Cluster
-                   (state coordination)
+```kotlin
+plugins {
+    id("com.android.application") version "9.0.0" apply false
+    id("org.jetbrains.kotlin.android") version "2.3.10" apply false
+    id("com.google.dagger.hilt.android") version "2.51.1" apply false
+}
 ```
 
-**Strategy:**
-1. Partition channels across servers (not users - channels are the routing unit)
-2. Redis tracks channel→server mapping
-3. Users connect to server owning their channel
-4. Dispatch users in multiple channels maintain connections to multiple servers
-5. Each server runs mediasoup workers (one per CPU core)
+## Risks & Mitigations
 
-**Cost scaling:** For 1000 users in 50 channels, 2-3 mediasoup servers sufficient.
+### Risk 1: libmediasoupclient Android Compatibility
 
-**Confidence:** MEDIUM-HIGH - Architecture is proven, but your specific deployment needs validation.
+**Risk:** crow-misia wrapper may lag behind mediasoup server version (server is 3.19, wrapper is 0.21.0)
 
----
+**Mitigation:**
+- libmediasoupclient uses semantic versioning; 0.x indicates API instability but doesn't map to server version
+- mediasoup protocol is version-negotiated via RTP capabilities exchange
+- Test early: create minimal app that connects to existing server, loads capabilities, creates transport
+- Fallback: If incompatible, evaluate haiyangwu fork or custom JNI wrapper
 
-## Recording Architecture (Future Support)
+**Confidence:** MEDIUM - Need to verify in development, but protocol negotiation should handle version differences
 
-Your requirement: "Architecture supports future recording (not implemented in v1)."
+### Risk 2: WebRTC Audio Latency
 
-Mediasoup provides RTP stream access for recording:
+**Risk:** Android audio stack adds latency (20-200ms). Bluetooth SCO adds 100-200ms. PTT requires <500ms end-to-end.
 
-**Recording pattern:**
-1. When recording starts, create plain RTP transport in mediasoup
-2. Pipe audio to ffmpeg via RTP
-3. ffmpeg transcodes to WAV/MP3/OGG for storage
-4. Store files in S3/local storage
-5. Track recording metadata in PostgreSQL
+**Mitigation:**
+- Use OpenSL ES (low-level audio API) if available
+- Disable software audio processing (AEC, AGC, NS)
+- Test with real Bluetooth headsets early
+- Configure Opus for low latency (frame size 10ms, complexity 4)
+- Monitor with in-app latency indicators
 
-**Code sketch (not for v1):**
-```typescript
-// Create plain RTP transport for recording
-const rtpTransport = await router.createPlainTransport({
-  listenIp: '127.0.0.1',
-  rtcpMux: false,
-  comedia: true,
-});
+**Confidence:** MEDIUM - Requires hardware testing, may need audio tuning phase
 
-// Pipe producer to recording transport
-await rtpTransport.consume({
-  producerId: producer.id,
-  rtpCapabilities: router.rtpCapabilities,
-});
+### Risk 3: Foreground Service Battery Drain
 
-// ffmpeg receives RTP on rtpTransport.tuple.localPort
-// ffmpeg -protocol_whitelist file,udp,rtp -i recording.sdp -c copy output.wav
-```
+**Risk:** Continuous WebSocket + WebRTC connection drains battery. 8-hour shift = critical.
 
-**Complexity:** Medium. Well-documented in mediasoup examples.
+**Mitigation:**
+- Use Media3's automatic foreground service transition (stops after 10min idle)
+- Close recv transports for silent channels (only keep send transport ready)
+- Implement "parking" mode: disconnect mediasoup, keep WebSocket for notifications
+- Wake lock only during active PTT transmission
+- Test battery drain: target <10% per hour in monitoring mode
 
-**Confidence:** MEDIUM - Pattern is clear, but implementation details need phase-specific research.
+**Confidence:** MEDIUM - Requires real-world testing with multi-hour sessions
 
----
+### Risk 4: Bluetooth HID Button Diversity
 
-## Opus Configuration for PTT
+**Risk:** Different Bluetooth PTT buttons send different KeyEvents. Some use proprietary SDKs.
 
-Opus is already in your broken implementation - you had the right codec, wrong transport.
+**Mitigation:**
+- Support common KeyEvents: VOLUME_DOWN, VOLUME_UP, HEADSETHOOK, MEDIA_NEXT, MEDIA_PREVIOUS
+- Add settings screen: "Capture any button" mode to detect and map custom KeyEvents
+- Document compatible hardware (Pryme PTT-Z, Flic, Seecode SHP, TWAYRDIO)
+- Fallback: On-screen PTT button always available
 
-**Recommended Opus settings for PTT:**
+**Confidence:** HIGH - Flexibility in mapping handles most cases
 
-| Parameter | Value | Rationale |
-|-----------|-------|-----------|
-| **Bitrate** | 16-24 kbps | Speech quality sufficient for PTT, saves bandwidth |
-| **Complexity** | 8-10 | Higher = better quality at same bitrate (CPU cost minimal on modern devices) |
-| **Frame size** | 20ms | Standard for VoIP (balance between latency and packet overhead) |
-| **FEC** | Enabled | Forward Error Correction recovers from ~5% packet loss without retransmission |
-| **DTX** | Enabled | Discontinuous Transmission - silence not transmitted (saves bandwidth on idle channels) |
-| **Sample rate** | 48 kHz | Opus native rate (internally resamples if needed) |
-| **Channels** | 1 (mono) | PTT doesn't need stereo |
-| **Application** | `voip` | Opus has three modes: voip, audio (music), restricted_lowdelay. Use voip. |
+### Risk 5: Android Fragmentation
 
-**Expected latency budget:**
-- Opus encoding: 20ms (frame size)
-- Network transmission: 50-100ms (depends on geography)
-- Jitter buffer: 20-40ms (mediasoup default)
-- Decoding: 5ms
-- **Total: 95-165ms** (well within 100-300ms target)
+**Risk:** Different OEMs modify AudioManager, Bluetooth stack. Samsung, Xiaomi, Huawei have custom behaviors.
 
-**Browser implementation:** Browsers handle Opus encoding/decoding automatically via WebRTC. You configure via SDP/mediasoup router parameters, not manual codec work.
+**Mitigation:**
+- Min SDK 26 reduces fragmentation (89% devices, avoids Android 6-7 Bluetooth issues)
+- Test on 3+ OEM devices (Samsung, Google Pixel, OnePlus/Oppo)
+- Use compat libraries (Media3, AndroidX)
+- Add diagnostic logs: audio routing, Bluetooth state, device info
+- Community feedback: Beta program with field workers on diverse devices
 
-**Sources:**
-- [Opus Recommended Settings - XiphWiki](https://wiki.xiph.org/Opus_Recommended_Settings)
-- [Best Audio Codec for Online Video Streaming in 2026](https://antmedia.io/best-audio-codec/)
+**Confidence:** MEDIUM - Known Android challenge, requires broad testing
 
-**Confidence:** HIGH - Opus configuration for PTT is well-established.
+### Risk 6: WebSocket Reconnection in Poor Network
 
----
+**Risk:** Field workers may have spotty LTE/5G. WebSocket drops, mediasoup state lost.
 
-## Migration Path from Current Stack
+**Mitigation:**
+- Exponential backoff reconnection (1s, 2s, 4s, 8s, 16s, cap at 30s)
+- Persist channel list locally (Room database or DataStore)
+- Auto-rejoin last channels on reconnect
+- Show connection status indicator (connected/reconnecting/offline)
+- Graceful degradation: queue PTT presses, send when reconnected (if <5s old)
 
-Your current broken implementation uses raw Opus over WebSocket. Here's the migration strategy:
+**Confidence:** HIGH - Pattern is well-known, OkHttp handles connection pooling
 
-### Phase 1: Parallel Implementation
-1. Keep existing WebSocket infrastructure (signaling only)
-2. Add mediasoup alongside current code
-3. Implement WebRTC offer/answer via WebSocket messages
-4. Test with small user group
+### Risk 7: Kotlin/AGP Version Churn
 
-### Phase 2: Cutover
-1. Deploy mediasoup-client to web UI
-2. Switch audio path from WebSocket binary frames to WebRTC
-3. Deprecate old Opus packet handlers
-4. Remove broken Opus code
+**Risk:** AGP 9.0 just released (Jan 2026), may have bugs. Kotlin 2.3.10 stable but 2.4.0 coming June 2026.
 
-### What to preserve:
-- ✅ WebSocket connections (signaling)
-- ✅ JWT authentication
-- ✅ User/channel/event management
-- ✅ Busy state logic
-- ✅ Redis state storage
-- ✅ PostgreSQL database
-- ✅ REST API (control plane)
+**Mitigation:**
+- Pin versions explicitly (don't use `+` or `latest`)
+- AGP 9.0 is stable release, not alpha/beta
+- Kotlin 2.3.10 is stable, tested with Compose 1.10
+- Subscribe to Android Developers Blog for critical updates
+- If AGP 9.0 issues: downgrade to AGP 8.7.x (supports Kotlin 2.3.x)
 
-### What to replace:
-- ❌ Raw Opus packet encoding/decoding
-- ❌ Binary WebSocket frames for audio
-- ❌ Manual jitter buffer (mediasoup handles this)
-- ❌ Packet loss recovery hacks
+**Confidence:** HIGH - AGP 9.0 went through beta cycle, production-ready
 
-### What to add:
-- ➕ mediasoup server (routers, transports, producers, consumers)
-- ➕ mediasoup-client in React UI
-- ➕ WebRTC signaling protocol (SDP/ICE via existing WebSocket)
-- ➕ UDP port configuration in Docker
+## Installation Steps
 
-**Confidence:** HIGH - Migration path preserves working components, replaces only broken audio subsystem.
-
----
-
-## Development Workflow
-
-### Local Development Setup
+### 1. Android Studio Setup
 
 ```bash
-# 1. Install dependencies
-npm install
+# Install Android Studio Ladybug (2025.1) or later
+# Includes Gradle 9.0, Kotlin 2.3.10, AGP 9.0 support
 
-# 2. Start Redis (Docker or local)
-docker run -p 6379:6379 redis:7-alpine
-
-# 3. Start PostgreSQL (existing setup)
-# (already configured)
-
-# 4. Set environment variables
-export MEDIASOUP_ANNOUNCED_IP=127.0.0.1  # Local IP for development
-export MEDIASOUP_MIN_PORT=40000
-export MEDIASOUP_MAX_PORT=40100
-
-# 5. Run development server
-npm run dev
+# SDK Manager: Install
+# - Android SDK Platform 35 (Android 15)
+# - Android SDK Build-Tools 35.0.0
+# - Android Emulator (for testing)
 ```
 
-### Testing WebRTC Locally
+### 2. Create Project
 
-**Challenge:** WebRTC requires HTTPS (browsers block getUserMedia on http://)
+```bash
+# Android Studio: New Project → Empty Activity (Compose)
+# Language: Kotlin
+# Minimum SDK: API 26 (Android 8.0)
+# Build configuration language: Kotlin DSL
 
-**Solutions:**
-1. **localhost exception:** Browsers allow WebRTC on `localhost` without HTTPS
-2. **Self-signed cert:** Generate cert for local IP, accept browser warning
-3. **ngrok/tunneling:** Expose local server with HTTPS (easiest for mobile testing)
+# Update build.gradle.kts files with dependencies above
+```
 
-**Recommended:** Use `localhost` for desktop testing, ngrok for mobile testing.
+### 3. Add JitPack (if needed for unofficial libraries)
 
-### Browser DevTools
+**settings.gradle.kts:**
+```kotlin
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url = uri("https://jitpack.io") } // If using JitPack libraries
+    }
+}
+```
 
-- **chrome://webrtc-internals** - Shows active connections, ICE candidates, packet stats, codec info
-- **Firefox:** about:webrtc - Similar to Chrome
-- **Safari:** Develop → WebRTC → Show Devices - Less detailed than Chrome
+### 4. Configure ProGuard (for mediasoup native library)
 
-**Confidence:** HIGH - Development workflow is standard for WebRTC projects.
+**proguard-rules.pro:**
+```proguard
+# Keep mediasoup JNI classes
+-keep class org.mediasoup.** { *; }
+-keepclassmembers class org.mediasoup.** { *; }
 
----
+# Keep WebRTC classes
+-keep class org.webrtc.** { *; }
+-keepclassmembers class org.webrtc.** { *; }
 
-## Production Deployment Checklist
+# Keep Gson models
+-keepattributes Signature
+-keepattributes *Annotation*
+-keep class com.voiceping.android.data.model.** { *; }
+```
 
-Before deploying mediasoup to production:
+### 5. Permissions (AndroidManifest.xml)
 
-- [ ] **Node.js 18+ LTS** installed (verify `node --version`)
-- [ ] **Build tools** installed (gcc, g++, make, python3 for mediasoup compilation)
-- [ ] **UDP ports** allocated and mapped in Docker/firewall (40000-41000 recommended for 1000 users)
-- [ ] **Announced IP** configured (public IP for cloud, internal IP for on-premise)
-- [ ] **DTLS certificates** (mediasoup auto-generates, but verify they're not expired)
-- [ ] **WSS (WebSocket Secure)** enabled for signaling
-- [ ] **Redis cluster** (if multi-server deployment) for state synchronization
-- [ ] **Monitoring** for CPU/bandwidth/active connections (mediasoup exposes metrics)
-- [ ] **Fallback** plan if WebRTC fails (ICE failure, firewall blocking UDP)
-- [ ] **TURN server** (for clients behind restrictive NAT/firewalls) - mediasoup doesn't include TURN, deploy separately
+```xml
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Network -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-**TURN server recommendation:** coturn (open source) or Twilio TURN as service
+    <!-- Audio -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
-**Why TURN matters:** ~5-10% of users are behind NAT that blocks direct UDP. TURN relays traffic through server. Without TURN, these users can't connect.
+    <!-- Bluetooth -->
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" android:maxSdkVersion="30" />
 
-**Confidence:** MEDIUM - Checklist is based on mediasoup documentation, but production specifics vary.
+    <!-- Foreground service -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" android:minSdkVersion="33" />
 
----
-
-## Cost Estimation (Infrastructure)
-
-Approximate costs for 1000 concurrent users:
-
-| Component | Specification | Monthly Cost (AWS) |
-|-----------|---------------|-------------------|
-| **Mediasoup servers** | 2x c5.2xlarge (8 vCPU, 16GB) | ~$500 |
-| **Redis** | ElastiCache r5.large | ~$150 |
-| **PostgreSQL** | RDS db.t3.medium | ~$100 |
-| **Load balancer** | ALB | ~$25 |
-| **Bandwidth** | ~1TB/month (audio-only PTT) | ~$90 |
-| **TURN server** | 1x c5.large (for 10% of users) | ~$70 |
-| **Total** | | **~$935/month** |
-
-**Notes:**
-- Assumes 1000 users, 5% speaking simultaneously
-- Audio-only (much cheaper than video)
-- Single-region deployment
-- On-premise deployment eliminates cloud costs but requires hardware
-
-**Confidence:** LOW-MEDIUM - Rough estimate, actual costs depend on usage patterns.
-
----
+    <!-- Wake lock (for PTT) -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+</manifest>
+```
 
 ## Sources
 
-### High Confidence (Official Documentation & Context7)
+### WebRTC & mediasoup
+- [mediasoup Android/iOS native client discussion](https://mediasoup.discourse.group/t/android-ios-native-client-support/4298)
+- [crow-misia/libmediasoup-android GitHub](https://github.com/crow-misia/libmediasoup-android)
+- [libmediasoup-android Maven Central](https://central.sonatype.com/artifact/io.github.crow-misia.libmediasoup-android/libmediasoup-android)
+- [GetStream webrtc-android GitHub](https://github.com/GetStream/webrtc-android)
+- [WebRTC Android official docs](https://webrtc.github.io/webrtc-org/native-code/android/)
 
-- [mediasoup official documentation](https://mediasoup.org/documentation/v3/)
-- [mediasoup npm package](https://www.npmjs.com/package/mediasoup) - Version 3.19.16, last published 1 day ago
-- [mediasoup GitHub repository](https://github.com/versatica/mediasoup) - 6,906 stars, active development
-- [Opus Recommended Settings - XiphWiki](https://wiki.xiph.org/Opus_Recommended_Settings)
-- [RFC 7874 - WebRTC Audio Codec Requirements](https://datatracker.ietf.org/doc/html/rfc7874)
-- [RFC 8827 - WebRTC Security Architecture](https://datatracker.ietf.org/doc/html/rfc8827)
+### Android Networking
+- [OkHttp comprehensive guide](https://www.oreateai.com/blog/comprehensive-guide-to-the-application-of-okhttp-in-android-development/cdfeaf9886a2f917f525b71c991a2554)
+- [Android WebSockets with Kotlin](https://bugfender.com/blog/android-websockets/)
+- [Retrofit and OkHttp networking](https://androshelf.com/blogs/retrofit-okhttp-android-networking.html)
+- [Retrofit official docs](https://square.github.io/retrofit/)
 
-### Medium Confidence (Verified Web Search - 2025/2026 Sources)
+### Android Framework
+- [Jetpack Compose December '25 release](https://android-developers.googleblog.com/2025/12/whats-new-in-jetpack-compose-december.html)
+- [Material 3 for Compose](https://developer.android.com/develop/ui/compose/designsystems/material3)
+- [StateFlow and SharedFlow](https://developer.android.com/kotlin/flow/stateflow-and-sharedflow)
+- [Hilt dependency injection](https://developer.android.com/training/dependency-injection/hilt-android)
+- [WorkManager overview](https://developer.android.com/develop/background-work/background-tasks/persistent)
 
-- [Janus vs. MediaSoup Comparison](https://dzone.com/articles/janus-vs-mediasoup-the-ultimate-guide-to-choosing)
-- [P2P, SFU, MCU, Hybrid: Which WebRTC Architecture Fits Your 2026 Roadmap?](https://www.forasoft.com/blog/article/webrtc-architecture-guide-for-business-2026)
-- [WebRTC Tech Stack Guide 2026](https://webrtc.ventures/2026/01/webrtc-tech-stack-guide-architecture-for-scalable-real-time-applications/)
-- [Best Audio Codec for Online Video Streaming in 2026](https://antmedia.io/best-audio-codec/)
-- [WebRTC Security Guide: Encryption, SRTP & DTLS Explained](https://antmedia.io/webrtc-security/)
-- [WebRTC Encryption and Security - 2026](https://www.mirrorfly.com/blog/webrtc-encryption-and-security/)
-- [Mesh vs SFU vs MCU: Choosing the Right WebRTC Network Topology](https://antmedia.io/webrtc-network-topology/)
-- [What is WebRTC P2P mesh and why it can't scale?](https://bloggeek.me/webrtc-p2p-mesh/)
-- [WebRTC signaling with WebSocket and Node.js](https://blog.logrocket.com/webrtc-signaling-websocket-node-js/)
-- [Comparative Study of WebRTC Open Source SFUs for Video Conferencing](https://mediasoup.org/resources/CoSMo_ComparativeStudyOfWebrtcOpenSourceSfusForVideoConferencing.pdf)
+### Audio & Bluetooth
+- [Background playback with MediaSessionService](https://developer.android.com/media/media3/session/background-playback)
+- [Android audio focus management](https://developer.android.com/media/optimize/audio-focus)
+- [Bluetooth SCO audio routing](http://gopinaths.gitlab.io/post/bluetooth_sco_android/)
+- [AudioManager.startBluetoothSco()](https://learn.microsoft.com/en-us/dotnet/api/android.media.audiomanager.startbluetoothsco)
 
-### Lower Confidence (Background/Context)
+### Hardware Integration
+- [Volume button KeyEvent handling](https://www.geeksforgeeks.org/android/how-to-listen-for-volume-button-and-back-key-events-programmatically-in-android/)
+- [Bluetooth PTT button pairing (Zello guide)](https://support.zello.com/hc/en-us/articles/230745407-Pairing-a-Bluetooth-PTT-Button-Android)
+- [KeyEvent API reference](https://developer.android.com/reference/android/view/KeyEvent)
 
-- Various WebRTC tutorial sites and blog posts (cross-referenced for accuracy)
-- npm package download statistics (as of search date)
-- Community forum discussions (mediasoup Discourse)
+### Build System & Security
+- [AGP 9.0.0 release notes](https://developer.android.com/build/releases/agp-9-0-0-release-notes)
+- [Kotlin 2.3.x updates](https://blog.jetbrains.com/kotlin/2026/01/update-your-projects-for-agp9/)
+- [Android target SDK requirements](https://developer.android.com/google/play/requirements/target-sdk)
+- [JWT authentication in Android](https://medium.com/@sanjaykushwaha_58217/jwt-authentication-in-android-a-step-by-step-guide-d0dd768cb21a)
+- [Secure token storage with EncryptedSharedPreferences](https://medium.com/@mohammad.hasan.mahdavi81/securely-storing-jwt-tokens-in-android-with-datastore-and-manual-encryption-741b104a93d3)
 
----
+## Confidence Assessment
 
-## Research Gaps & Future Validation Needed
+| Area | Confidence | Notes |
+|------|------------|-------|
+| **WebRTC/mediasoup** | MEDIUM | crow-misia wrapper actively maintained, but need to verify server compatibility. WebSearch-verified with Maven Central. |
+| **Networking** | HIGH | OkHttp + Retrofit is industry standard. Version 4.12.0 confirmed via WebSearch. |
+| **Android Framework** | HIGH | Compose 1.10, Material 3 1.4 stable per official Android blog (Dec 2025). AGP 9.0 released Jan 2026. |
+| **Audio Management** | MEDIUM | AudioManager/MediaSessionService APIs verified. Bluetooth SCO and latency need hardware testing. |
+| **Hardware Integration** | MEDIUM | KeyEvent API is standard. Bluetooth PTT button diversity requires testing with real devices. |
+| **Build System** | HIGH | AGP 9.0 + Kotlin 2.3.10 compatibility confirmed via official JetBrains blog. |
 
-**Items requiring phase-specific research when implemented:**
+**Overall confidence: MEDIUM** - Core stack is proven (OkHttp, Compose, Hilt), but mediasoup Android wrapper and audio latency require validation in development. Recommend early prototype to verify mediasoup integration.
 
-1. **Recording implementation details** - Deferred to Phase 2+, architecture validated but not implemented
-2. **Multi-region deployment** - If events are globally distributed, need to research geographic load balancing
-3. **TURN server configuration** - Coturn setup and capacity planning for NAT traversal
-4. **End-to-end encryption with Insertable Streams** - If E2E becomes requirement, needs deep research
-5. **Mobile native apps** - Out of scope for v1, but mediasoup supports native clients via C++ library
-6. **Stress testing at 1000+ users** - Architecture supports it, but needs validation with actual load tests
+## Next Steps for Roadmap
 
-**Confidence in recommendations:** MEDIUM-HIGH overall. Core stack (mediasoup + Opus + SFU) is HIGH confidence. Integration details and scaling specifics are MEDIUM confidence pending implementation.
+**Phase prioritization based on stack:**
 
----
+1. **Foundation Phase** - Verify mediasoup integration
+   - Minimal app: Connect to server, load RTP capabilities, create transport
+   - Proves crow-misia wrapper compatibility
+   - De-risks critical technical assumption
 
-**Research completed:** 2026-02-06
-**Researcher:** GSD Project Research Agent
-**Ready for roadmap creation:** Yes - stack recommendations are actionable for requirements definition and phase planning.
+2. **Networking Phase** - WebSocket + JWT
+   - Standard pattern (OkHttp + Retrofit)
+   - Low risk, well-documented
+
+3. **Audio Phase** - MediaSessionService + AudioManager
+   - Bluetooth SCO routing needs hardware testing
+   - Foreground service is straightforward
+
+4. **UI Phase** - Compose + Material 3
+   - Stable APIs, low risk
+   - Can parallelize with audio work
+
+5. **Hardware Phase** - PTT buttons
+   - Requires physical devices (Bluetooth PTT buttons)
+   - Iterate based on device testing
+
+**Research flags:**
+- Phase 1 (Foundation): May need deeper research if mediasoup wrapper incompatible (custom JNI or fork)
+- Phase 3 (Audio): May need research on low-latency audio (OpenSL ES, Oboe library)
+- Phase 5 (Hardware): May need manufacturer SDKs for proprietary PTT buttons

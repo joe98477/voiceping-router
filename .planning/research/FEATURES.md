@@ -1,346 +1,401 @@
-# Feature Research: Enterprise PTT/PoC Platform
+# Features Research: Android PTT Client
 
-**Domain:** Enterprise Push-to-Talk over Cellular (PoC) for Event Coordination
-**Researched:** 2026-02-06
-**Confidence:** MEDIUM
+**Domain:** Android Push-to-Talk (PTT) application for field workers
+**Researched:** 2026-02-08
+**Confidence:** MEDIUM (verified with multiple PTT app sources, official Android documentation, and competitor analysis)
 
-## Feature Landscape
+## Table Stakes
 
-### Table Stakes (Users Expect These)
+Features users expect from any professional Android PTT app. Missing these = product feels incomplete.
 
-Features users assume exist. Missing these = product feels incomplete or broken.
+| Feature | Why Expected | Complexity | Dependencies | Notes |
+|---------|--------------|------------|--------------|-------|
+| **Hardware PTT button mapping** | Industry standard - volume keys, dedicated PTT buttons (Sonim/Kyocera rugged phones), Bluetooth headset buttons | Medium | Android accessibility services for volume key capture; Bluetooth HID protocol for headset PTT | Volume keys only work when app in foreground unless using accessibility service. Bluetooth PTT requires per-device mapping. |
+| **Lock screen PTT operation** | Field workers need hands-free, screen-off operation (device in pocket) | High | Foreground service with WAKE_LOCK, lock screen notification with custom actions, audio focus management | Must handle Android 12+ locked action constraints. Critical for "pocket radio" use case. |
+| **Foreground service for background audio** | PTT audio must play with screen off, app backgrounded | Medium | MediaSession service with `mediaPlayback` foreground service type (Android 14+) | Required for background audio playback. Must declare in manifest and request FOREGROUND_SERVICE permission. |
+| **Channel list with activity indicators** | Users need to see which channels are active, who's talking | Low | Server already provides channel state via WebSocket | Visual indicators: talking (animated), active (recent transmission), idle. Color-coded or icon-based. |
+| **Audio routing control** | Earpiece (privacy) vs speaker (loud environment) | Low | Android AudioManager routing APIs | Default to speaker for PTT (walkie-talkie convention), earpiece for privacy mode. Auto-switch to Bluetooth when connected. |
+| **Push notifications for incoming transmissions** | Alert users when channel becomes active, especially when app not in foreground | Medium | FCM integration + server-side notification triggers | Must work with Do Not Disturb - some PTT apps override DND for broadcast talkgroups if admin-configured. |
+| **Auto-reconnect with session recovery** | Cellular network drops are common in field environments | Low | Server already supports reconnection via JWT session refresh | ReconnectingSignalingClient exists. Android-specific: handle network changes (WiFi <-> cellular), background restrictions. |
+| **Per-channel volume control** | Users need different volume for different channels (noisy vs quiet teams) | Low | Android AudioManager per-stream volume | Store per-channel volume preferences locally. Apply when channel becomes active. |
+| **Busy state indicators** | Visual feedback when channel is busy (someone else talking) | Low | Server already provides PTT busy state | Show "busy" overlay on PTT button, disable transmit, show who's talking. |
+| **Login with event picker** | Multi-tenant system - users select event before accessing channels | Low | Server already supports JWT auth with event scope | Material 3 design for login flow. Remember last event. |
+| **Team-grouped channel list** | Channels organized by team for easier navigation | Low | Server provides team metadata via channel list | Collapsible team sections. Material 3 expansion panels. |
+| **Transmission history (recent)** | Users need to see recent transmissions per channel | Low | Local storage of recent messages | Show last 10-20 transmissions per channel. Timestamp, user name, duration. Not persistent across app restarts (table stakes). |
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| **Core PTT Audio** |
-| Press-to-talk audio transmission | Core function of any PTT system | MEDIUM | Current system is broken; rebuilding is milestone focus |
-| Low latency audio (100-300ms mouth-to-ear) | Industry standard for MCPTT; >200ms degrades quality rapidly | HIGH | 3GPP/ETSI define 200ms as critical threshold for voice quality |
-| Floor control (one speaker per channel) | Prevents audio collisions; standard in all PTT systems | MEDIUM | Already implemented as "busy state management" |
-| Audio quality indicators | Users need feedback on connection quality | LOW | Session quality and poor connection indicators |
-| PTT start/end beep (Roger beep) | Users expect audio feedback that transmission started/ended | LOW | Standard UX in PTT systems |
-| **Channel Management** |
-| Group/channel creation and assignment | Basic organizational structure for teams | LOW | Already exists (Event → Team → Channel hierarchy) |
-| Multi-channel monitoring (dispatch) | Dispatch users monitor 10-50 channels simultaneously | MEDIUM | Existing feature; must work with rebuilt audio |
-| Selective mute/unmute channels | Dispatch need to filter noise from inactive channels | LOW | Existing feature; must work with rebuilt audio |
-| Channel scanning with priority | Auto-scan for active calls, prioritize important channels | MEDIUM | Common dispatch feature for situational awareness |
-| **User Management** |
-| Role-based access control (Admin/Dispatch/General) | Security and authorization for enterprise use | LOW | Already implemented and working |
-| Presence status (Available/Busy/Offline) | Users need to know if contacts are reachable | LOW | Standard in enterprise PTT; prevents failed calls |
-| User/contact directory with online/offline filter | Essential for finding and reaching team members | LOW | Standard organizational feature |
-| **Audio Quality** |
-| Noise suppression/cancellation | Expected in industrial/loud environments (construction, events) | MEDIUM | AI-backed noise suppression is table stakes in 2026 |
-| Echo cancellation | Prevents feedback loops in PTT systems | MEDIUM | Software echo cancellation required for browser-based PTT |
-| Opus codec support (16-32kbps) | Industry standard for PTT; efficient bandwidth usage | MEDIUM | Current broken system uses Opus; need proper implementation |
-| Voice Activity Detection (VAD) | Reduces bandwidth and improves efficiency | MEDIUM | Standard codec feature; 4-6kbps average with VAD |
-| Jitter buffer management | Critical for audio quality in variable network conditions | HIGH | Very important for quality per PTT best practices |
-| **Security** |
-| Authentication (JWT or equivalent) | Enterprise security baseline | LOW | Already implemented with JWT |
-| Encrypted transmission (TLS/WSS) | Expected for enterprise systems handling business comms | LOW | Industry standard; likely already in place |
-| Authorization (channel access control) | Users must be in group to send/receive | LOW | Already implemented |
+## Differentiators
 
-### Differentiators (Competitive Advantage)
+Features that set VoicePing apart from competitors. Not expected, but highly valued.
 
-Features that set the product apart. Not required, but valuable for enterprise events.
+| Feature | Value Proposition | Complexity | Dependencies | Notes |
+|---------|-------------------|------------|--------------|-------|
+| **Scan mode with auto-switch** | Monitor up to 5 channels simultaneously, auto-switch to active channel, drop back to primary when transmission ends | High | Server supports multi-channel monitoring. Client needs channel priority logic, audio stream switching | Like two-way radio scan mode. Priority channel = primary. Auto-switch on activity. Visual indicator of which channel is "hot". This is the killer feature for dispatch/field coordination. |
+| **Scan mode visual bottom bar** | Bottom bar shows all monitored channels with real-time activity indicators, tap to switch manually | Medium | Scan mode feature above | Persistent UI element showing 1-5 monitored channels. Color-coded activity (idle/talking/recent). One-tap manual override. Material 3 chip-style design. |
+| **Bluetooth headset PTT with dual-button support** | Map primary/secondary PTT buttons to different channels or functions | High | Bluetooth HID protocol, per-device button mapping | Some Bluetooth headsets have 2 PTT buttons (e.g., E2 headset). Primary = talk on active channel, Secondary = switch to priority channel. Competitive advantage over Zello. |
+| **Instant channel monitoring (no manual join)** | Add channel to monitoring with one tap - no explicit join flow | Medium | Server already supports join flow; client needs streamlined UX | Unlike Zello which requires explicit channel join, VoicePing can add to scan list immediately. Reduces friction for dispatch users. |
+| **Network quality indicator** | Real-time display of connection quality, latency, jitter | Low | WebRTC stats API for RTT, packet loss, jitter | Show in status bar or per-channel. Warn when quality degraded (>300ms latency, >5% packet loss). Helps field workers troubleshoot. |
+| **Offline mode with cached channel list** | View channel list, team structure when offline; notify when online | Low | Local storage of channel metadata | Doesn't allow PTT when offline, but users can see structure. Auto-reconnect when network returns. |
+| **Haptic feedback for PTT events** | Vibrate on PTT press, release, transmission start, busy state | Low | Android Vibrator API | Short pulse on press (confirm), different pattern on busy (warn), pulse on transmission end. Improves tactile UX for lock-screen use. |
+| **Emergency broadcast override** | Dispatch can force-transmit to all monitored channels simultaneously | Medium | Server already supports emergency broadcast via dispatchHandlers.ts | Client shows distinct visual + audio alert for emergency transmission. Separate from normal PTT. Admin-triggered only. |
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| **Emergency & Priority** |
-| Emergency alert button | One-button SOS with GPS location, highest priority preemption | MEDIUM | Life-threatening situations at large events require immediate response |
-| Priority calling (dispatcher override) | Dispatcher can preempt any active call for urgent comms | MEDIUM | Critical for incident response during events |
-| Emergency call location display | Shows GPS, signal strength, battery level of emergency caller | MEDIUM | Enables rapid response; standard in Motorola WAVE PTX |
-| **Recording & Compliance** |
-| Call recording with retention policies | Legal compliance, incident review, training | HIGH | Architecture should support; defer implementation to v2 |
-| Audit logs (who talked when, on which channel) | Compliance and incident investigation | MEDIUM | Rich analytics for workforce allocation and response times |
-| Playback/replay of recent messages (7-day history) | Late joiners catch up; missed message review | MEDIUM | Zello provides 7-day replay; valuable for shift changes |
-| Message transcription (voice-to-text) | Skim messages without listening; accessibility | HIGH | AI-powered feature gaining traction in 2026 |
-| **Location & Tracking** |
-| GPS location tracking (real-time) | Coordinate distributed teams across large venues | MEDIUM | Standard in enterprise PTT; critical for events |
-| Location mapping (display on map) | Visual situational awareness for dispatch | MEDIUM | Embedded in dispatch consoles; pairs with GPS tracking |
-| Geofencing with alerts | Notify when users enter/exit defined areas | MEDIUM | Worker safety and access control for restricted zones |
-| Location-based dynamic groups | Auto-assign users to channels based on GPS location | HIGH | Advanced feature for large venues (stadium zones) |
-| **Multimedia Communication** |
-| Text messaging (individual and group) | Async communication when voice is inappropriate | MEDIUM | Standard in modern PTT; familiar message thread UX |
-| Photo/image sharing | Visual documentation (incident photos, security concerns) | MEDIUM | Common in enterprise PTT for situational awareness |
-| Video clip sharing | Richer context than photos; incident documentation | HIGH | Bandwidth-intensive; consider carefully |
-| File/document sharing | Share maps, runbooks, schedules | MEDIUM | Operational efficiency for event coordination |
-| **Advanced Dispatch** |
-| Multi-device support per user | Dispatch on desktop + mobile backup | LOW | Already implemented; maintain feature parity |
-| Broadcast/all-call (one-to-many, one-way) | Mass announcements to 500-3000 users; preempts all calls | HIGH | Critical for venue-wide alerts (evacuation, security) |
-| Patching (bridge channels together) | Connect multiple channels for cross-team coordination | HIGH | Advanced dispatch feature; complex audio routing |
-| Remote monitoring (ambient listening) | Listen to user's surroundings without PTT activation | MEDIUM | Security/safety feature; privacy concerns require careful UX |
-| **Analytics & Reporting** |
-| Usage analytics (calls, response times, user activity) | Optimize staffing, identify bottlenecks | MEDIUM | Zello provides rich analytics; valuable for post-event review |
-| Channel activity dashboard | Real-time view of active channels and traffic | LOW | Dispatch situational awareness |
-| Historical reporting (call logs, duration, participants) | Post-event analysis and compliance | MEDIUM | Pairs with recording for complete audit trail |
-| **Integration & Interoperability** |
-| API for third-party integration | Connect to existing security/event management systems | MEDIUM | Enterprise requirement for workflow integration |
-| LMR radio interoperability | Bridge to traditional two-way radios | HIGH | Mixed teams (some with radios, some with phones) |
-| Single Sign-On (SSO) integration | Enterprise auth (SAML, OAuth) | MEDIUM | Large organizations require SSO for user management |
+## Anti-Features
 
-### Anti-Features (Commonly Requested, Often Problematic)
+Features to explicitly NOT build. Common mistakes or feature creep in PTT apps.
 
-Features that seem good but create problems for this use case.
+| Anti-Feature | Why Avoid | What to Do Instead |
+|--------------|-----------|-------------------|
+| **Persistent transmission history** | Storage bloat, privacy concerns, not core PTT use case | Keep only recent (last 10-20) transmissions in memory. Clear on app restart. PTT is ephemeral, not archival. |
+| **In-app messaging/chat** | Feature creep - VoicePing is voice-first | If needed, link to external chat (Teams, Slack). Don't reinvent messaging. Focus on voice. |
+| **Video streaming** | Bandwidth intensive, battery drain, not PTT use case | Audio-only. If visual needed, suggest separate video call app. |
+| **GPS tracking / location sharing** | Privacy nightmare, battery drain, regulatory complexity | If dispatch needs location, integrate with external MDM or GPS tracker. Don't build into PTT app. |
+| **Complex admin controls in mobile app** | Mobile is for field workers, not admins | Admin functions stay in web dashboard. Mobile app is view-only for settings. |
+| **Offline message queuing** | PTT is real-time; queued messages break mental model | Show "offline" state clearly. Don't queue - it creates confusion about whether message was heard. |
+| **Custom notification sounds per channel** | Cacophony in multi-channel monitoring | Single, clear PTT notification sound. Visual indicators differentiate channels. |
+| **Recording/playback of transmissions** | Legal liability, storage complexity, privacy concerns | Ephemeral only. If recording needed, server-side with compliance framework. |
 
-| Feature | Why Requested | Why Problematic | Alternative |
-|---------|---------------|-----------------|-------------|
-| **End-to-end encryption** | "Maximum security" sounds good | Breaks recording/compliance (cannot decrypt on server); complex key management for 1000+ users; not needed for server-in-trusted-environment deployment | Server-side encryption at rest + TLS in transit; server can decrypt for recording/compliance |
-| **Native mobile apps (v1)** | "Apps are more professional than web" | Delays time-to-market; WebRTC works in mobile browsers; requires separate Android/iOS development; app store approval delays | Browser-first strategy; native apps in v2 after validation |
-| **Video calls (full conferencing)** | "Zoom for events" feature creep | PTT is voice-first; video consumes massive bandwidth (10-50x audio); different UX paradigm (always-on vs push-to-talk); scope creep | Focus on PTT audio; offer video clip sharing instead of live video |
-| **Real-time everything (presence, typing indicators, etc.)** | "Make it feel modern" | Adds WebSocket message overhead; battery drain on mobile; complex state synchronization; diminishing returns for PTT use case | Presence status on connection/disconnection events; avoid typing indicators and "user is listening" real-time updates |
-| **Custom codec implementation** | "Optimize for our specific use case" | Opus is industry-proven for PTT; custom codecs require extensive testing; browser compatibility issues; maintenance burden | Use standard Opus codec (16-32kbps) with VAD and proper jitter buffer |
-| **Offline mode with sync** | "Work without internet" | PTT requires real-time connectivity by definition; complex sync logic for missed messages; conflicts with live communication model | Assume internet connectivity; provide clear "no connection" indicators |
-| **Unlimited message history** | "Never lose anything" | Storage costs scale with users; GDPR/compliance concerns (data retention limits); performance degradation; users don't need years of PTT audio | 7-day replay window (Zello standard); configurable retention policies |
-| **Per-user customizable UI** | "Let users personalize" | Increases support burden (every user has different UI); QA complexity; users in high-stress events need consistent UX | Consistent UI across all users; role-based layouts (Dispatch vs General) only |
+## UX Patterns
 
-## Feature Dependencies
+Standard Android PTT interaction patterns from competitor analysis (Zello, WAVE PTX, Voxer).
 
-```
-[Audio Transmission (PTT)]
-    ├──requires──> [Floor Control (Busy State)]
-    ├──requires──> [Opus Codec Implementation]
-    ├──requires──> [Jitter Buffer Management]
-    └──requires──> [WebSocket or WebRTC Infrastructure]
+### PTT Button Interaction Model
 
-[Multi-Channel Monitoring (Dispatch)]
-    ├──requires──> [Audio Transmission (PTT)]
-    ├──requires──> [Selective Mute/Unmute]
-    └──enhances──> [Channel Scanning with Priority]
+**Standard Mode (screen on, app in foreground):**
+- Large central PTT button (Material 3 FAB style, 56dp minimum)
+- Press and hold to transmit (visual feedback: button grows, color shifts, waveform animation)
+- Release to end transmission (button returns to rest state)
+- Busy state: button disabled, overlay shows "Busy - [User Name] speaking"
+- Transmitting state: button shows waveform or pulsing animation, timer shows duration
 
-[Emergency Alert]
-    ├──requires──> [Priority Calling (Override)]
-    ├──requires──> [GPS Location Tracking]
-    └──enhances──> [Emergency Location Display]
+**Lock Screen Mode:**
+- Notification with custom PTT action (requires Android unlock for security on Android 12+)
+- Alternative: accessibility overlay with PTT button (works without unlock, but requires special permission)
+- Hardware button mapping (volume down = PTT) - most common pattern for lock screen use
 
-[Call Recording]
-    ├──requires──> [Audio Transmission (PTT)]
-    ├──conflicts──> [End-to-End Encryption]
-    └──enhances──> [Playback/Replay Features]
+**Hardware Button Patterns:**
+- Volume Down = PTT (most common default)
+- Volume Up = secondary function (switch to priority channel, toggle scan mode)
+- Camera button = alternative PTT (some apps support)
+- Dedicated PTT button (rugged phones like Sonim XP8, Kyocera DuraForce) = instant PTT without app launch
 
-[Broadcast/All-Call]
-    ├──requires──> [Priority Calling (Override)]
-    └──conflicts──> [Floor Control] (overrides normal floor control)
+### Channel List Patterns
 
-[Geofencing]
-    ├──requires──> [GPS Location Tracking]
-    └──enhances──> [Location-Based Dynamic Groups]
+**Zello Pattern:**
+- Tab-based navigation: Contacts, Channels, Recents
+- Channels tab shows joined channels with status indicators (online/offline)
+- FAB (+) button for adding channels/contacts
+- Swipe actions for channel options
 
-[Message Transcription]
-    ├──requires──> [Call Recording]
-    └──enhances──> [Playback/Replay Features]
+**WAVE PTX Pattern:**
+- Two modes: PTT Radio (radio emulation - minimal UI) and Standard Mode (full features)
+- Talkgroup list with scan list indicators
+- Drawer navigation for settings, favorites, map
 
-[LMR Interoperability]
-    ├──requires──> [Audio Codec Transcoding]
-    └──conflicts──> [End-to-End Encryption]
-```
+**VoicePing Recommendation:**
+- Single screen: Team-grouped channel list (Material 3 expansion panels)
+- Each channel shows: name, current speaker (if active), activity indicator, monitoring status (scan mode)
+- Bottom bar: Scan mode controls + active channel indicator
+- Top bar: Event name, network quality, settings
+- No tabs - simpler for field workers
 
-### Dependency Notes
+### Scan Mode Visual Patterns
 
-- **Audio Transmission requires Floor Control:** Cannot have multiple users transmitting simultaneously on same channel; busy state management prevents audio collisions
-- **Multi-Channel Monitoring requires Selective Mute:** Dispatch monitoring 10-50 channels would be chaos without ability to mute inactive channels
-- **Emergency Alert enhances Priority Calling:** Emergency button triggers highest-priority call that preempts all other traffic
-- **Call Recording conflicts with E2E Encryption:** Server must decrypt audio to record; E2E encryption prevents server-side recording
-- **Broadcast/All-Call overrides Floor Control:** One-way announcements to 500-3000 users bypass normal "one speaker at a time" rule
-- **Geofencing enhances Location-Based Groups:** Can auto-assign users to channels when they enter geographic zones (e.g., stadium sections)
-- **Message Transcription requires Recording:** Must record audio to transcribe; adds AI processing step
+**Traditional Two-Way Radio Pattern:**
+- Primary channel (priority 1) = default transmit channel
+- Scan list (2-5 additional channels) = listen-only unless manually switched
+- Auto-switch: when scan channel becomes active, radio switches audio to that channel
+- Drop-back: when transmission ends, radio returns to primary channel after 5-second delay
+- Manual override: press PTT on non-primary channel to transmit there, or press channel selector to lock to that channel
 
-## MVP Definition
+**VoicePing Implementation:**
+- Bottom bar shows 1-5 monitored channels as chips/cards
+- Each chip shows: channel name, activity indicator (idle/talking/recent), speaker name (if talking)
+- Active channel (currently playing audio) highlighted with distinct color/border
+- Primary channel marked with star/pin icon
+- Tap chip to manually switch to that channel
+- Auto-switch behavior:
+  - When any monitored channel becomes active → switch audio to that channel (visual highlight)
+  - When transmission ends → 5-second delay → return to primary channel (unless user manually locked)
+  - If multiple channels active simultaneously → priority order (primary > manually selected > first active)
+- Visual feedback: animated pulse on active channel, waveform on speaking channel
 
-### Launch With (v1 - Audio Subsystem Rebuild)
+### Audio Routing Patterns
 
-Minimum viable product for functional enterprise PTT. Focus: Make audio work reliably.
+**Default Behavior:**
+- PTT incoming audio → speaker (walkie-talkie convention: loud for field use)
+- Phone calls → earpiece (standard Android behavior)
+- Priority: Bluetooth headset > wired headset > speaker/earpiece
 
-- [ ] **Press-to-talk audio transmission** — Core functionality currently broken; top priority
-- [ ] **Low latency audio (100-300ms target)** — Quality threshold for usable PTT
-- [ ] **Opus codec (16-32kbps) with proper encoding/decoding** — Fix broken implementation
-- [ ] **Jitter buffer management** — Critical for quality in variable network conditions
-- [ ] **Floor control (busy state management)** — Already working; maintain with new audio
-- [ ] **Noise suppression and echo cancellation** — Table stakes for industrial environments
-- [ ] **Multi-channel monitoring with selective mute** — Already working; maintain with new audio
-- [ ] **Role-based access (Admin/Dispatch/General)** — Already working; maintain
-- [ ] **Channel/group management (Event→Team→Channel)** — Already working; maintain
-- [ ] **Presence status (Available/Busy/Offline)** — Prevent failed calls; low complexity
-- [ ] **WebSocket or WebRTC infrastructure decision** — Architectural foundation for audio
-- [ ] **Architecture supports future recording** — Design for recording even if not implemented yet
-- [ ] **Architecture supports future encryption** — AES-256 capability without implementation
-- [ ] **Web UI dispatch console** — Already working; maintain with rebuilt audio
+**User Controls:**
+- Toggle: earpiece mode (privacy) vs speaker mode (loud)
+- Setting persists per session, not per channel (KISS principle)
+- Auto-switch to Bluetooth when connected (with visual indicator)
+- Volume: per-channel volume adjustment (slider in channel long-press menu)
 
-### Add After Validation (v1.x - Post-Launch Enhancements)
+**Edge Case Handling:**
+- Phone call incoming → pause PTT audio, resume after call ends
+- Multiple Bluetooth devices → last connected wins (or user selects in Android Bluetooth settings)
+- Wired headset plugged in mid-transmission → auto-switch to wired, continue transmission
 
-Features to add once core audio is proven stable at scale.
+### Settings Patterns (Typical PTT Apps)
 
-- [ ] **GPS location tracking** — Dispatch situational awareness; defer until audio is solid
-- [ ] **Location mapping (display on map)** — Visual coordination for distributed teams
-- [ ] **Emergency alert button** — Life-safety feature; needs GPS tracking first
-- [ ] **Priority calling (dispatcher override)** — Incident response; needs stable audio first
-- [ ] **Text messaging (group and individual)** — Async communication; separate from audio rebuild
-- [ ] **Photo/image sharing** — Situational awareness; separate from audio
-- [ ] **Channel scanning with priority** — Dispatch efficiency; complex audio mixing
-- [ ] **Playback/replay (7-day message history)** — Requires recording infrastructure
-- [ ] **Call recording with retention policies** — Compliance and training; architecture ready
-- [ ] **Usage analytics and reporting** — Post-event analysis; needs data collection infrastructure
-- [ ] **Broadcast/all-call (500-3000 users)** — Mass announcements; complex scaling challenge
+**Audio Settings:**
+- Speaker vs earpiece default
+- PTT call volume (per-channel saved separately)
+- Notification sound (single sound, not per-channel)
+- Vibration patterns (on/off, intensity)
 
-### Future Consideration (v2+ - Advanced Features)
+**PTT Button Settings:**
+- Select PTT button (volume down/up, screen button, Bluetooth)
+- Map hardware buttons to channels (advanced)
+- PTT lock (require hold vs toggle mode) - most apps default to hold
 
-Features to defer until product-market fit is established and core is battle-tested.
+**Network Settings:**
+- Prefer WiFi vs cellular (usually auto-detect with WiFi priority)
+- Auto-reconnect on network change (usually always on)
+- Low bandwidth mode (reduce audio quality to save data)
 
-- [ ] **Native mobile apps (Android/iOS)** — Web-first strategy; apps after validation
-- [ ] **Video clip sharing** — Bandwidth-intensive; assess demand after launch
-- [ ] **Geofencing with alerts** — Worker safety; niche use case; assess demand
-- [ ] **Location-based dynamic groups** — Complex feature; needs geofencing first
-- [ ] **Message transcription (voice-to-text)** — AI feature; nice-to-have for accessibility
-- [ ] **Patching (bridge channels)** — Advanced dispatch; complex audio routing
-- [ ] **Remote monitoring (ambient listening)** — Security feature; privacy concerns
-- [ ] **LMR radio interoperability** — Niche requirement; complex integration
-- [ ] **SSO integration (SAML/OAuth)** — Enterprise auth; assess customer demand
-- [ ] **API for third-party integration** — Custom integrations; assess partner needs
-- [ ] **File/document sharing** — Operational efficiency; assess usage patterns
-- [ ] **AES-256 encryption implementation** — Security validation; architecture ready
+**Notification Settings:**
+- Lock screen notifications (on/off)
+- Show content on lock screen (for secure devices, may hide channel names)
+- Override Do Not Disturb (admin-configurable per channel/talkgroup)
 
-## Feature Prioritization Matrix
+**Scan Mode Settings (if feature exists):**
+- Max monitored channels (1-5)
+- Auto-switch behavior (on/off)
+- Drop-back delay (0-10 seconds)
+- Priority channel selection
 
-| Feature | User Value | Implementation Cost | Priority |
-|---------|------------|---------------------|----------|
-| **Audio Subsystem (Core)** |
-| Press-to-talk audio transmission | HIGH | HIGH | P1 |
-| Low latency (100-300ms) | HIGH | HIGH | P1 |
-| Opus codec with jitter buffer | HIGH | HIGH | P1 |
-| Noise suppression + echo cancel | HIGH | MEDIUM | P1 |
-| Floor control (busy state) | HIGH | LOW (existing) | P1 |
-| **Dispatch Features** |
-| Multi-channel monitoring | HIGH | LOW (existing) | P1 |
-| Selective mute/unmute | HIGH | LOW (existing) | P1 |
-| Channel scanning with priority | MEDIUM | MEDIUM | P2 |
-| Priority calling (override) | HIGH | MEDIUM | P2 |
-| Emergency alert button | HIGH | MEDIUM | P2 |
-| Broadcast/all-call | MEDIUM | HIGH | P3 |
-| **Location & Tracking** |
-| GPS location tracking | HIGH | MEDIUM | P2 |
-| Location mapping display | MEDIUM | MEDIUM | P2 |
-| Geofencing with alerts | LOW | MEDIUM | P3 |
-| Location-based dynamic groups | LOW | HIGH | P3 |
-| **Communication** |
-| Text messaging | MEDIUM | MEDIUM | P2 |
-| Photo/image sharing | MEDIUM | MEDIUM | P2 |
-| Video clip sharing | LOW | HIGH | P3 |
-| File/document sharing | LOW | MEDIUM | P3 |
-| **Recording & Compliance** |
-| Call recording | MEDIUM | HIGH | P2 |
-| Playback/replay (7-day history) | MEDIUM | MEDIUM | P2 |
-| Message transcription | LOW | HIGH | P3 |
-| Audit logs and reporting | MEDIUM | MEDIUM | P2 |
-| **User Experience** |
-| Presence status indicators | MEDIUM | LOW | P1 |
-| PTT start/end beep (Roger beep) | MEDIUM | LOW | P1 |
-| Audio quality indicators | MEDIUM | LOW | P1 |
-| User directory with filters | MEDIUM | LOW | P1 |
-| **Platform & Integration** |
-| Multi-device support | MEDIUM | LOW (existing) | P1 |
-| Native mobile apps | LOW (web-first) | HIGH | P3 |
-| SSO integration (SAML/OAuth) | LOW | MEDIUM | P3 |
-| API for third-party integration | LOW | MEDIUM | P3 |
-| LMR radio interoperability | LOW | HIGH | P3 |
+**Other:**
+- Auto-start on boot (for always-on field workers)
+- Battery optimization exclusion (request user to disable for app)
+- Remember last event (for multi-tenant)
 
-**Priority key:**
-- **P1:** Must have for v1 launch (audio subsystem rebuild)
-- **P2:** Should have for v1.x (post-validation enhancements)
-- **P3:** Nice to have for v2+ (future consideration)
+**VoicePing Principle:** Minimal settings. Smart defaults. Field workers should not need to configure - it should just work.
 
-## Competitor Feature Analysis
+## Edge Cases
 
-Based on research of leading enterprise PTT/PoC platforms in 2026.
+Important edge cases and expected behavior for Android PTT apps.
 
-| Feature Category | Motorola WAVE PTX | Zello Enterprise | Our Approach (VoicePing) |
-|------------------|-------------------|------------------|--------------------------|
-| **Audio Quality** | Wideband audio, adaptive dual-mic noise suppression | 99.99% uptime, AI-powered noise tools | Opus 16-32kbps, VAD, noise suppression, jitter buffer (P1) |
-| **Latency** | MCPTT-compliant (<200ms) | Low-latency push-to-talk | 100-300ms target (P1) |
-| **Dispatch Console** | Browser-based, 50-channel monitoring, video streaming | Rich analytics, unlimited channels | 10-50 channel monitoring, selective mute (P1) |
-| **Group Sizes** | Up to 3,000 users per group | Centrally managed unlimited channels | Event-based (1000+ concurrent, not all in one group) |
-| **Location Tracking** | Real-time GPS, location mapping | Historical location tracking | GPS + mapping (P2) |
-| **Emergency Features** | Emergency calling, priority override, location display | Not prominently featured | Emergency alert + priority calling (P2) |
-| **Recording** | Embedded recording, instant recall | Historical message tracking | Architecture supports, defer to P2 |
-| **Multimedia** | Text, photo, video, file sharing in message threads | Text, images, videos, documents | Text + photos (P2), video clips (P3) |
-| **Broadcast/All-Call** | Up to 500 members, one-way preemptive | Not prominently featured | 500-3000 users (P3, complex scaling) |
-| **Replay/History** | Instant recall recording | 7-day message replay + transcription | 7-day replay (P2), transcription (P3) |
-| **Encryption** | AES-256 with random key generation | Secure communication (details unclear) | Server-side AES-256 architecture (P3) |
-| **Platform** | Android, iOS, web dispatch | iOS, Android, React Native SDK | Web-first (P1), native apps (P3) |
-| **Interoperability** | LMR radio bridge (P25, DMR, NXDN) | Not featured | Defer to P3 (niche requirement) |
-| **Analytics** | Call logs, channel activity | Rich analytics, response times, user locations | Usage analytics and reporting (P2) |
-| **Deployment** | Cloud-based SaaS | Cloud SaaS or self-hosted Enterprise Server | Single-tenant, on-premise or client cloud (P1) |
+### Phone Calls
 
-### Competitive Positioning
+**Incoming phone call during PTT reception:**
+- Pause PTT audio immediately (Android system audio focus loss)
+- Show notification: "PTT paused - incoming call"
+- After call ends: auto-resume PTT audio if still connected to channel
+- Do NOT resume mid-transmission if transmission ended during call
 
-**VoicePing differentiators vs competitors:**
-1. **Single-tenant deployment model** — Competitors are multi-tenant SaaS; we offer isolated instances for security-critical events
-2. **Event-based architecture** — Built for temporary large-scale events (1000+ users for event duration) vs ongoing operations
-3. **Web-first dispatch console** — No desktop app installation required; browser-based for rapid deployment
-4. **Hierarchical organization (Event→Team→Channel)** — Purpose-built for large events with complex team structures
+**Incoming phone call during PTT transmission:**
+- End PTT transmission immediately (send PTT release to server)
+- Answer phone call (Android system takes audio focus)
+- After call ends: return to channel, but do NOT auto-resume transmission
 
-**Where competitors excel (features to consider for P2/P3):**
-1. **Motorola's emergency calling suite** — Industry-leading safety features; strong case for P2 priority
-2. **Zello's 7-day replay + transcription** — Valuable for shift changes and incident review
-3. **Motorola's LMR interoperability** — Niche but critical for customers with existing radio infrastructure
-4. **Zello's analytics** — Post-event optimization and staffing insights
+**Outgoing phone call while monitoring channels:**
+- Pause PTT monitoring (stop all audio playback)
+- After call ends: auto-resume monitoring
+
+**Expected behavior:** Phone calls always win. PTT is secondary to cellular voice.
+
+### Do Not Disturb (DND)
+
+**User has DND enabled:**
+- PTT audio should still play (if app in foreground or monitoring mode active)
+- PTT notifications should be suppressed UNLESS channel is marked as "emergency broadcast" (admin override)
+- Setting: "Allow PTT audio during DND" (default: ON for field worker use case)
+
+**Broadcast talkgroup override:**
+- Admin can configure talkgroups to override DND (emergency use case)
+- Client shows distinct visual alert (red banner, different notification)
+- Plays emergency sound even in DND
+
+**Expected behavior:** DND suppresses normal notifications, but active PTT monitoring continues (field workers need to hear transmissions even in DND).
+
+### Battery Saver Mode
+
+**Android Battery Saver enabled:**
+- Reduces CPU performance, limits background sync
+- Foreground service should continue running (not killed by battery saver)
+- Network reconnection may be delayed if app backgrounded
+- Visual effects (animations) may be reduced by system
+
+**App-specific battery optimization:**
+- Request user to exclude VoicePing from battery optimization (via settings deep link)
+- Show warning when battery optimization detected: "For best performance, disable battery optimization for VoicePing"
+
+**Expected behavior:** Foreground service keeps app alive, but warn users about battery optimization settings that could impact performance.
+
+### Split Screen / Multitasking
+
+**App in split screen mode:**
+- Continue PTT operation normally (audio playback, transmission)
+- UI may be condensed - ensure PTT button remains accessible
+- Bottom bar (scan mode) should remain visible in compact layout
+
+**App in picture-in-picture (PiP):**
+- Not applicable - PTT apps don't typically support PiP (no video)
+
+**Task switcher / recent apps:**
+- Foreground service keeps app alive
+- Switching to another app = app moves to background but audio continues
+- PTT button in notification (MediaSession controls) for quick access
+
+**Expected behavior:** PTT audio continues regardless of app visibility state. Foreground service is key.
+
+### Network Changes
+
+**WiFi to cellular handoff:**
+- WebRTC may drop connection briefly (ICE restart)
+- Auto-reconnect with exponential backoff (ReconnectingSignalingClient)
+- Show "reconnecting" indicator during handoff
+- Resume monitoring after reconnection
+
+**Network completely lost:**
+- Show "offline" state immediately (WebSocket disconnect)
+- Disable PTT button (prevent failed transmit attempts)
+- Keep channel list visible (cached)
+- Auto-reconnect when network returns
+
+**Airplane mode toggled:**
+- On: immediate disconnect, show offline
+- Off: auto-reconnect when network available
+
+**Expected behavior:** Seamless handoff when possible. Clear offline indicators when not possible. Auto-reconnect always.
+
+### Bluetooth Headset Edge Cases
+
+**Bluetooth headset disconnects mid-transmission:**
+- Continue transmission, but switch audio to speaker (don't drop transmission)
+- Show notification: "Bluetooth disconnected - using speaker"
+
+**Bluetooth headset connects mid-transmission:**
+- Switch audio to Bluetooth immediately (if user preference allows)
+- Don't interrupt transmission
+
+**Multiple Bluetooth devices paired:**
+- Use last connected device (Android default behavior)
+- If user wants to switch, must do so via Android Bluetooth settings (don't reinvent in-app)
+
+**Bluetooth PTT button not responding:**
+- Show troubleshooting hint: "Ensure Bluetooth device is mapped to VoicePing in Settings > PTT Button"
+- Provide link to pairing guide
+
+**Expected behavior:** Audio routing switches seamlessly. PTT button mapping requires user configuration (per-device).
+
+### Screen Lock Transitions
+
+**Screen locks during transmission:**
+- Continue transmission (don't release PTT)
+- Show lock screen notification with waveform animation
+- Allow release via hardware button or lock screen action
+
+**Screen locks during reception:**
+- Continue playing audio
+- Show lock screen notification with speaker name
+
+**App moves to background (home button pressed):**
+- Continue monitoring/transmission via foreground service
+- MediaSession notification shows active channel, PTT controls
+
+**Expected behavior:** Screen state does not affect PTT operation. Foreground service + MediaSession handle all background cases.
+
+### Permission Edge Cases
+
+**User revokes microphone permission mid-session:**
+- Immediately disable PTT button
+- Show alert: "Microphone permission required for PTT"
+- Provide button to re-request permission
+
+**User revokes notification permission:**
+- PTT audio continues (doesn't depend on notifications)
+- Lock screen controls unavailable (no notification to show actions)
+- Show in-app warning: "Enable notifications for lock screen PTT"
+
+**User revokes foreground service permission (Android 14+):**
+- App cannot run in background
+- Show critical alert: "Foreground service required for background PTT"
+- Deep link to app settings
+
+**Expected behavior:** Graceful degradation when permissions revoked. Clear messaging about what's broken and how to fix.
+
+### Multi-Instance Prevention
+
+**User tries to open app on multiple devices simultaneously:**
+- Server should enforce single-session-per-user (JWT invalidation)
+- Show alert on older device: "Session started on another device"
+- Gracefully disconnect older session
+
+**User has multiple Android devices logged in:**
+- Each device = separate WebSocket session
+- Server broadcasts PTT to all sessions
+- Both devices receive audio (not a problem - walkie-talkie behavior)
+
+**Expected behavior:** Allow multi-device (field worker might have phone + tablet). Server prevents duplicate transmissions.
+
+## Feature Dependencies on Server
+
+VoicePing Android app builds on existing server features. No new server features required for MVP.
+
+| Android Feature | Server Dependency | Status |
+|-----------------|-------------------|--------|
+| Channel monitoring | `/joinChannel` handler, WebSocket channel membership | EXISTS |
+| Multi-channel scan mode | Multiple simultaneous `/joinChannel` calls, multi-consumer support | EXISTS (dispatch web already does this) |
+| PTT transmission | `/pttRequest` handler with busy state management | EXISTS |
+| Hardware PTT button | Client-side only (no server changes) | N/A |
+| Lock screen PTT | Client-side foreground service + MediaSession | N/A |
+| Emergency broadcast | `/emergencyBroadcast` handler in dispatchHandlers.ts | EXISTS (admin/dispatch role only) |
+| Network quality indicator | WebRTC stats (client-side), no server changes | N/A |
+| Per-channel volume | Client-side setting storage | N/A |
+| Auto-reconnect | JWT session refresh, existing reconnection logic | EXISTS |
+| Offline mode | Client-side cache, no server changes | N/A |
+
+**Key insight:** Android app is a new client for existing server. No server-side feature work required for MVP. Focus on Android-native UX patterns.
+
+## Implementation Complexity Notes
+
+**Low Complexity (1-3 days per feature):**
+- Channel list UI, team grouping
+- Per-channel volume control
+- Audio routing (earpiece/speaker toggle)
+- Network quality indicator
+- Haptic feedback
+- Offline mode with cached channels
+
+**Medium Complexity (3-7 days per feature):**
+- Foreground service with MediaSession
+- Lock screen notifications with PTT actions
+- Hardware volume button mapping (accessibility service approach)
+- Push notifications (FCM integration)
+- Scan mode bottom bar UI
+- Auto-reconnect with network change handling
+
+**High Complexity (1-2 weeks per feature):**
+- Lock screen PTT operation (foreground service + wake lock + audio focus + notification actions + Android 12+ constraints)
+- Scan mode auto-switch logic (multi-channel audio stream management, priority resolution)
+- Bluetooth headset PTT button mapping (HID protocol, per-device configuration, dual-button support)
+
+**Critical path for MVP:**
+1. Lock screen PTT operation (highest complexity, highest value for field workers)
+2. Scan mode with auto-switch (differentiator feature)
+3. Hardware button mapping (table stakes for "pocket radio" use case)
 
 ## Sources
 
-### Enterprise PTT Features and Standards
-- [Direct PTT Enterprise Standard Global Push-to-Talk Over Cellular Service](https://directptt.com/product/nextel-cellular-enterprise-direct-connect-cellular-service-for-nextel-two-way-network-radios-push-to-talk-over-cellular-poc/)
-- [WAVE PTX Push to Talk (PTT) - Motorola Solutions](https://www.motorolasolutions.com/en_us/products/command-center-software/broadband-ptt-and-lmr-interoperability/wave.html)
-- [Push to Talk (PTT) Plus Services | Verizon](https://www.verizon.com/business/products/voice-collaboration/push-talk-plus/)
-- [Best Enterprise Push-To-Talk (PTT) Software in 2026](https://www.g2.com/categories/push-to-talk-ptt/enterprise)
-
-### Dispatch Console Features
-- [Everest PC Dispatch Console | Peak PTT](https://www.peakptt.com/products/everest-dispatch-console)
-- [Dispatch Console Software - Airacom | APTT Push-to-Talk](https://www.airacom.com/solutions/workforce-management-software/dispatch-console-software/)
-- [How Radio Dispatch Consoles Unite Analog, Digital, and Cloud Technologies In 2025](https://intertalksystems.com/blog/how-radio-dispatch-consoles-unite-analog-digital-and-cloud-technologies-in-2025/)
-
-### Audio Quality and Latency Standards
-- [MCPTT Standards Require Measuring Mouth to Ear (M2E) Latency](https://teraquant.com/measuring-mouth-to-ear-latency-as-required/)
-- [Understanding MCPTT Performance via the Standard 4 KPIs](https://teraquant.com/understanding-mcptt-performance-via-standard-kpis/)
-- [Audio Codec - ProPTT2](https://dev.proptt2.com/docs-media-audio.html)
-
-### Emergency Alert and Priority Features
-- [WAVE PTX emergency calling & alerting - Airwave Communications](https://www.airwavecommunication.com/wave-ptx-ptt/emergency-calling.htm)
-- [BROCHURE | EMERGENCY CALLING PRIORITY COMMUNICATION FOR BROADBAND PTT](https://www.motorolasolutions.com/content/dam/msi/docs/Emergency_Calling_Brochure_ANZ.pdf)
-- [How two-way radios enable reliable access to assistance when emergencies strike | Hytera](https://hytera.co.za/news/how-two-way-radios-enable-reliable-access-to-assistance-when-emergencies-strike)
-
-### Noise Suppression and Audio Features
-- [Noise Cancellation Features of Peak PTT Products](https://blog.peakptt.com/noise-cancellation-features-of-peak-ptt-products/)
-- [Top 15 PTT Radios for Business Resilience in 2025 & Beyond](https://www.peakptt.com/blogs/news/ptt-radios-for-business-resilience)
-
-### Recording, Compliance, and Encryption
-- [Best Secure Communication Platforms for Enterprises (2026 Guide)](https://wire.com/en/blog/best-secure-communication-platforms-enterprises)
-- [Regulatory Pressure in 2026: Enterprise File Proof & Digital Traceability Requirements](https://medium.com/@E-7Cyber/regulatory-pressure-in-2026-enterprise-file-proof-digital-traceability-requirements-c33de2c5ee7b)
-
-### Group Management and Dynamic Channels
-- [Driving interoperability in Mission Critical Services - Motorola Solutions](https://www.motorolasolutions.com/en_xu/products/broadband-push-to-talk/wave-ptx/driving-interoperability-in-mission-critical-services.html)
-- [Why push-to-talk (PTT) is a must for frontline workers | Zoom](https://www.zoom.com/en/blog/push-to-talk/)
-
-### Message Replay and History
-- [Zello APK for Android Download](https://apkpure.com/zello-ptt-walkie-talkie/com.loudtalks)
-- [Top Push-To-Talk (PTT) Software in 2026](https://slashdot.org/software/push-to-talk-ptt/)
-
-### Competitor Analysis
-- [Zello Enterprise](https://zello.com/enterprise/)
-- [Zello Enterprise Server (ZES) Overview](https://paidsupport.zello.com/hc/en-us/articles/32799833341581-Zello-Enterprise-Server-ZES-Overview)
-- [Zello Pricing 2026](https://www.g2.com/products/zello/pricing)
-- [Motorola WAVE PTX Dispatch Console](https://twowayradiogear.com/products/motorola-wave-ptx-dispatch-console)
-- [WAVE PTX eBrochure](https://www.daywireless.com/ptt-brochure/)
-
-### Presence and Status Features
-- [Presence notification - Contact's availability | PTT Pro](https://www.pushtotalkpro.com/en/presence-notification.html)
-- [Push to Talk Plus - Status Icons | Verizon](https://www.verizon.com/support/knowledge-base-112570/)
-
-### Anti-Features and Best Practices
-- [Push-to-Talk App Pitfalls: 6 Mistakes to Avoid - Talker](https://talker.network/push-to-talk-app-pitfalls-6-mistakes-to-avoid/)
-- [9 truths about PTT services and security you wish you had known before](https://www.criticalcommunications.airbus.com/en/newsroom/web-story/9-truths-about-ptt-services-and-security-you-wish-you-had-known-before)
-
-### Multimedia Features
-- [WAVE PTX Broadband Push-To-Talk - Motorola Solutions](https://www.motorolasolutions.com/en_xu/products/broadband-push-to-talk/wave-ptx.html)
-- [Push-to-Talk (PTT) App | Best PTT Solution - NuovoTeam](https://nuovoteam.com/push-to-talk-app)
-
----
-*Feature research for: Enterprise PTT/PoC platform for event coordination (1000+ users)*
-*Researched: 2026-02-06*
-*Research confidence: MEDIUM (web search verification with industry sources; specific to VoicePing context)*
+- [Zello PTT Walkie Talkie - Apps on Google Play](https://play.google.com/store/apps/details?id=com.loudtalks&hl=en_US)
+- [Zello Support: Using Volume/Screen Button for PTT (Android)](https://support.zello.com/hc/en-us/articles/230745107-Using-Volume-Screen-Button-for-PTT-Android)
+- [Zello Support: Android Options Guide](https://support.zello.com/hc/en-us/articles/230749107-Android-Options-Guide)
+- [Motorola WAVE PTX Mobile App](https://www.airwavecommunication.com/wave-ptx-ptt/wave-ptx-mobile-app.htm)
+- [Android Developers: Foreground service types](https://developer.android.com/develop/background-work/services/fgs/service-types)
+- [Android Developers: Background playback with MediaSessionService](https://developer.android.com/media/media3/session/background-playback)
+- [Android Developers: About notifications](https://developer.android.com/develop/ui/views/notifications)
+- [Android Developers: Configure audio policies](https://source.android.com/docs/core/audio/implement-policy)
+- [Sonim XP8 PTT Capabilities](https://blog.sonimtech.com/blog/the-push-to-talk-over-cellular-capabilities-of-the-sonim-xp8)
+- [Sonim XP5plus Rugged PTT Phone](https://www.sonimtech.com/products/phones/xp5plus)
+- [Pairing a Bluetooth PTT Button (Android) - Zello Support](https://support.zello.com/hc/en-us/articles/230745407-Pairing-a-Bluetooth-PTT-Button-Android)
+- [Zebra: Enable PTT Button Support for Bluetooth Headsets](https://docs.zebra.com/us/en/solutions/wcc/wcc-pttpro-android-cg/ptt-pro-for-android-json-configuration-elements/enable-ptt-button-support-for-bluetooth-headsets.html)
+- [VoicePing: Integrated Bluetooth PTT Headset](https://www.voicepingapp.com/blog/integrated-bluetooth-ptt-headset)
+- [Google Support: Limit interruptions with Do Not Disturb](https://support.google.com/android/answer/9069335?hl=en)
+- [Tait Radio Academy: How Scanning Works](https://www.taitradioacademy.com/topic/how-scanning-works-1/)
+- [Herda Radio: Mastering Scanning - The Ultimate Guide](https://herdaradio.com/blog/radioknowledge/scanning/)
+- [PTT over Cellular Network Latency Analysis (2026)](https://www.telecomgurukul.com/post/analyzing-latency-in-4g-and-5g-networks-updated-in-2024)
+- [Mobile Tornado: Factors that have driven the increase in reliability of PTT](https://mobiletornado.com/blog/what-has-driven-the-increase-in-reliability-of-ptt/)
+- [Talker: 5 Best Push-to-Talk Walkie Talkie Apps (2025)](https://talker.network/5-best-push-to-talk-apps-for-ios-and-android/)
+- [Push-to-Talk Functions with Locked Screen](https://www.smartwalkie.com/blog/push-to-talk-functions-with-locked-screen)

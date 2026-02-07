@@ -1,397 +1,646 @@
-# Pitfalls Research
+# Pitfalls Research: Android PTT Client
 
-**Domain:** WebRTC Push-to-Talk (PTT) Communications at Scale
-**Researched:** 2026-02-06
-**Confidence:** HIGH
+**Domain:** Android native PTT app with WebRTC/mediasoup
+**Researched:** 2026-02-08
+**Confidence:** HIGH (WebRTC/Android ecosystem well-documented)
+
+## Executive Summary
+
+Building an Android PTT client for an existing mediasoup server presents specific integration challenges beyond standard WebRTC apps. The most critical pitfalls involve: (1) mediasoup-client native library compilation/ABI issues, (2) OEM battery optimization killing foreground services, (3) Bluetooth SCO audio routing race conditions, (4) WebRTC native object memory leaks, and (5) multi-channel audio mixing thread contention. OEM-specific battery killers (Xiaomi, Samsung, Huawei) are the largest deployment risk — even properly configured foreground services get killed without user whitelist configuration.
+
+---
 
 ## Critical Pitfalls
 
-### Pitfall 1: Opus Codec Misconfiguration for PTT Workloads
+### 1. mediasoup-client Native Build Fragmentation
 
-**What goes wrong:**
-Using conversational audio settings for Opus codec results in high latency, excessive buffering, and poor audio quality for PTT use case. Default WebRTC Opus settings optimize for continuous two-way conversation, not sporadic push-to-talk transmissions. The current system's "invalid packet" errors suggest fundamental codec parameter mismatches between encoder and decoder.
+**What goes wrong:** mediasoup-client does not have official Android native support. Third-party wrappers like `haiyangwu/mediasoup-client-android` exist but have known crashes (arm64-v8a on Android 10+), are unmaintained, or lack ABI coverage. JNI/NDK linking errors, missing ABIs (x86, armeabi-v7a), and version mismatches between libwebrtc and libmediasoupclient cause build failures or runtime crashes.
 
-**Why it happens:**
-Developers treat PTT like conversational audio and use default WebRTC settings (20ms frame duration, adaptive bitrate for conversation). PTT requires different tradeoffs: lower latency over bandwidth efficiency, consistent bitrate over adaptation, immediate start over smooth conversation.
+**Why it happens:** mediasoup maintains official JavaScript (browser/Node.js) client only. Community Android ports wrap C++ `libmediasoupclient` with JNI, but require NDK expertise to maintain. WebRTC ABI support and NDK versions change frequently, breaking builds. Crashes on `PeerConnection.SetRemoteDescription()` have been reported on specific Android versions/ABIs.
 
-**How to avoid:**
-- Configure Opus frame size between 2.5-10ms (not default 20ms) for PTT latency requirements
-- Use Opus in VOIP mode (not AUDIO mode) with CBR (Constant Bitrate) at 32-64 kbps
-- Disable DTX (Discontinuous Transmission) for PTT — silence detection causes delays on transmission start
-- Configure FEC (Forward Error Correction) in Opus for packet loss resilience: provides reasonable protection with minimal overhead
-- Test decoder against encoder parameters explicitly — frame size, bitrate mode, FEC settings must match
-- Avoid raw Opus packet transmission without proper RTP encapsulation (causes the "invalid packet" errors)
+**Consequences:**
+- App crashes on specific devices (Samsung Galaxy S20 on arm64, etc.)
+- Failed builds when upgrading NDK or WebRTC dependencies
+- Client can't connect to mediasoup server despite server working perfectly
+- Debug time measured in days due to native stack traces
 
-**Warning signs:**
-- "Invalid packet" or "corrupted stream" errors during Opus decoding
-- Latency spikes at beginning of each PTT transmission (DTX interference)
-- Inconsistent audio quality between transmissions
-- Browser console errors: "Opus: Unable to parse packet for number of samples"
+**Prevention:**
+- **Phase 1 (tech spike):** Evaluate ALL available Android mediasoup wrappers BEFORE committing:
+  - `haiyangwu/mediasoup-client-android` (most popular, ~600 stars, last update?)
+  - `crow-misia/libmediasoup-android` (Maven Central, actively maintained?)
+  - Build sample app and test on physical devices (arm64-v8a minimum)
+- **Acceptance criteria for wrapper:** Successful build + connection to your existing server + tested on 3+ physical devices (different OEMs, Android 10-14)
+- **Fallback plan:** If no stable wrapper exists, consider mediasoup-client via WebView hybrid approach for MVP (delay native rewrite to post-MVP)
+- **ABI coverage:** Ensure wrapper supports arm64-v8a (primary) and armeabi-v7a (legacy devices)
+- **Version pinning:** Pin NDK version, libwebrtc version, and mediasoup-client-android version together — do NOT upgrade independently
 
-**Phase to address:**
-**Phase 1 (Proof of Concept)** — codec configuration is foundational; wrong settings make everything else irrelevant.
+**Detection:**
+- Build failure: `undefined reference to 'mediasoup::...'` or JNI linking errors
+- Runtime crash: `java.lang.UnsatisfiedLinkError: dlopen failed: cannot locate symbol`
+- Device-specific crash: Works on emulator, crashes on Samsung Galaxy S21 (arm64-v8a)
 
----
-
-### Pitfall 2: SFU Selection Without PTT-Specific Requirements
-
-**What goes wrong:**
-Most WebRTC media servers optimize for video conferencing (MCU) or broadcast (SFU) scenarios, not PTT. A single SFU server typically supports only 200-500 users before performance degrades. Choosing the wrong media server architecture makes 1000+ user scaling impossible or prohibitively expensive. PTT has unique characteristics: one speaker at a time per channel, dispatch users monitoring 10-50 channels simultaneously, sporadic audio bursts not continuous streams.
-
-**Why it happens:**
-Teams choose media servers based on popularity or video conferencing benchmarks without evaluating PTT-specific requirements. WebRTC marketing materials focus on video quality and participant counts, not audio-only PTT patterns. The assumption that "if it handles 100 video participants, it can handle 1000 audio-only" is incorrect due to connection management overhead.
-
-**How to avoid:**
-- Choose SFU architecture over MCU for PTT: SFU requires less server processing (forwarding vs mixing), scales better for audio-only
-- Evaluate SFU options specifically for audio-only performance, not video capabilities
-- Test with PTT traffic patterns: 1 speaker → N listeners per channel, not N↔N mesh
-- Plan for clustering from day one: single server limits around 200-500 users, 1000+ requires distributed architecture
-- Consider hybrid architecture: automatic switching based on channel load
-- Budget for regional SFU distribution to reduce latency and keep traffic local
-
-**Warning signs:**
-- SFU CPU usage spikes during peak user counts (indicates processing bottleneck)
-- Users report audio cutting out when concurrent connections exceed ~500
-- Media server vendor documentation focuses exclusively on video conferencing use cases
-- No clear horizontal scaling path in vendor documentation
-
-**Phase to address:**
-**Phase 2 (Architecture)** — after codec PoC works, before scaling validation. Changing media servers mid-project requires rewrite.
+**Sources:**
+- [mediasoup Android/iOS native client support discussion](https://mediasoup.discourse.group/t/android-ios-native-client-support/4298)
+- [haiyangwu/mediasoup-client-android GitHub](https://github.com/haiyangwu/mediasoup-client-android)
+- [mediasoup-client-android crash on SetRemoteDescription](https://github.com/haiyangwu/mediasoup-client-android/issues/17)
 
 ---
 
-### Pitfall 3: Browser Compatibility Assumptions (Safari H.264-Only Trap)
+### 2. OEM Battery Optimization Kills Foreground Services
 
-**What goes wrong:**
-Safari only supports H.264 codec for video and has stricter WebRTC implementation than Chrome/Firefox. While your system is audio-only, Safari's WebRTC stack has audio-specific quirks: different getUserMedia permissions model, stricter security context requirements (HTTPS mandatory), and incompatible SDP negotiation patterns. Chrome/Firefox audio works perfectly, Safari users hear nothing or experience one-way audio.
+**What goes wrong:** Despite implementing a proper foreground service with ongoing notification, OEM battery optimization (Xiaomi MIUI, Samsung "Put Apps to Sleep", Huawei PowerGenie) kills the app after 5-10 minutes with screen off. User expects pocket radio behavior but discovers the app stopped running and missed critical PTT messages. Foreground service notification disappears, WebSocket disconnects, audio stops.
 
-**Why it happens:**
-Teams develop and test on Chrome/Firefox (90% of developer machines), assume WebRTC is "standard" across browsers, deploy to production, and discover Safari requires special handling. Safari's stricter WebRTC implementation prioritizes security and battery life over developer convenience. The adapter.js shim exists specifically because browser differences are significant.
+**Why it happens:** Android's standard Doze mode exempts foreground services. BUT OEMs add aggressive battery savers (Xiaomi "Battery Saver", Samsung "Sleeping Apps", Huawei "App Launch Manager") that kill apps regardless of foreground service status. These OEM layers operate ABOVE Android's Doze mode and ignore standard exemptions. MIUI is notorious: "background processing simply does not work right" in default settings even with proper foreground services.
 
-**How to avoid:**
-- Use adapter.js library for WebRTC API normalization across browsers
-- Test on Safari iOS (mobile) and Safari desktop early — incompatibilities are different
-- Verify SDP negotiation handles Safari's stricter parsing (case-sensitive codec names)
-- Ensure HTTPS in all environments — Safari blocks WebRTC getUserMedia on HTTP
-- Test audio-specific constraints across browsers: echoCancellation, noiseSuppression settings behave differently
-- Check for one-time microphone permissions (Chrome M116+, Firefox, Safari have different UX flows)
+**Consequences:**
+- App stops responding to PTT after 5-10 minutes with screen off
+- User thinks radio is working but misses emergency broadcasts
+- Trust erosion — field workers abandon app after missing critical communication
+- Support burden — "why isn't the app working?" when settings are device-specific
 
-**Warning signs:**
-- getUserMedia fails silently on Safari but works on Chrome/Firefox
-- Audio works one direction (Chrome→Safari) but not other direction
-- SDP negotiation fails with cryptic Safari console errors
-- Audio permissions prompt behavior differs significantly between browsers
+**Prevention:**
+- **Phase 1 (architecture):** Foreground service with `FOREGROUND_SERVICE_MEDIA_PLAYBACK` permission (API 34+)
+- **Phase 1 (UI):** Implement OEM-specific battery optimization detection and in-app whitelist instructions:
+  - Detect Xiaomi/MIUI: Check `android.os.Build.MANUFACTURER == "Xiaomi"` or `Build.getRadioVersion().contains("MIUI")`
+  - Detect Samsung: Check for "Put Apps to Sleep" feature (API level check)
+  - Detect Huawei: Check for "App Launch Manager" (EMUI/HarmonyOS)
+  - Show device-specific setup wizard on first launch: "To use VoicePing as a pocket radio, disable battery optimization: [screenshots/steps]"
+- **Phase 2 (resilience):** Implement battery optimization permission request flow:
+  - Request `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` permission
+  - Prompt user: "VoicePing needs to stay awake for PTT. Allow?"
+  - Link to device-specific settings: Settings → Battery → App Launch (Huawei), Settings → Battery → Background Usage Limits → Sleeping Apps (Samsung)
+- **Phase 2 (monitoring):** Detect unexpected service death and show prominent "Service stopped — check battery settings" notification on next app open
+- **Documentation:** Include OEM-specific setup guide in onboarding and support docs
 
-**Phase to address:**
-**Phase 1 (Proof of Concept)** — verify cross-browser compatibility before building features. Discovering Safari incompatibility in Phase 3 forces rework.
+**Detection:**
+- Service stops after 5-10 minutes screen-off on Xiaomi/Samsung/Huawei devices
+- Logcat shows service killed without `onDestroy()` callback
+- `adb shell dumpsys battery` shows app in restricted bucket
+- User reports: "App worked for 5 minutes then stopped"
 
----
+**OEM-Specific Mitigation:**
+- **Xiaomi/MIUI:** Autostart permission + Battery Optimization disabled + App Pinning (lock in recent apps) + avoid Ultra Battery Saver
+- **Samsung:** Remove from "Sleeping Apps" list, disable "Put unused apps to sleep"
+- **Huawei:** App Launch Manager → Disable "Manage automatically" → Enable "Run in background"
 
-### Pitfall 4: Memory Leaks in Long-Running Sessions
-
-**What goes wrong:**
-WebRTC connections, MediaRecorder instances, and audio processing nodes accumulate in memory over long-running sessions (8-12 hour events). Memory consumption grows 20GB+ per day until browser tabs crash or server runs out of memory. Dispatch users monitoring 10-50 channels for hours are most affected. Symptoms: browser slowdown over time, eventual tab crash, server process restart required after each event.
-
-**Why it happens:**
-Developers test with short sessions (5-30 minutes), assume garbage collection handles cleanup, don't explicitly close/dispose WebRTC objects. Common mistakes: not calling `.close()` on RTCPeerConnection when users disconnect, not stopping MediaStream tracks, not disposing AudioContext nodes, using MediaRecorder with timeslice (stores blobs in memory instead of streaming to disk).
-
-**How to avoid:**
-- Explicitly close all WebRTC objects on disconnect: `RTCPeerConnection.close()`, `MediaStream.getTracks().forEach(t => t.stop())`
-- Avoid MediaRecorder timeslice parameter — let browser optimize disk storage instead of memory buffering
-- Implement connection lifecycle management: track active connections, clean up on timeout/disconnect
-- Use WeakMap for peer connection references to allow garbage collection
-- Monitor memory usage in production: alert when process memory exceeds threshold
-- Test with realistic durations: 8-12 hour sessions, not 5-minute demos
-- Consider periodic tab refresh for dispatch users (e.g., every 4 hours with state recovery)
-
-**Warning signs:**
-- Browser memory usage grows linearly with session duration
-- Performance degrades after 2-4 hours of continuous operation
-- DevTools heap snapshots show RTCPeerConnection objects not being released
-- Server process memory grows unbounded, requiring periodic restart
-- Users report "browser getting slower over time"
-
-**Phase to address:**
-**Phase 3 (Feature Development)** — after core audio works, during dispatch multi-channel implementation. Long-running session testing must happen before production.
+**Sources:**
+- [Don't kill my app! - Xiaomi](https://dontkillmyapp.com/xiaomi)
+- [Don't kill my app! - Samsung](https://dontkillmyapp.com/samsung)
+- [Don't kill my app! - Huawei](https://dontkillmyapp.com/huawei)
+- [Android Doze mode optimization](https://developer.android.com/training/monitoring-device-state/doze-standby)
 
 ---
 
-### Pitfall 5: TURN Server Cost Explosion at Scale
+### 3. Bluetooth SCO Audio Routing Race Conditions
 
-**What goes wrong:**
-TURN relay servers transfer all media traffic when direct peer connection fails (15-20% of connections typically). At 1000 users, with 15% requiring TURN, bandwidth costs become massive: ~2.71TB per 1000-user session, potentially 16TB+ per day with multiple events. TURN bandwidth costs can exceed all other infrastructure costs combined. In PTT dispatch scenarios with monitoring 10-50 channels, TURN usage can approach 100% of connections (complex NAT environments).
+**What goes wrong:** User presses Bluetooth headset PTT button but audio routes to phone speaker or earpiece instead of headset. Or audio starts on headset, then switches mid-transmission to phone speaker. Or Bluetooth SCO connection takes 2-3 seconds to establish, cutting off first words of PTT transmission. User releases PTT button, audio stays stuck on Bluetooth when they expected speaker playback.
 
-**Why it happens:**
-Teams budget for typical WebRTC deployments (15-20% TURN usage), don't account for PTT dispatch monitoring patterns (one user → many channels = multiple connections), deploy to corporate networks with aggressive NAT/firewall policies (increasing TURN dependency to 50%+), discover bandwidth costs in first production invoice.
+**Why it happens:** Bluetooth SCO (Synchronous Connection-Oriented) audio is a separate audio channel requiring explicit start/stop via `AudioManager.startBluetoothSco()`. This operation is ASYNCHRONOUS and takes 500ms-2s to establish. If you attempt to play audio before SCO is ready, Android routes to default output (earpiece/speaker). WebRTC's audio routing is managed internally and doesn't always wait for SCO establishment. Additionally, SCO sampling rate is restricted to 16kHz or 8kHz — your server uses 48kHz Opus, requiring resampling.
 
-**How to avoid:**
-- Prioritize STUN-first connections: configure ICE to aggressively attempt direct connections before falling back to TURN
-- Deploy regionally distributed TURN servers to reduce latency and keep traffic local
-- Use SFU architecture to reduce connection count: 1 connection to SFU instead of N peer connections
-- For dispatch users: single WebRTC connection to SFU for all channels, not per-channel connections
-- Implement connection quality monitoring: track TURN vs direct connection ratio
-- Budget for higher TURN usage in enterprise deployments: corporate NATs may require 30-50% TURN
-- Consider TURN server pooling: shared TURN infrastructure across events
-- Evaluate managed TURN services vs self-hosted: break-even point depends on scale
+**Timing issues:**
+- User presses PTT → app starts SCO → app starts WebRTC transmission BEFORE SCO ready → audio routes to speaker
+- User releases PTT → SCO stays active → next incoming PTT plays on Bluetooth when user expected speaker
+- Device switches between WiFi/cellular → Bluetooth disconnects/reconnects → audio routing changes mid-call
 
-**Warning signs:**
-- Bandwidth bills significantly higher than projected
-- More than 20% of connections using TURN relay in non-corporate networks
-- Dispatch users showing 100% TURN usage (indicates architecture issue)
-- TURN server bandwidth metrics show sustained high utilization
+**Device-specific issues:**
+- OnePlus devices: `setAudioRoute()` to Bluetooth doesn't work reliably
+- Android 14+: More restrictive Bluetooth permissions (BLUETOOTH_CONNECT runtime permission)
 
-**Phase to address:**
-**Phase 2 (Architecture)** — SFU selection and connection architecture must minimize TURN dependency. Retrofitting is expensive.
+**Consequences:**
+- First 1-2 seconds of PTT transmission cut off (user says "Team 3, we need—" but "Team 3" doesn't transmit)
+- Audio plays through phone speaker in noisy environment, can't hear dispatch
+- User thinks PTT failed because they didn't hear audio feedback through expected device
+- Confusing audio routing behavior erodes trust in app reliability
 
----
+**Prevention:**
+- **Phase 2 (Bluetooth integration):** Implement proper SCO lifecycle:
+  - Register `AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED` broadcast receiver
+  - When user presses PTT on Bluetooth button: start SCO, WAIT for `SCO_AUDIO_STATE_CONNECTED`, THEN start WebRTC transmission
+  - Add 200ms pre-roll time before transmitting audio (visual countdown "Connecting to headset...")
+  - When user releases PTT: optionally stop SCO (or keep alive for 5s for quick re-transmission)
+- **Phase 2 (audio routing):** Maintain explicit audio routing state machine:
+  - Track current output device (SPEAKER, EARPIECE, WIRED_HEADSET, BLUETOOTH)
+  - On Bluetooth connect: set mode to `MODE_IN_COMMUNICATION`, route to Bluetooth
+  - On Bluetooth disconnect: fallback to wired headset if present, else speaker
+  - Provide manual audio output selector in UI for testing/override
+- **Phase 3 (advanced):** Pre-start SCO when Bluetooth headset connects (keep SCO alive for duration of session for zero latency)
+- **Testing:** Test with physical Bluetooth headsets from multiple manufacturers (Plantronics, Jabra, cheap AliExpress PTT headsets)
 
-### Pitfall 6: Jitter Buffer Misconfiguration for PTT Latency
+**Detection:**
+- Audio routing logs show `setAudioRoute(BLUETOOTH)` but actual route is `SPEAKER`
+- Logcat shows `SCO_AUDIO_STATE_CONNECTING` but transmission starts before `SCO_AUDIO_STATE_CONNECTED`
+- User reports: "First word of my message is cut off when using Bluetooth"
 
-**What goes wrong:**
-Default adaptive jitter buffer settings optimize for smooth continuous audio (40-120ms buffering), creating unacceptable latency for PTT (target: 100-300ms total). With default settings, press-to-transmit delay can exceed 500ms, making system feel unresponsive. Dispatch users experience delayed audio across multiple channels, losing situational awareness.
-
-**Why it happens:**
-WebRTC's NetEQ adaptive jitter buffer is designed for conversational audio with micro-adjustments for smooth playback. PTT requires different tradeoffs: responsiveness over smoothness, lower latency over packet loss resilience. Default jitter buffer can grow to 120ms on poor connections. Developers don't configure jitter buffer parameters and accept defaults.
-
-**How to avoid:**
-- Configure minimum jitter buffer delay: `setJitterBufferMinDelay(15)` for 15ms minimum (default 30ms)
-- Reduce maximum packet buffer: `setJitterBufferMaxPackets(25)` instead of default 50
-- Balance buffer size with network quality: 15-40ms for good networks, 40-60ms for poor
-- Use Opus FEC (Forward Error Correction) to handle packet loss instead of relying on large jitter buffers
-- Test jitter buffer settings under variable network conditions: packet loss, jitter, latency
-- Monitor audio quality metrics: if users report choppy audio, buffer may be too small
-- Consider adaptive configuration: detect network quality and adjust buffer accordingly
-
-**Warning signs:**
-- Total PTT latency (press to hear) exceeds 400ms consistently
-- Audio feels "laggy" or "delayed" compared to traditional radios
-- Jitter buffer growing beyond 100ms in production metrics
-- Users report audio "catching up" after PTT release (buffering artifacts)
-
-**Phase to address:**
-**Phase 1 (Proof of Concept)** — jitter buffer configuration impacts latency target validation. Test early.
+**Sources:**
+- [Android Bluetooth SCO audio routing issues (react-native-webrtc)](https://deepwiki.com/react-native-webrtc/react-native-incall-manager/7.2-bluetooth-sco-audio)
+- [Signal Android Bluetooth headset microphone issue](https://github.com/signalapp/Signal-Android/issues/6184)
+- [flutter-webrtc audio routing issue](https://github.com/flutter-webrtc/flutter-webrtc/issues/811)
 
 ---
 
-### Pitfall 7: State Synchronization Complexity at Scale
+### 4. WebRTC Native Object Memory Leaks
 
-**What goes wrong:**
-At 1000+ users across multiple channels, state synchronization becomes complex: who is talking on which channel, who is monitoring which channels, busy state per channel, user presence per event. Without proper state management, race conditions emerge: two users transmit simultaneously (busy state desync), dispatch users miss transmissions (subscription state drift), channels become "stuck" in busy state after disconnection.
+**What goes wrong:** After 30-60 minutes of use (multiple channel joins/leaves, network reconnections), app memory usage climbs from 80MB to 300MB+ and eventually crashes with `OutOfMemoryError`. Or app crashes on second channel join with `IllegalStateException: MediaStreamTrack has been disposed`. Native heap shows thousands of undisposed `PeerConnection`, `MediaStream`, `MediaStreamTrack` objects.
 
-**Why it happens:**
-Systems designed for small scale (10-50 users) use simple in-memory state, don't account for distributed deployment, assume state updates are instantaneous, don't handle network partitions or race conditions. At scale, multiple server instances require distributed state (Redis), introducing eventual consistency challenges.
+**Why it happens:** WebRTC native objects (PeerConnection, MediaStream, MediaStreamTrack, VideoTrack, AudioTrack) are backed by C++ objects managed through JNI. Java garbage collector does NOT automatically free these native objects — you must explicitly call `.dispose()` on each. If you:
+- Create PeerConnection and forget to call `.close()` + `.dispose()` on disconnect
+- Remove MediaStream from PeerConnection without calling `.dispose()` on the stream
+- Dispose PeerConnection before disposing individual MediaStreamTrack objects (wrong order)
+- Re-connect after network drop without cleaning up previous PeerConnection
 
-**How to avoid:**
-- Use Redis for distributed state management with pub/sub for real-time updates
-- Implement optimistic concurrency control: version state, reject stale updates
-- Design for eventual consistency: assume state updates aren't instant across all clients
-- Implement state reconciliation: periodic sync to recover from desync
-- Use atomic operations for critical state: Redis SETNX for busy state acquisition
-- Handle disconnection gracefully: automatic busy state release on connection loss
-- Implement state recovery on reconnection: sync current channel state on join
-- Test race conditions explicitly: simultaneous PTT press, rapid connect/disconnect
+...then native memory leaks accumulate until OOM crash.
 
-**Warning signs:**
-- Channels stuck in "busy" state after user disconnects
-- Two users transmitting simultaneously on same channel
-- Dispatch users receiving some transmissions but not others (subscription drift)
-- State diverges between connected clients over time
+**Multi-channel context:** VoicePing monitors up to 5 channels simultaneously = 5 PeerConnections + 5+ MediaStreams. Each reconnection creates new objects. After 10 reconnects across 5 channels = 50+ leaked PeerConnections if not disposed properly.
 
-**Phase to address:**
-**Phase 2 (Architecture)** — distributed state design must happen during architecture phase. Retrofitting breaks assumptions.
+**Consequences:**
+- App crashes after 30-60 minutes of normal use
+- Memory pressure triggers Android low-memory killer, app gets killed in background
+- Difficult to debug — leak is in native heap, not visible in Java heap profiler
+- User reports: "App worked fine for an hour then crashed"
 
----
+**Prevention:**
+- **Phase 1 (architecture):** Implement strict lifecycle management for WebRTC objects:
+  - Track all PeerConnections in map: `channelId -> PeerConnection`
+  - On disconnect/channel leave: call in order:
+    1. `peerConnection.close()`
+    2. For each `MediaStream`: `stream.dispose()`
+    3. For each `MediaStreamTrack`: `track.dispose()`
+    4. `peerConnection.dispose()`
+    5. Remove from tracking map
+  - NEVER reuse disposed objects — create fresh instances on reconnect
+- **Phase 2 (reconnection):** On network drop, ensure old PeerConnection is fully disposed BEFORE creating new one
+- **Phase 3 (monitoring):** Add memory leak detection in debug builds:
+  - Track count of created vs disposed PeerConnections
+  - Log warning if count > number of active channels
+  - Use LeakCanary library to detect native leaks
+- **Testing:** Run app for 2+ hours with repeated channel joins/leaves and network disconnections, monitor memory usage with Android Profiler
 
-### Pitfall 8: Audio Feedback Loops in Dispatch Monitoring
+**Detection:**
+- Native heap size grows continuously (Android Studio Profiler → Memory → Native)
+- Crash log: `java.lang.OutOfMemoryError: Failed to allocate...`
+- Crash on second channel join: `IllegalStateException: MediaStreamTrack has been disposed`
+- Logcat shows `PeerConnection.dispose() not called` warnings
 
-**What goes wrong:**
-Dispatch users monitoring multiple channels with speakers enabled create audio feedback loops: transmission from Channel A plays on dispatch speakers, dispatch microphone picks up audio, transmits to Channel B, creating cascading feedback across channels. High-pitched squealing or echo makes system unusable. Standard WebRTC echo cancellation (AEC) assumes 1:1 conversation, not 1:N monitoring.
-
-**Why it happens:**
-WebRTC's Acoustic Echo Cancellation (AEC) is designed for single peer conversation: echo from far-end speaker feeding back into near-end microphone. Dispatch scenario breaks assumptions: far-end audio comes from multiple channels simultaneously, near-end microphone can transmit to different channels than audio source. AEC doesn't handle N:N audio routing.
-
-**How to avoid:**
-- Require dispatch users to use headphones (policy enforcement, not just recommendation)
-- Implement UI warnings when microphone input matches speaker output (feedback detection)
-- Consider separate audio contexts: monitoring channels (speakers only) vs transmission channels (mic enabled)
-- For critical deployments: enforce push-to-talk for ALL users including dispatch (no open mic)
-- Disable automatic gain control (AGC) for dispatch users monitoring (prevents amplifying feedback)
-- Implement audio level monitoring: detect and alert on feedback patterns
-- Design UI to make headphone requirement obvious (onboarding, visual cues)
-
-**Warning signs:**
-- High-pitched audio feedback during dispatch multi-channel monitoring
-- Echo reported when dispatch user transmits while monitoring other channels
-- Audio quality degrades when multiple channels active simultaneously
-- Users report "hearing themselves" through the system
-
-**Phase to address:**
-**Phase 3 (Feature Development)** — dispatch multi-channel monitoring implementation must address feedback explicitly.
+**Sources:**
+- [WebRTC Android MediaStream memory leak fix](https://codereview.webrtc.org/1308733004)
+- [Android dispose MediaStream fails (Chromium bug)](https://bugs.chromium.org/p/webrtc/issues/detail?id=5128)
+- [flutter-webrtc local stream disposing issue](https://github.com/flutter-webrtc/flutter-webrtc/issues/106)
+- [Best practices for closing WebRTC PeerConnections](https://medium.com/@BeingOttoman/best-practices-for-closing-webrtc-peerconnections-b60616b1352)
 
 ---
 
-## Technical Debt Patterns
+### 5. Multi-Channel Audio Mixing Thread Contention
 
-Shortcuts that seem reasonable but create long-term problems.
+**What goes wrong:** User monitors 3 channels. All 3 channels have active PTT simultaneously (overlapping speech). Audio stutters, glitches, or one channel's audio drops entirely. Or CPU usage spikes to 80%+ and device gets hot. Or audio mixing introduces 500ms+ latency (violates <300ms requirement).
 
-| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
-|----------|-------------------|----------------|-----------------|
-| Skip adapter.js, test Chrome only | Faster initial development | Safari incompatibility discovered in production | Never — cross-browser testing is table stakes |
-| Use default Opus settings | Works immediately without research | High latency, wrong for PTT use case | Never — codec config is foundational |
-| In-memory state without Redis | Simpler architecture, no Redis dependency | Cannot scale beyond single server instance | Only for PoC/demo, never production |
-| Skip explicit connection cleanup | No immediate impact, "garbage collector handles it" | Memory leaks in long-running sessions | Never — cleanup is critical for 8-12 hour events |
-| Use MCU instead of SFU | Easier to implement, less client-side code | Server processing bottleneck, cost explosion at scale | Never — PTT is audio-only, SFU is optimal |
-| Default jitter buffer settings | Works out of box, no configuration needed | Latency exceeds 300ms, feels unresponsive | Only for testing, not production PTT |
-| Self-host TURN servers | Cost savings vs managed service | Operational complexity, bandwidth management | Acceptable if team has ops expertise |
+**Why it happens:** Android WebRTC uses `JavaAudioDeviceModule` which creates a single `AudioTrack` output for playback. When you have 5 separate PeerConnections (one per channel), each has its own audio thread delivering decoded audio buffers. These must be MIXED in software before sending to `AudioTrack`. Naive mixing approach:
+- Each PeerConnection delivers audio to separate `AudioTrack` instances → AudioTracks "take turns" if same thread (stuttering), or if separate threads, audio glitches due to contention
+- Manual mixing in callback: 5 channels × 20ms buffers = need to mix 5 buffers every 20ms in audio thread callback → if callback takes >20ms due to mixing overhead, buffer underrun occurs (glitch)
 
-## Integration Gotchas
+**WebRTC's internal audio management:** WebRTC for mobile doesn't expose API for custom audio mixing. Default assumes single audio stream per PeerConnection.
 
-Common mistakes when connecting to external services.
+**Consequences:**
+- Audio glitches (clicks, pops, dropouts) when 2+ channels active simultaneously
+- High CPU usage (40%+ on low-end devices) due to mixing overhead
+- Increased latency (mixing adds 50-200ms processing time)
+- User reports: "Audio is garbled when multiple people talk at once"
 
-| Integration | Common Mistake | Correct Approach |
-|-------------|----------------|------------------|
-| TURN/STUN servers | Using public STUN/TURN (Google, Twilio) without fallback | Deploy own TURN infrastructure or use paid service with SLA |
-| Redis state management | Assuming Redis operations are instant/atomic | Use Redis transactions (MULTI/EXEC) for compound state updates |
-| WebRTC signaling | Sending signaling over same WebSocket as media | Separate signaling and media paths for reliability |
-| Browser getUserMedia | Requesting permissions without HTTPS context | Enforce HTTPS in all environments (Safari requirement) |
-| SFU connection | Creating per-channel peer connections for dispatch users | Single peer connection with multiple tracks/subscriptions |
-| Opus encoding | Sending raw Opus packets without RTP encapsulation | Use proper RTP packetization or WebRTC RTCPeerConnection |
+**Prevention:**
+- **Phase 2 (audio architecture):** Choose one approach:
+  - **Option A (WebRTC internal mixing):** Use single PeerConnection with multiple incoming audio tracks (1 track per channel). Let WebRTC mix internally. **ISSUE:** mediasoup creates 1 consumer per channel — requires server-side mixer or client-side track multiplexing (complex).
+  - **Option B (Custom AudioTrack mixer):** Implement custom audio mixing outside WebRTC:
+    - Disable WebRTC's audio playback (`peerConnection.setAudioEnabled(false)` or similar)
+    - Extract decoded audio buffers from each PeerConnection (requires accessing WebRTC internals — may not be exposed in Java API)
+    - Mix buffers in separate mixer thread: sum samples with clipping protection (`output = clamp(sum(inputs), -32768, 32767)`)
+    - Feed mixed buffer to single `AudioTrack`
+  - **Option C (Priority-based selective playback):** Only play ONE channel at a time (highest priority: emergency > dispatch > first-to-speak). Simpler but loses multi-channel awareness.
+- **Phase 2 (Oboe for low latency):** Use Oboe library instead of AudioTrack for output:
+  - Oboe uses AAudio (API 27+) or OpenSL ES (older) for lower latency
+  - Callback-based model better suited for real-time mixing
+  - Set `PerformanceMode::LowLatency` and `SharingMode::Exclusive`
+  - Set buffer size to 2× burst size (double buffering)
+- **Phase 3 (optimization):** Implement per-channel volume control and muting to reduce mixing overhead (muted channels skip mixing)
+- **Testing:** Test with 5 channels all transmitting simultaneously, measure CPU usage and latency with Android Profiler
 
-## Performance Traps
+**Detection:**
+- Audio glitches when multiple channels active (clicks, pops, silence)
+- CPU usage >40% during multi-channel playback
+- Logcat shows `AudioTrack underrun` warnings
+- User reports: "Can't hear all channels clearly when multiple people talk"
 
-Patterns that work at small scale but fail as usage grows.
-
-| Trap | Symptoms | Prevention | When It Breaks |
-|------|----------|------------|----------------|
-| N:N peer connections for dispatch monitoring | Works fine with 5 channels, crashes with 50 | Use SFU with single connection for all channels | 10+ channels per dispatch user |
-| In-memory state without Redis | Perfect for single server | Cannot add more servers | 200-500 users (single server limit) |
-| Synchronous state updates via WebSocket | Low latency at small scale | Synchronization delays, race conditions | 500+ concurrent users |
-| MediaRecorder with timeslice | Easy to implement, works in demos | Memory exhaustion in long recordings | 2+ hour recording sessions |
-| Per-connection jitter buffers without limit | Smooth audio per connection | Memory explosion with 50+ monitored channels | Dispatch users with 20+ channels |
-| Broadcasting state to all users on every change | Simple, works for 50 users | Network saturation, client processing bottleneck | 500+ users in single event |
-
-## Security Mistakes
-
-Domain-specific security issues beyond general web security.
-
-| Mistake | Risk | Prevention |
-|---------|------|------------|
-| Allowing getUserMedia without user gesture (Safari) | Security violation, browser blocks audio | Require user interaction before requesting mic permissions |
-| Transmitting audio without encryption | Eavesdropping on PTT communications | Enforce DTLS-SRTP (WebRTC default) and HTTPS signaling |
-| Not validating channel authorization before media transmission | Users can listen to unauthorized channels | Verify authorization on SFU before forwarding media |
-| Exposing TURN credentials in client code | TURN server hijacking, bandwidth theft | Use time-limited TURN credentials via REST API |
-| Allowing open mic without PTT enforcement | Accidental transmission of sensitive audio | Enforce PTT at UI and server level (no open mic mode) |
-| Broadcasting user location/metadata in signaling | Privacy violation during high-profile events | Minimize metadata in signaling, encrypt sensitive fields |
-
-## UX Pitfalls
-
-Common user experience mistakes in this domain.
-
-| Pitfall | User Impact | Better Approach |
-|---------|-------------|-----------------|
-| No visual feedback on PTT press | Users don't know if transmission started | Immediate visual "transmitting" indicator before audio starts |
-| Relying on audio quality for busy channel indication | Users talk over each other when busy signal not obvious | Visual busy indicator + haptic feedback on mobile |
-| Auto-unmute on channel join | Users accidentally broadcast when switching channels | Always join muted, explicit unmute required |
-| No latency indicator | Users assume system is broken when latency spikes | Show connection quality indicator (green/yellow/red) |
-| Identical UI for General vs Dispatch users | Dispatch users overwhelmed by multi-channel complexity | Separate UI patterns: single-channel for General, multi-channel grid for Dispatch |
-| No offline/reconnection handling | Network blip feels like complete failure | Graceful reconnection with state recovery |
-
-## "Looks Done But Isn't" Checklist
-
-Things that appear complete but are missing critical pieces.
-
-- [ ] **Opus audio playback:** Often missing proper jitter buffer configuration — verify latency under network jitter
-- [ ] **Cross-browser compatibility:** Often missing Safari testing — verify iOS Safari specifically, not just desktop
-- [ ] **Memory management:** Often missing explicit cleanup on disconnect — verify no leaks in 8-12 hour session
-- [ ] **State synchronization:** Often missing race condition handling — verify simultaneous PTT press doesn't break busy state
-- [ ] **TURN fallback:** Often missing TURN server configuration — verify works behind corporate NAT/firewall
-- [ ] **Dispatch multi-channel:** Often missing feedback loop prevention — verify with speakers (not just headphones)
-- [ ] **Error recovery:** Often missing reconnection logic — verify state recovery after network interruption
-- [ ] **Scalability:** Often missing distributed deployment testing — verify works with Redis cluster, multiple servers
-
-## Recovery Strategies
-
-When pitfalls occur despite prevention, how to recover.
-
-| Pitfall | Recovery Cost | Recovery Steps |
-|---------|---------------|----------------|
-| Wrong codec configuration | LOW | Update Opus encoder/decoder parameters, redeploy — no data migration needed |
-| Wrong SFU selected | HIGH | Replace media server infrastructure, rewrite media handling code — major refactor |
-| Memory leaks discovered in production | MEDIUM | Add explicit cleanup code, force periodic reconnection — requires code changes + deployment |
-| TURN costs exceed budget | MEDIUM | Implement connection quality routing, optimize for direct connections — architecture adjustment |
-| Safari incompatibility discovered late | MEDIUM | Add adapter.js, rewrite signaling for compatibility — testing across all browsers |
-| State desynchronization at scale | HIGH | Implement distributed state management (Redis), add reconciliation logic — architecture change |
-| Audio feedback in dispatch mode | LOW | Enforce headphone policy, add feedback detection — policy + UI changes |
-| Jitter buffer causing high latency | LOW | Reconfigure jitter buffer parameters — configuration change only |
-
-## Pitfall-to-Phase Mapping
-
-How roadmap phases should address these pitfalls.
-
-| Pitfall | Prevention Phase | Verification |
-|---------|------------------|--------------|
-| Opus codec misconfiguration | Phase 1 (PoC) | Measure latency under 100ms for codec processing, no "invalid packet" errors |
-| Browser compatibility (Safari) | Phase 1 (PoC) | Test on Chrome, Firefox, Safari (desktop + iOS) before feature work |
-| Jitter buffer latency | Phase 1 (PoC) | Total PTT latency (press to hear) under 300ms in controlled network |
-| SFU architecture selection | Phase 2 (Architecture) | Benchmark with 500 simulated users, plan horizontal scaling path |
-| TURN cost optimization | Phase 2 (Architecture) | TURN usage under 20% in testing, architecture minimizes connection count |
-| State synchronization at scale | Phase 2 (Architecture) | Test with Redis cluster, verify state consistency under race conditions |
-| Memory leaks | Phase 3 (Features) | 8-hour session test with memory profiling, no unbounded growth |
-| Audio feedback (dispatch) | Phase 3 (Features) | Test dispatch multi-channel with speakers, verify feedback detection |
-
-## Sources
-
-**WebRTC Architecture and Scaling:**
-- [P2P, SFU, MCU, Hybrid: Which WebRTC Architecture Fits Your 2026 Roadmap?](https://www.forasoft.com/blog/article/webrtc-architecture-guide-for-business-2026)
-- [Complete Guide to WebRTC Scalability in 2025](https://antmedia.io/webrtc-scalability/)
-- [WebRTC Tech Stack Guide: Architecture for Scalable Real-Time Applications](https://webrtc.ventures/2026/01/webrtc-tech-stack-guide-architecture-for-scalable-real-time-applications/)
-- [Different WebRTC server allocation schemes for scaling group calling](https://bloggeek.me/webrtc-server-allocation-scaling/)
-
-**Opus Codec Configuration:**
-- [FreeSWITCH And The Opus Audio Codec](https://developer.signalwire.com/freeswitch/FreeSWITCH-Explained/Modules/mod-opus/FreeSWITCH-And-The-Opus-Audio-Codec_12517398/)
-- [Opus Discontinuous Transmission (DTX) - What is it and how does it work?](https://getstream.io/resources/projects/webrtc/advanced/dtx/)
-- [Best practices for decoding Opus audio in real time](https://github.com/webrtc-rs/webrtc/issues/550)
-- [Decoding Opus packets](https://github.com/pion/webrtc/issues/2647)
-
-**TURN Server Costs and Optimization:**
-- [How to Optimize Costs in Large-Scale WebRTC Applications](https://cyberpanel.net/blog/how-to-optimize-costs-in-large-scale-webrtc-applications)
-- [TURN Server Costs: A Complete Guide](https://dev.to/alakkadshaw/turn-server-costs-a-complete-guide-1c4b)
-- [How Much Does It Really Cost to Build and Run a WebRTC Application?](https://webrtc.ventures/2025/10/how-much-does-it-really-cost-to-build-and-run-a-webrtc-application/)
-
-**Browser Compatibility:**
-- [WebRTC Browser Support 2025: Complete Compatibility Guide](https://antmedia.io/webrtc-browser-support/)
-- [Journey to get WebRTC working well in Safari](https://www.kirsle.net/journey-to-get-webrtc-working-well-in-safari)
-- [WebRTC on Chrome, Firefox, Edge and others on iOS](https://www.webrtc-developers.com/webrtc-on-chrome-firefox-edge-and-others-on-ios/)
-
-**Memory Leaks:**
-- [Reproducible memory leak in WebRTC reliable data channels](https://bugzilla.mozilla.org/show_bug.cgi?id=953084)
-- [WebRTC Memory Leak(?) when creating many peer connections](https://bugzilla.mozilla.org/show_bug.cgi?id=1379000)
-- [Memory leak with WebRTC streaming - NVIDIA Developer Forums](https://forums.developer.nvidia.com/t/memory-leak-with-webrtc-streaming/329619)
-- [WebRTC getUserMedia MediaRecorder Memory Leak](https://github.com/electron/electron/issues/41123)
-
-**Audio Feedback and Echo:**
-- [Echo in WebRTC; Why?](https://www.slideshare.net/MuazKhan/echo-in-webrtc-why)
-- [How to echo cancellation / noise management / in WebRTC?](https://www.webrtc-experiment.com/docs/echo-cancellation.html)
-- [WebRTC: high-pitched audio feedback when making a call](https://bugzilla.mozilla.org/show_bug.cgi?id=879095)
-
-**Jitter Buffer:**
-- [How WebRTC's NetEQ Jitter Buffer Provides Smooth Audio](https://webrtchacks.com/how-webrtcs-neteq-jitter-buffer-provides-smooth-audio/)
-- [Set adaptive Jitter in WEBRTC](https://medium.com/@selvakanimano/set-adaptive-jitter-in-webrtc-e3a9980a31cd)
-- [WebRTC and Buffers](https://getstream.io/resources/projects/webrtc/advanced/buffers/)
-
-**State Synchronization:**
-- [Scaling WebRTC Applications for High Traffic with Effective Session Management](https://moldstud.com/articles/p-scaling-webrtc-apps-with-effective-session-management)
-- [WebRTC Session Controller](https://docs.oracle.com/cd/E40972_01/doc.70/e40976/con_overview.htm)
-
-**PTT-Specific:**
-- [Push-to-Talk App Pitfalls: 6 Mistakes to Avoid](https://talker.network/push-to-talk-app-pitfalls-6-mistakes-to-avoid/)
-- [Push to Talk App: Best PTT Solution for Android & iOS](https://www.mirrorfly.com/blog/push-to-talk-sdk-for-android-ios-app/)
-
-**Latency Optimization:**
-- [Understanding WebRTC Latency: Causes, Solutions, and Optimization Techniques](https://www.videosdk.live/developer-hub/webrtc/webrtc-latency)
-- [How to Reduce WebRTC Latency in Your Applications](https://bloggeek.me/reducing-latency-webrtc/)
-- [7 WebRTC Trends Shaping Real-Time Communication in 2026](https://dev.to/alakkadshaw/7-webrtc-trends-shaping-real-time-communication-in-2026-1o07)
+**Sources:**
+- [Mixing multiparty audio from multiple peer connections (discuss-webrtc)](https://groups.google.com/d/topic/discuss-webrtc/ruhDuK8N8KA)
+- [How We Built Local Audio Streaming in Android (100ms.live)](https://www.100ms.live/blog/webrtc-audio-streaming-android)
+- [Android: Mixing multiple AudioTrack instances](https://bugsdb.com/_en/debug/2670846503c9b35bd45b53b61ade90db)
+- [Android Oboe low latency audio](https://developer.android.com/games/sdk/oboe/low-latency-audio)
 
 ---
-*Pitfalls research for: VoicePing PTT Communications Platform*
-*Researched: 2026-02-06*
+
+## Moderate Pitfalls
+
+### 6. Android API Fragmentation for Foreground Services
+
+**What goes wrong:** App builds and runs fine on Android 13 (API 33) but crashes on Android 14 (API 34) with `SecurityException: Permission Denial: startForeground requires android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK`. Or app works on API 28 but crashes on API 26 (target minimum) with missing foreground service type.
+
+**Why it happens:** Foreground service requirements evolved significantly across Android versions:
+- **API 26-27:** `startForeground()` requires ongoing notification
+- **API 28:** `FOREGROUND_SERVICE` permission required in manifest
+- **API 31:** Foreground service type parameter introduced (optional)
+- **API 34+:** Type-specific permissions MANDATORY — must request `FOREGROUND_SERVICE_MEDIA_PLAYBACK` permission in manifest AND at runtime for media playback services
+
+This creates 3 different code paths depending on API level. Missing any causes `SecurityException` on specific Android versions.
+
+**Prevention:**
+- **Phase 1 (manifest):** Declare ALL required permissions and service types:
+  ```xml
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
+  <service android:name=".PttForegroundService"
+           android:foregroundServiceType="mediaPlayback" />
+  ```
+- **Phase 1 (runtime):** Check API level and request permissions conditionally:
+  ```kotlin
+  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) { // API 34
+      if (ContextCompat.checkSelfPermission(this, Manifest.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK)
+          != PackageManager.PERMISSION_GRANTED) {
+          // Request permission
+      }
+  }
+  ```
+- **Testing:** Test on physical devices running API 26, 28, 31, 33, 34 (emulators may not enforce fully)
+
+**Detection:**
+- Crash on Android 14: `SecurityException: ... requires android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK`
+- Crash on Android 8: `IllegalStateException: foregroundServiceType not specified`
+
+**Sources:**
+- [Android foreground service changes (developer.android.com)](https://developer.android.com/develop/background-work/services/fgs/changes)
+- [Foreground service types (developer.android.com)](https://developer.android.com/develop/background-work/services/fgs/service-types)
+
+---
+
+### 7. WebSocket Heartbeat Timing in Doze Mode
+
+**What goes wrong:** User locks phone, device enters Doze mode after 5-10 minutes. WebSocket heartbeat fails to send every 30 seconds as expected (server closes connection after 60s of no heartbeat). User unlocks phone, discovers they've been disconnected for 10 minutes and missed PTT messages. Reconnection takes 5-10 seconds (ICE gathering, WebRTC negotiation).
+
+**Why it happens:** Doze mode suspends network access and defers alarms/timers to maintenance windows (every 15-30 minutes). Your 30-second heartbeat timer (likely `Handler.postDelayed()` or Kotlin coroutine `delay()`) gets deferred until next maintenance window. Foreground services EXEMPT from App Standby but NOT fully exempt from Doze mode network restrictions. Chrome on Android suspends WebSocket timers completely when screen off — similar behavior can affect native WebSocket libraries.
+
+**Prevention:**
+- **Phase 1 (foreground service):** Foreground service with partial wake lock keeps CPU awake → heartbeat timer should fire reliably
+- **Phase 2 (heartbeat mechanism):** Use `AlarmManager.setExactAndAllowWhileIdle()` for heartbeat timer (bypasses Doze restrictions):
+  ```kotlin
+  val alarmManager = getSystemService(AlarmManager::class.java)
+  val intent = PendingIntent.getBroadcast(this, 0, Intent(ACTION_HEARTBEAT), FLAGS)
+  alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, intent)
+  ```
+- **Phase 2 (resilience):** Implement server-side grace period (120s instead of 60s) to tolerate occasional missed heartbeats
+- **Phase 3 (monitoring):** Detect missed heartbeats and log to analytics: "Missed heartbeat — Doze mode interference detected"
+- **Alternative:** Use FCM high-priority push notification to wake device when PTT message arrives (requires server changes — out of scope for pure client milestone)
+
+**Detection:**
+- WebSocket disconnects after 5-10 minutes screen-off despite foreground service running
+- Logcat shows: "Heartbeat scheduled but not executed for 15 minutes"
+- User reports: "App disconnects when I lock my phone"
+
+**Sources:**
+- [Android WebSocket Doze mode issues (Qt Forum)](https://forum.qt.io/topic/90939/sending-keep-alive-messages-on-android-even-if-the-device-is-in-sleep-doze-mode)
+- [WebSocket connections and Android Doze (Ably)](https://ably.com/topic/websockets-android)
+- [Android AlarmManager and Doze mode](https://developer.android.com/develop/background-work/services/alarms)
+
+---
+
+### 8. Cellular Network NAT Traversal Failures
+
+**What goes wrong:** App works perfectly on WiFi but fails to connect on 4G/5G cellular. User sees "Connecting..." spinner indefinitely. WebRTC ICE gathering times out or only gathers `srflx` (server reflexive) candidates but connection fails. Or connection works but drops after 2-3 minutes when carrier NAT mapping times out.
+
+**Why it happens:** Cellular networks use aggressive NAT (often Carrier-Grade NAT / CGN) with restrictive policies:
+- **Symmetric NAT:** Most restrictive type, requires TURN relay (STUN alone insufficient)
+- **Short NAT mapping timeout:** 30-60 seconds — if no traffic, mapping expires and connection drops
+- **Different NAT types across carriers:** AT&T, Verizon, T-Mobile have different policies
+- **Dual-SIM devices:** ICE gathering on wrong interface causes STUN storm, carrier blocks STUN packets
+
+**Dual-SIM issue:** When using 'all' interfaces for ICE candidates, device queries both SIMs → sends STUN requests to both → triggers carrier firewall → STUN blocked → ICE fails.
+
+**Prevention:**
+- **Phase 1 (TURN server):** Ensure mediasoup server has TURN server configured (not just STUN). Verify TURN credentials passed to Android client via WebSocket signaling.
+- **Phase 1 (ICE configuration):** Configure ICE with proper candidate gathering:
+  ```kotlin
+  val iceServers = listOf(
+      PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer(),
+      PeerConnection.IceServer.builder("turn:your-server.com:3478")
+          .setUsername("user")
+          .setPassword("pass")
+          .createIceServer()
+  )
+  ```
+- **Phase 2 (network detection):** Detect cellular vs WiFi and adjust ICE timeout (cellular needs 10-15s vs WiFi 5s)
+- **Phase 3 (keepalive):** Send periodic dummy packets (every 20s) to keep NAT mapping alive during silent periods
+- **Testing:** Test on physical devices with 4G/5G SIM cards from multiple carriers (AT&T, Verizon, T-Mobile). Disable WiFi to force cellular.
+
+**Detection:**
+- Connection works on WiFi, fails on cellular
+- ICE state stuck in `checking` or `failed`
+- Logcat shows: `No TURN candidates gathered` or `ICE gathering timeout`
+- User reports: "App doesn't work when I'm in the field without WiFi"
+
+**Sources:**
+- [WebRTC NAT traversal on cellular (moldstud.com)](https://moldstud.com/articles/p-troubleshooting-webrtc-ice-candidates-common-issues-and-solutions-explained)
+- [Dual-SIM iPhone ICE connectivity issue](https://issues.webrtc.org/issues/42221045)
+- [WebRTC NAT traversal methods](https://www.liveswitch.io/blog/webrtc-nat-traversal-methods-a-case-for-embedded-turn)
+
+---
+
+### 9. Volume Button Capture Conflicts with System Volume
+
+**What goes wrong:** User configures volume keys as PTT buttons. Pressing volume down starts PTT transmission BUT also lowers media volume to zero (can't hear incoming PTT audio). Or Android's "Select to Speak" accessibility feature is enabled and volume buttons control TTS volume instead of media volume, causing confusing behavior.
+
+**Why it happens:** Android volume buttons are hardware keys that generate `KEYCODE_VOLUME_DOWN` / `KEYCODE_VOLUME_UP` events. By default, these adjust the active audio stream volume (media/call/alarm). To use volume keys for PTT, you must intercept the key event in `onKeyDown()` and return `true` to consume it (prevent default volume adjustment). BUT:
+- **Activity lifecycle:** Volume key interception only works when activity is in foreground. When screen is off or app in background, volume keys adjust volume normally (can't intercept).
+- **Select to Speak bug (Android 14+):** When "Select to Speak" accessibility feature is enabled, volume keys control accessibility service volume instead of media volume, even when your app intercepts the event.
+- **System volume dialog:** Even if you consume the key event, Android may still show volume slider UI (distracting).
+
+**Consequences:**
+- User presses volume down for PTT → media volume drops to zero → can't hear response
+- User enables "Select to Speak" for accessibility → volume buttons stop working as PTT (no PTT transmission triggered)
+- Confusing UX: volume slider appears during PTT transmission
+
+**Prevention:**
+- **Phase 2 (volume key PTT):** Implement volume key interception:
+  ```kotlin
+  override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+      if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN && pttEnabled) {
+          startPtt()
+          return true // Consume event
+      }
+      return super.onKeyDown(keyCode, event)
+  }
+  ```
+- **Phase 2 (workaround for system volume):** Set audio focus to `AUDIOFOCUS_GAIN` before PTT session → locks media volume
+- **Phase 3 (accessibility detection):** Detect "Select to Speak" enabled and show warning:
+  ```kotlin
+  val accessibilityManager = getSystemService(AccessibilityManager::class.java)
+  if (/* Select to Speak enabled */) {
+      showDialog("Volume keys may not work as PTT. Disable Select to Speak in Accessibility settings.")
+  }
+  ```
+- **Phase 3 (alternative PTT trigger):** Offer on-screen PTT button as fallback when volume keys unreliable
+- **Documentation:** Warn users that volume key PTT only works when screen is on (limitation of Android)
+
+**Detection:**
+- Volume slider appears when user presses volume key for PTT
+- Media volume drops to zero after repeated PTT transmissions
+- User reports: "Volume keys don't work as PTT after enabling accessibility features"
+
+**Sources:**
+- [Android volume button bug with Select to Speak](https://android.gadgethacks.com/news/android-volume-bug-confirmed-by-google-fix-coming/)
+- [Zello: Using volume key for PTT on Android](https://support.zello.com/hc/en-us/articles/230745107)
+- [Android intercepting hardware buttons](https://www.b4x.com/android/forum/threads/intercepting-hardware-buttons.135065/)
+
+---
+
+### 10. Audio Buffer Underruns with Oboe (XRuns)
+
+**What goes wrong:** User monitors 2-3 channels on older device (Samsung Galaxy A50, Snapdragon 665). Audio playback has frequent clicks, pops, and brief moments of silence every 2-3 seconds. Logcat shows `AudioTrack underrun` warnings. Audio latency increases over time from 100ms to 500ms+.
+
+**Why it happens:** Oboe uses low-latency audio with small buffer sizes (typically 2× burst size = ~5ms of audio). Audio callback runs every 5ms and must deliver next audio buffer BEFORE previous buffer exhausted. If callback takes >5ms (blocked by GC, CPU contention, heavy mixing logic), buffer underrun occurs (XRun). Common causes:
+- **Memory allocation in callback:** `new`, `malloc`, Kotlin list operations → triggers GC → callback blocked 20ms → underrun
+- **Thread locking:** Synchronization on shared state in callback → other thread holds lock → callback blocked → underrun
+- **Heavy mixing logic:** Mixing 5 channels with volume adjustment, sample rate conversion → takes 10ms → underrun
+- **File I/O in callback:** Logging to file, reading config → disk I/O → callback blocked → underrun
+
+**Low-end devices:** Budget phones (Snapdragon 4xx/6xx series) have slower CPUs → callback overhead is proportionally higher → more frequent underruns.
+
+**Prevention:**
+- **Phase 2 (Oboe implementation):** Follow real-time audio best practices:
+  - NEVER allocate memory in audio callback (pre-allocate all buffers)
+  - NEVER lock mutexes in callback (use lock-free data structures or atomic operations)
+  - NEVER perform I/O in callback (no logging, no file access)
+  - Keep callback logic under 50% of buffer duration (if buffer is 5ms, callback must complete in <2.5ms)
+- **Phase 2 (buffer sizing):** Start with larger buffer (4× burst size) for stability, optimize down to 2× after testing:
+  ```cpp
+  builder.setPerformanceMode(oboe::PerformanceMode::LowLatency);
+  builder.setFramesPerCallback(2 * burstSize); // Double buffering
+  ```
+- **Phase 3 (monitoring):** Monitor XRun count in production:
+  ```cpp
+  int32_t xruns = stream->getXRunCount();
+  if (xruns > previousXruns) {
+      logXRunEvent(); // Track in analytics
+  }
+  ```
+- **Phase 3 (fallback):** If XRun rate >10/minute, automatically increase buffer size (trade latency for stability)
+- **Testing:** Test on low-end devices (2GB RAM, Snapdragon 4xx) with 5 channels active + background CPU load
+
+**Detection:**
+- Audio clicks, pops, glitches during playback
+- Logcat: `AudioTrack: getXRunCount() returned XRun count > 0`
+- Latency increases over time (buffer backlog)
+- User reports: "Audio sounds choppy on my older phone"
+
+**Sources:**
+- [Oboe TechNote: Glitches](https://github.com/google/oboe/wiki/TechNote_Glitches)
+- [Android low latency audio with Oboe](https://developer.android.com/games/sdk/oboe/low-latency-audio)
+- [Real-time audio processing best practices](https://oboe.com/learn/c-for-audio-dsp-1qhwprx/real-time-audio-processing-1mzn463)
+
+---
+
+## Minor Pitfalls
+
+### 11. Audio Focus Loss During Phone Calls
+
+**What goes wrong:** User receives phone call while monitoring PTT channels. App continues playing incoming PTT audio during phone call (user misses important call audio or PTT audio leaks to caller). Or app loses audio focus and can't resume PTT after call ends.
+
+**Why it happens:** Android audio focus system allows multiple apps to request audio output. When phone call starts, Phone app requests `AUDIOFOCUS_GAIN` → your app receives `AUDIOFOCUS_LOSS` → should pause/stop audio. If you don't handle this, Android may forcibly duck (lower volume) your audio or route it to unexpected output.
+
+**Prevention:**
+- **Phase 2 (audio focus):** Implement `OnAudioFocusChangeListener`:
+  ```kotlin
+  val focusListener = OnAudioFocusChangeListener { focusChange ->
+      when (focusChange) {
+          AudioManager.AUDIOFOCUS_LOSS -> pausePtt() // Stop PTT
+          AudioManager.AUDIOFOCUS_GAIN -> resumePtt() // Resume PTT
+          AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> /* Pause temporarily */
+      }
+  }
+  audioManager.requestAudioFocus(focusListener, AudioManager.STREAM_VOICE_CALL,
+                                  AudioManager.AUDIOFOCUS_GAIN)
+  ```
+- **Phase 3 (notification):** Show notification: "PTT paused during phone call. Will resume after call ends."
+- **Testing:** Test with incoming call, outgoing call, and WhatsApp/Signal calls
+
+**Detection:**
+- PTT audio continues playing during phone call
+- User reports: "Caller heard my radio traffic" or "Couldn't hear my phone call"
+
+---
+
+### 12. Wake Lock Battery Drain
+
+**What goes wrong:** App keeps device awake 24/7 even when user is not actively monitoring channels. Battery drains from 100% to 0% in 8 hours (expected: 24+ hours). Device gets noticeably warm in pocket.
+
+**Why it happens:** Foreground service with `PARTIAL_WAKE_LOCK` keeps CPU awake to maintain WebSocket and audio. If wake lock is held continuously without release, CPU never enters deep sleep → high battery drain.
+
+**Prevention:**
+- **Phase 1 (wake lock management):** Only acquire wake lock when channels are actively monitored:
+  ```kotlin
+  val wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "VoicePing::PttWakeLock")
+  wakeLock.acquire(10*60*1000L /* 10 minutes */) // Timeout for safety
+  ```
+- **Phase 2 (optimization):** Release wake lock during idle periods (no active PTT for 5+ minutes)
+- **Phase 3 (monitoring):** Track wake lock duration in analytics, alert if held >12 hours continuously
+
+**Detection:**
+- Battery drain rate >10%/hour with screen off
+- Device warm to touch after 2-3 hours idle
+- Android battery stats show app as top battery consumer
+
+---
+
+### 13. Incorrect Opus Decoder Configuration
+
+**What goes wrong:** Audio sounds robotic, garbled, or has metallic artifacts. Or audio decoding fails entirely with `Opus decode error: invalid packet`.
+
+**Why it happens:** Server sends Opus at 48kHz but Android client expects 16kHz. Or server uses VBR (Variable Bit Rate) but client decoder configured for CBR. WebRTC's Opus decoder must match server encoder settings (sample rate, channels, packet duration).
+
+**Prevention:**
+- **Phase 1 (decoder config):** Match server Opus configuration exactly:
+  - Sample rate: 48kHz (server uses 48kHz per PROJECT.md)
+  - Channels: 1 (mono) for PTT
+  - Packet duration: 20ms (standard for WebRTC)
+  - FEC: Enabled (server has FEC enabled)
+  - DTX: Disabled (server has DTX disabled)
+- **Testing:** Verify audio quality with side-by-side web client (known-good) vs Android client
+
+**Detection:**
+- Audio sounds robotic or garbled
+- Decoding errors in logcat
+- User reports: "Audio sounds weird on Android but fine on web"
+
+---
+
+## OEM-Specific Issues
+
+### Xiaomi/MIUI
+
+**Primary issue:** MIUI kills background apps aggressively even with foreground service + battery optimization disabled.
+
+**Required mitigation (all must be configured by user):**
+1. Disable battery optimization: Settings → Battery & Performance → App battery saver → VoicePing → No restrictions
+2. Enable Autostart: Settings → Apps → Manage apps → VoicePing → Autostart → Enable
+3. Lock app in recent apps: Recent apps → Drag VoicePing down → Tap lock icon
+4. Disable "Put app to sleep after lock screen": Settings → Battery & Performance → App battery saver → Disable
+
+**Detection:** `Build.MANUFACTURER == "Xiaomi"` or check for MIUI ROM
+
+**In-app guidance:** Show Xiaomi-specific setup wizard with screenshots on first launch
+
+---
+
+### Samsung One UI
+
+**Primary issue:** "Sleeping Apps" and "Deep Sleeping Apps" features put unused apps to sleep, killing foreground services.
+
+**Required mitigation:**
+1. Remove from Sleeping Apps: Settings → Battery → Background usage limits → Sleeping apps → Remove VoicePing
+2. Disable "Put unused apps to sleep": Settings → Battery → Background usage limits → Toggle off
+
+**One UI 8+ (2026):** AI-powered battery optimization is more aggressive, automatically moves apps to deep sleep after 3 days of no use.
+
+**Detection:** `Build.MANUFACTURER == "samsung"`
+
+**In-app guidance:** Show Samsung-specific setup wizard with device screenshots
+
+---
+
+### Huawei EMUI / HarmonyOS
+
+**Primary issue:** PowerGenie task killer and App Launch Manager kill apps not on whitelist.
+
+**Required mitigation:**
+1. App Launch Manager: Settings → Battery → App launch → VoicePing → Disable "Manage automatically" → Enable "Run in background"
+2. Battery optimization: Settings → Battery optimization → VoicePing → Don't allow
+
+**PowerGenie:** EMUI 9+ has hard-coded app killer that ignores foreground services unless app is on system whitelist (can't be controlled by user or app).
+
+**Detection:** `Build.MANUFACTURER == "HUAWEI"` or check for EMUI/HarmonyOS
+
+**In-app guidance:** Show Huawei-specific setup wizard; warn that some EMUI versions may still kill app
+
+---
+
+### OnePlus OxygenOS
+
+**Primary issue:** Bluetooth audio routing (`setAudioRoute()`) doesn't work reliably on OnePlus devices.
+
+**Workaround:** Use `AudioManager.startBluetoothSco()` + explicit routing instead of relying on automatic routing.
+
+**Detection:** `Build.MANUFACTURER == "OnePlus"`
+
+---
+
+### Oppo / Realme ColorOS
+
+**Primary issue:** Similar to Xiaomi — aggressive battery optimization with "Sleeping apps" feature.
+
+**Required mitigation:**
+1. Disable battery optimization: Settings → Battery → App Battery Saver → VoicePing → No restrictions
+2. Startup manager: Settings → Security → Startup Manager → VoicePing → Enable
+
+**Detection:** `Build.MANUFACTURER == "OPPO"` or `"Realme"`
+
+---
+
+## Phase Mapping
+
+| Phase | Pitfalls to Address | Why This Phase |
+|-------|---------------------|----------------|
+| **Phase 1: WebRTC Foundation** | #1 (mediasoup-client native), #4 (memory leaks), #6 (API fragmentation), #13 (Opus config) | Core WebRTC integration must be stable before building UI/features on top. Memory leak prevention is architectural. |
+| **Phase 2: Foreground Service & Audio** | #2 (OEM battery killers), #5 (multi-channel mixing), #7 (WebSocket Doze), #10 (Oboe XRuns), #11 (audio focus), #12 (wake lock) | Background operation and audio reliability are critical for pocket radio use case. |
+| **Phase 3: Hardware PTT & Bluetooth** | #3 (Bluetooth SCO), #9 (volume button conflicts) | Hardware integration comes after core audio works. Bluetooth is complex and can be iterated. |
+| **Phase 4: Network Resilience** | #8 (cellular NAT traversal) | Network edge cases addressed after core functionality proven on WiFi. |
+
+---
+
+## Research Confidence Assessment
+
+| Pitfall | Confidence | Source Quality |
+|---------|------------|----------------|
+| mediasoup-client native | HIGH | Official mediasoup forums, GitHub issues with crash reports |
+| OEM battery killers | HIGH | dontkillmyapp.com (community-maintained), official Android docs |
+| Bluetooth SCO | HIGH | Multiple WebRTC project issue trackers (Signal, flutter-webrtc) |
+| WebRTC memory leaks | HIGH | Chromium bug tracker, WebRTC code reviews |
+| Multi-channel mixing | MEDIUM | Community forums, need to verify with your specific architecture |
+| API fragmentation | HIGH | Official Android developer docs |
+| WebSocket Doze | MEDIUM | Community reports, need device testing to confirm |
+| Cellular NAT | HIGH | WebRTC documentation, carrier NAT is well-known issue |
+| Volume button conflicts | HIGH | Google confirmed bug, community workarounds |
+| Oboe XRuns | HIGH | Official Oboe documentation |
+| Audio focus | HIGH | Official Android audio docs |
+| Wake lock drain | MEDIUM | Standard Android practice |
+| Opus config | MEDIUM | Verified server uses 48kHz from PROJECT.md |
+
+---
+
+## Open Questions for Phase-Specific Research
+
+1. **mediasoup-client wrapper maintenance status** — Check GitHub last commit date, open issues count, maintainer responsiveness for selected wrapper before committing (Phase 1 acceptance criteria)
+
+2. **Multi-channel mixing architecture** — Does chosen mediasoup-client wrapper expose API for custom audio mixing? Or must we work around WebRTC's internal AudioTrack? (Phase 2 spike)
+
+3. **Bluetooth PTT button event handling** — How do different Bluetooth headset manufacturers send PTT button events? (Some use media button, some use vendor-specific commands) (Phase 3 research)
+
+4. **TURN server capacity** — Current TURN server can handle 30%+ of Android clients needing relay on cellular? Verify TURN server capacity before production. (Phase 4)
+
+---
+
+**Recommendations:**
+1. **Phase 1 acceptance gate:** Build minimal WebRTC connection demo with selected mediasoup wrapper, test on 3 physical devices (different OEMs, API levels) before proceeding to full implementation
+2. **Phase 2 OEM setup wizard:** Make OEM-specific battery optimization setup mandatory on first launch for Xiaomi/Samsung/Huawei devices (block app use until configured)
+3. **Phase 3 Bluetooth pre-warming:** Keep SCO connection alive during entire PTT session (trade battery for zero-latency PTT response)
+4. **Phase 4 cellular testing:** Dedicate test devices with SIM cards from AT&T, Verizon, T-Mobile for real-world NAT traversal validation
+
+---
+
+*Researched: 2026-02-08*
+*Next: This research informs roadmap phase structure and per-phase acceptance criteria*
