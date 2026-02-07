@@ -92,10 +92,12 @@ Plans:
   3. Dispatch user can transmit on any monitored channel using PTT
   4. Dispatch user sees visual indicators showing which channels have active speakers
   5. Dispatch user hears audio from all unmuted channels without audio mixing artifacts
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] TBD - Will be created during plan-phase
+- [ ] 04-01-PLAN.md -- Server-side dispatch channel limit bypass, compact ChannelCard variant with mute toggle and activity indicator
+- [ ] 04-02-PLAN.md -- DispatchMonitoring page, ChannelGrid component, route wiring, navigation links, grid CSS
+- [ ] 04-03-PLAN.md -- Build verification, integration fixes, and visual verification checkpoint
 
 ## Progress
 
@@ -107,8 +109,8 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | 1. WebRTC Audio Foundation | 8/8 | ✓ Complete | 2026-02-06 |
 | 2. User Management & Access Control | 8/8 | ✓ Complete | 2026-02-06 |
 | 3. Browser UI for General Users | 5/5 | ✓ Complete | 2026-02-07 |
-| 4. Dispatch Multi-Channel Monitoring | 0/TBD | Not started | - |
+| 4. Dispatch Multi-Channel Monitoring | 0/3 | Planned | - |
 
 ---
 *Roadmap created: 2026-02-06*
-*Last updated: 2026-02-06*
+*Last updated: 2026-02-07*
