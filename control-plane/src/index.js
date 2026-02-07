@@ -1284,30 +1284,48 @@ app.post("/api/router/token", requireAuth, requireProfileComplete, async (req, r
   if (!eventId) {
     return res.status(400).json({ error: "Missing eventId" });
   }
-  const membership = await prisma.eventMembership.findUnique({
-    where: { userId_eventId: { userId: req.user.id, eventId } }
-  });
-  if (!membership || membership.status !== "ACTIVE") {
-    return res.status(403).json({ error: "Not active in event" });
-  }
-  const channelMemberships = await prisma.channelMembership.findMany({
-    where: { userId: req.user.id, status: "ACTIVE", channel: { eventId } },
-    select: { channelId: true }
-  });
-  const channelIds = channelMemberships.map((entry) => entry.channelId);
 
-  // Fetch channel names for general users (Phase 04-02)
-  const channelsData = await prisma.channel.findMany({
-    where: { id: { in: channelIds } },
-    select: { id: true, name: true }
-  });
-  const channelNames = Object.fromEntries(channelsData.map(c => [c.id, c.name]));
+  const isGlobalAdmin = req.user.globalRole === "ADMIN";
+
+  // ADMIN users bypass event membership requirement — full access to all events
+  let role;
+  let channelIds;
+  let channelsData;
+
+  if (isGlobalAdmin) {
+    role = "ADMIN";
+    // Get ALL channels in the event
+    channelsData = await prisma.channel.findMany({
+      where: { eventId },
+      select: { id: true, name: true }
+    });
+    channelIds = channelsData.map((c) => c.id);
+  } else {
+    const membership = await prisma.eventMembership.findUnique({
+      where: { userId_eventId: { userId: req.user.id, eventId } }
+    });
+    if (!membership || membership.status !== "ACTIVE") {
+      return res.status(403).json({ error: "Not active in event" });
+    }
+    role = membership.role;
+    const channelMemberships = await prisma.channelMembership.findMany({
+      where: { userId: req.user.id, status: "ACTIVE", channel: { eventId } },
+      select: { channelId: true }
+    });
+    channelIds = channelMemberships.map((entry) => entry.channelId);
+    channelsData = await prisma.channel.findMany({
+      where: { id: { in: channelIds } },
+      select: { id: true, name: true }
+    });
+  }
+
+  const channelNames = Object.fromEntries(channelsData.map((c) => [c.id, c.name]));
 
   const token = jwt.sign(
     {
       userId: req.user.id,
       eventId,
-      role: membership.role,
+      role,
       channelIds
     },
     ROUTER_JWT_SECRET,
