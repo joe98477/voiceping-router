@@ -422,7 +422,7 @@ export class SignalingHandlers {
       const producerKey = `${ctx.userId}:${channelId}`;
       this.userProducers.set(producerKey, producerId);
 
-      this.sendResponse(ctx, message.id, { producerId });
+      this.sendResponse(ctx, message.id, { id: producerId });
 
       logger.info(`Created producer ${producerId} for ${ctx.userId} in channel ${channelId}`);
     } catch (err) {
