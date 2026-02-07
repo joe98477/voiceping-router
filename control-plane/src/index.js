@@ -226,7 +226,7 @@ app.use(
     store: new RedisStore({ client: redisClient }),
     secret: SESSION_SECRET,
     resave: false,
-    saveUninitialized: false,
+    saveUninitialized: true,
     cookie: { httpOnly: true, sameSite: "lax", secure: sessionCookieSecure }
   })
 );
@@ -538,8 +538,9 @@ app.post("/api/auth/login", async (req, res) => {
   if (!valid) {
     return res.status(401).json({ error: "Invalid credentials" });
   }
+  console.log("[login] session BEFORE modify:", JSON.stringify(req.session), "cookie.secure:", req.session.cookie.secure);
   req.session.userId = user.id;
-  console.log("[login] session id:", req.sessionID, "userId:", user.id);
+  console.log("[login] session AFTER modify:", JSON.stringify(req.session));
   const updated = await prisma.user.update({
     where: { id: user.id },
     data: { lastLoginAt: new Date() }
