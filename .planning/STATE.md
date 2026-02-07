@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-08)
 ## Current Position
 
 Phase: 5 of 10 (Android Project Setup & WebRTC Foundation)
-Plan: 2 of 5 complete
+Plan: 3 of 5 complete
 Status: In progress
-Last activity: 2026-02-08 — Completed 05-02-PLAN.md (Authentication & login flow)
+Last activity: 2026-02-08 — Completed 05-03-PLAN.md (Networking layer)
 
-Progress: [████████░░] 40% (Milestone 1 complete: 4/10 phases shipped)
+Progress: [████████░░] 40% (Milestone 1 complete: 4/10 phases shipped, Milestone 2: 3/5 Phase 5 plans complete)
 
 ## Performance Metrics
 
@@ -58,6 +58,10 @@ Key decisions carrying forward to Milestone 2:
 | Store credentials (email/password) for silent refresh | Server requires email/password for token refresh. EncryptedSharedPreferences secure (hardware-backed Keystore). Matches "always persist session" decision. | 05 | 02 |
 | Inline validation errors under fields | Per user decision. Errors stay visible, don't auto-dismiss like toasts. Better UX and accessibility. | 05 | 02 |
 | BuildConfig.SERVER_URL default 10.0.2.2:3000 | Android emulator's host loopback. Works out-of-box for dev, configurable for production. | 05 | 02 |
+| JWT via Sec-WebSocket-Protocol header | Server expects 'voiceping, <token>' format in handleProtocols callback | 05 | 03 |
+| 10-second timeout for signaling requests | Prevents hanging on server failures, generous buffer for network latency | 05 | 03 |
+| 25-second heartbeat interval | Balances disconnect detection (within 30s) with battery efficiency | 05 | 03 |
+| MediasoupClient pattern skeleton with TODOs | Exact library API uncertain, pattern documents architecture for Plan 05 integration | 05 | 03 |
 
 ### Pending Todos
 
@@ -72,7 +76,7 @@ Deferred to future milestones:
 ## Session Continuity
 
 Last session: 2026-02-08
-Stopped at: Completed 05-02-PLAN.md (Authentication & login flow)
+Stopped at: Completed 05-03-PLAN.md (Networking layer)
 Resume file: None
 
 **Milestone 1 (WebRTC Audio Rebuild + Web UI) COMPLETE:**
@@ -83,9 +87,12 @@ Resume file: None
 - Total: 26 plans, ~4.2 hours execution time
 
 **Milestone 2 (Android Client App) IN PROGRESS:**
-- Phase 5: Android Project Setup & WebRTC Foundation (2/5 plans complete)
+- Phase 5: Android Project Setup & WebRTC Foundation (3/5 plans complete)
   - 05-01: Android project foundation ✓
   - 05-02: Authentication & login flow ✓
+  - 05-03: Networking layer (WebSocket signaling, mediasoup client) ✓
+  - 05-04: Channel join & audio playback (pending)
+  - 05-05: Channel list UI with team grouping (pending)
 - Phase 6: Single-Channel PTT & Audio Transmission (pending)
 - Phase 7: Foreground Service & Background Audio (pending)
 - Phase 8: Multi-Channel Monitoring & Scan Mode (pending)
