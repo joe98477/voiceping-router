@@ -1,0 +1,30 @@
+# Dependencies - reinstalled inside containers
+node_modules
+web-ui/node_modules
+control-plane/node_modules
+
+# Git
+.git
+.gitignore
+
+# Planning docs
+.planning
+
+# IDE
+.vscode
+.idea
+
+# Build output
+dist
+
+# Environment files (passed via --env-file)
+.env
+.env.*
+!.env.example
+!.env.test.example
+
+# Certificates (mounted as volumes)
+deploy/nginx/certs
+
+# Test artifacts
+coverage
