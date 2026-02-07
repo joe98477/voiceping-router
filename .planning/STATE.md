@@ -2,289 +2,57 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-06)
+See: .planning/PROJECT.md (updated 2026-02-08)
 
 **Core value:** Reliable, secure real-time audio communication for coordinating 1000+ distributed team members during high-profile events where security and uptime are critical
-**Current focus:** ALL PHASES COMPLETE — Milestone 1 finished
+**Current focus:** Milestone v2.0 — Android Client App
 
 ## Current Position
 
-Phase: 4 of 4 (Dispatch Multi-Channel Monitoring) — COMPLETE
-Plan: 03 of 03 complete
-Status: ALL PHASES COMPLETE
-Last activity: 2026-02-07 — Phase 4 complete, human checkpoint approved
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-02-08 — Milestone v2.0 started
 
-Progress: [██████████] 100% (26 plans complete)
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
-**Velocity:**
+**Milestone 1 Velocity:**
 - Total plans completed: 26
 - Average duration: 9.6 minutes
 - Total execution time: ~4.2 hours
-
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 01 | 8 | 93 min | 11.6 min |
-| 02 | 8 | 38 min | 4.8 min |
-| 03 | 5 | 73 min | 14.6 min |
-| 04 | 3 | 44 min | 14.7 min |
-
-**Recent Trend:**
-- Last 5 plans: 03-05 (~60 min), 04-01 (4 min), 04-02 (5 min), 04-03 (~30 min)
-- Trend: Non-interactive plans consistently fast (3-5 min); checkpoint plans with human interaction + fixes take 30-60 min
-
-*Updated after each plan completion*
 
 ## Accumulated Context
 
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
+Key decisions carrying forward to Milestone 2:
 
-- Rebuild audio subsystem, keep everything else (Current audio is broken; user management and structure work well)
-- Web-first, mobile apps later (Faster to market, WebRTC works in browsers, native apps can use same backend)
-- Server-side decryption acceptable (Enables recording, compliance; servers in trusted environment)
-
-**From 01-01 execution:**
-
-| ID | Decision | Rationale | Impact |
-|----|----------|-----------|--------|
-| DEP-001 | Upgraded Node.js from v8.16.0 to v20 LTS | mediasoup requires Node.js 18+ for C++ worker compilation | Breaking change, but necessary for modern WebRTC libraries |
-| DEP-002 | Replaced all legacy dependencies with modern equivalents | Node 8 dependencies are unmaintained and have security vulnerabilities | Complete dependency refresh, removed 7 legacy packages, added 10 modern ones |
-| ARCH-001 | Created src/shared/ directory for types shared between server and client | Signaling protocol must be identical on both sides | Establishes pattern for all future shared code |
-| CONFIG-001 | Configured Opus with 48kHz, 20ms ptime, usedtx=0 | Per research recommendations for real-time voice (can optimize to 10ms if needed) | Sets audio quality baseline for all channels |
-| BUILD-001 | Excluded legacy src/lib from TypeScript compilation | Legacy code uses Node 8 patterns incompatible with strict TypeScript 5 | Old code preserved but not compiled; new code in src/server and src/shared |
-
-**From 01-02 execution:**
-
-| ID | Decision | Rationale | Impact |
-|----|----------|-----------|--------|
-| DEP-003 | Added Winston logger module for structured logging | mediasoup operations need module-specific logging for debugging worker/router/transport lifecycle | All mediasoup modules use child loggers with labels |
-| ARCH-002 | Round-robin worker selection instead of random | Round-robin provides more even load distribution across workers | Worker selection is deterministic and balanced |
-| CONFIG-002 | Opus codec requires channels: 2 in codec capabilities | mediasoup's supported Opus format requires channels: 2, rtcpFeedback arrays | Mono configuration applied at producer level, not codec capability level |
-| PTT-001 | Producers and consumers start paused by default | PTT button not pressed = no audio transmission | Resume/pause methods control PTT state |
-
-**From 01-03 execution:**
-
-| ID | Decision | Rationale | Impact |
-|----|----------|-----------|--------|
-| STATE-001 | Redis v4 async/await API | Modern promise-based API replaces legacy callback pattern | All state operations use async/await, cleaner code |
-| STATE-002 | Dedicated pub/sub clients | Redis v4 requires separate client instances for pub/sub | ChannelStateManager creates dedicated clients for pub/sub notifications |
-| LOCK-001 | Fail-safe lock denial on Redis errors | When Redis operations fail, deny lock acquisition | Prevents multiple speakers if state management fails |
-| LOCK-002 | Speaker lock TTL of 30s | Balances preventing deadlocks vs allowing reasonable PTT hold | Auto-expiry prevents stuck locks on client crashes |
-| SESSION-001 | Session auto-expiry with 1-hour TTL | Automatic cleanup of stale sessions | Redis handles session cleanup without manual intervention |
-
-**From 01-04 execution:**
-
-| ID | Decision | Rationale | Impact |
-|----|----------|-----------|--------|
-| DEP-004 | Installed @types/jsonwebtoken for TypeScript JWT type definitions | jsonwebtoken package lacks bundled types | Enables proper type checking for JWT verification and payload extraction |
-| SIG-001 | WebSocket server at dedicated /ws path | Per user decision for dedicated WebSocket channel for WebRTC signaling | Clear separation from HTTP endpoints, explicit signaling path |
-| SIG-002 | Three JWT token locations: Authorization header, query param, sec-websocket-protocol | Authorization header is standard, query param for convenience, sec-websocket-protocol for legacy client compatibility | Flexible authentication supports multiple client implementations |
-| SIG-003 | 30-second heartbeat interval with ping/pong | Detects dead connections from network failures or client crashes | Automatic cleanup of stale connections prevents resource leaks |
-| PTT-002 | PTT_DENIED message sent to blocked clients with current speaker info | Per plan requirement to show "visual message showing [username] is speaking" when PTT denied | Clients receive denial reason with speaker identity for user feedback |
-| SHUTDOWN-001 | Graceful shutdown closes resources in reverse initialization order | WebSocket → HTTP → ChannelState → Workers → Redis ensures clean teardown | SIGTERM/SIGINT handled gracefully, proper cleanup on deployment/restart |
-
-**From 01-05 execution:**
-
-| ID | Decision | Rationale | Impact |
-|----|----------|-----------|--------|
-| CODEC-001 | Disable Opus DTX (opusDtx: false) in audio production | Per research recommendations: DTX causes first-word cutoff in PTT scenarios by cutting silent packets | Critical for PTT audio quality; ensures all audio transmitted immediately on PTT press |
-| CODEC-002 | Enable Opus FEC (opusFec: true) in audio production | Forward Error Correction improves audio quality over lossy networks | Better audio quality at cost of slightly higher bandwidth |
-| CODEC-003 | Mono 48kHz audio with echo cancellation, noise suppression, AGC | PTT voice communication doesn't benefit from stereo; 48kHz is Opus native sample rate | Optimal quality/bandwidth balance for real-time voice; processing improves audio clarity |
-| CLIENT-001 | Request-response correlation with 10-second timeout | WebSocket signaling needs to match responses to requests; 10s balances network delays vs UX | Enables async request/response pattern over WebSocket; prevents indefinite hangs |
-| CLIENT-002 | Permission API with Safari fallback for microphone access | navigator.permissions.query not supported in Safari; check permission before getUserMedia for better UX | Graceful degradation across browsers; better UX by showing permission state early |
-| CLIENT-003 | Track mute via track.enabled instead of stop() | PTT toggle needs fast enable/disable without re-requesting microphone permission | Efficient PTT toggle; no permission prompts on each press |
-
-**From 01-06 execution:**
-
-| ID | Decision | Rationale | Impact |
-|----|----------|-----------|--------|
-| UX-001 | Optimistic UI for instant PTT feedback | Physical walkie-talkie feel requires immediate visual/audio response | Button state changes before server confirms, reverts if denied |
-| UX-002 | Framework-agnostic vanilla TypeScript components | PttButton will be wrapped in React for web-ui in Phase 3 | Components use plain DOM APIs, no framework dependencies |
-| UX-003 | Configurable audio tones with folder/naming convention | Per user's specific idea for admin-uploadable event-specific audio prompts | Supports /audio/{tone}.mp3 and /audio/events/{eventId}/{tone}.mp3 paths |
-| UX-004 | Busy state auto-reverts after 3 seconds | Prevent button from staying stuck in blocked state | User can retry PTT after brief cooldown |
-| UX-005 | Controller creates button with bound callbacks | Simplifies initialization and ensures proper method binding | buttonContainer passed in options instead of pre-created button |
-
-**From 01-07 execution:**
-
-| ID | Decision | Rationale | Impact |
-|----|----------|-----------|--------|
-| RECONNECT-001 | Exponential backoff with 30s max delay and 0-500ms jitter | Fast recovery (1s initial) balanced with preventing server overload during outages; jitter prevents thundering herd when many clients reconnect simultaneously | Reconnection delays: 1s, 2s, 4s, 8s, 16s, 30s (cap); prevents coordinated reconnection storms |
-| RECONNECT-002 | Message queue during reconnection (max 100 messages) | Ensures no lost PTT requests when users press button during brief network disruption | Seamless UX during reconnection; prevents memory issues with queue size limit |
-| RECONNECT-003 | Stale PTT message filtering (>2s threshold) | PTT messages older than 2 seconds represent outdated button state (user likely released button) | Prevents replaying stale actions after reconnection; maintains button state accuracy |
-| RECONNECT-004 | Clean disconnect does NOT trigger reconnection | User-initiated disconnect (e.g., leaving channel) should NOT auto-reconnect | Only unclean closes (network loss, server crash) trigger automatic reconnection |
-| ARCH-003 | ISignalingClient interface for type compatibility | Enables ReconnectingSignalingClient to be drop-in replacement for SignalingClient in existing code | Type-safe wrapper pattern; no changes needed to MediasoupDevice or TransportClient consumers |
-| RECONNECT-005 | Session recovery restores PTT lock if user was transmitting | If user was pressing PTT button when network disconnected, re-acquire speaker lock after reconnection | Maintains seamless UX; user doesn't need to release and re-press button after brief network blip |
-
-**From 01-08 execution:**
-
-| ID | Decision | Rationale | Impact |
-|----|----------|-----------|--------|
-| DEPLOY-001 | Nginx reverse proxy terminates TLS and proxies WSS to WS on Node.js server | Standard production pattern for SEC-02 (WSS with TLS/SSL): nginx handles TLS/SSL, Node.js server operates with plain HTTP/WS internally | TLS termination at nginx layer is simpler, more secure, and more performant than handling TLS in Node.js; satisfies SEC-02 requirement |
-| DEPLOY-002 | Multi-stage Docker build: builder stage compiles TypeScript, production stage copies only dist/ and production node_modules | Builder stage installs all deps (including devDependencies) and compiles TypeScript; production stage copies only runtime artifacts | Smaller final image (no TypeScript, no dev tools, no source code); faster deployments |
-| DEPLOY-003 | Self-signed certificates for development with SAN for localhost and 127.0.0.1 | Modern browsers require SAN (Subject Alternative Name) for certificate validation; self-signed certs enable local HTTPS/WSS testing | Enables development testing of WSS without purchasing real certificates; browser security warnings expected |
-| DEPLOY-004 | esbuild for browser bundling (simple, fast, no complex build system) | Test page needs browser-compatible bundle; esbuild is simple and fast for Phase 1 testing | No complex webpack/vite configuration needed for test page; Phase 3 (Browser UI) will use proper production build system |
-| TEST-001 | Test page served only in development mode (NODE_ENV !== 'production') | Production deployments should not expose internal testing tools | Routes check NODE_ENV before serving test page; security best practice |
-| TEST-002 | Two-user test panels for real-time PTT interaction testing | Simulates real PTT interaction without complex test harness; each panel has own ConnectionManager instance | Enables comprehensive Phase 1 verification: two users in same channel, PTT arbitration (busy state), speaker notifications, reconnection |
-| TEST-003 | Latency measurement with performance.now() and audio element 'playing' event | Record timestamp when PTT button pressed, calculate difference when audio starts playing | Enables verification of <300ms latency requirement (Phase 1 Success Criterion #2) |
-
-**From 02-01 execution:**
-
-| ID | Decision | Rationale | Impact |
-|----|----------|-----------|--------|
-| AUTH-001 | Admin role does NOT have PTT priority | Per user decision: Admin role is management, not real-time communication | Admin can force-disconnect and manage channels, but cannot interrupt speakers |
-| AUTH-002 | Permission checks at channel join time only | No per-PTT-action overhead per user decision; balances security with performance | Enables <300ms PTT latency; heartbeat refresh catches revocations |
-| AUTH-003 | 30-second heartbeat-based permission refresh interval | Balances Redis load vs revocation delay; matches existing heartbeat infrastructure | Catches permission changes within 30s without per-action database queries |
-| AUTH-004 | 1-hour JWT token TTL combined with heartbeat sync | Balances security (fresh permissions) vs authentication overhead | Users stay authenticated for session duration; heartbeat ensures fresh permissions |
-| AUDIT-001 | Non-blocking audit logging with fire-and-forget pattern | Audit logging must never break core PTT functionality | log() method wrapped in try/catch, never throws; Redis failures logged but ignored |
-| AUDIT-002 | Redis audit log capped at 10,000 entries with LTRIM | Prevents unbounded growth while keeping recent history | Rolling window of recent events; older events exported to control-plane database |
-| CONFIG-003 | 40-80ms jitter buffer configuration range | Per user constraint for network reliability on degraded networks | Server-side buffering smooths packet arrival times; improves audio quality on cellular/high-jitter networks |
-| REDIS-001 | Redis key patterns match control-plane conventions | u.{userId}.g for user channels, g.{channelId}.u for channel users | Seamless integration with existing control-plane syncUserChannelsToRedis |
-
-**From 02-02 execution:**
-
-| ID | Decision | Rationale | Impact |
-|----|----------|-----------|--------|
-| RATE-001 | Progressive slowdown instead of hard lockout | Legitimate users should never be permanently blocked. Exponential backoff (1s, 2s, 4s, 8s, 16s, 30s) slows brute force while keeping legitimate users unblocked after brief delay | Rate limiting is lenient, security through slowdown not hard denial |
-| RATE-002 | Fail-safe rate limiting (fail open on Redis errors) | Redis connection issues or errors should NOT block legitimate users. Rate limiting is security layer, not critical path | getSlowdownMs() returns 0 on Redis errors, allowing operation to proceed |
-| WORKER-001 | Load-aware worker selection over round-robin | Workers can have uneven load (channels with different user counts). Selecting worker with fewest routers provides better load distribution | More even load distribution across workers, better scalability |
-| WORKER-002 | 25% CPU headroom for system overhead | Single-server 1000+ user target needs system resources for Redis, nginx, OS overhead. Reserve 25% CPU | getOptimalWorkerCount() returns floor(cpuCount * 0.75), e.g., 6 workers on 8-core system |
-| TRANSPORT-001 | 600kbps outgoing bitrate for voice | Opus audio typically uses 24-48kbps. 600kbps provides 10-20x headroom for multiple consumers and transport overhead without overallocation | Increased from 100kbps baseline, sufficient for voice, prevents bandwidth waste |
-
-**From 02-03 execution:**
-
-| ID | Decision | Rationale | Impact |
-|----|----------|-----------|--------|
-| AUTHZ-001 | Permission refresh integrated into heartbeat | 30s heartbeat already exists for dead connection detection. Adding permission refresh adds no network overhead | Efficient periodic sync without per-action overhead; 30s latency acceptable per 02-01 decision |
-| AUTHZ-002 | Deferred channel removal for transmitting users | Permission revoked while user transmitting should not cut audio mid-sentence | User gets PERMISSION_UPDATE with pendingRemoval flag; removal executed in handlePttStop after checking pendingChannelRemovals map |
-| AUTHZ-003 | Admin role bypasses channel permission checks | Global admins (globalRole==='ADMIN') can join any channel without explicit permission, simplifies admin operations | Admin can manage/monitor any channel but still subject to rate limits for security |
-| AUTHZ-004 | Channel limits enforced at join time | defaultSimultaneousChannelLimit (10) and defaultMaxUsersPerChannel (100) prevent resource exhaustion | Admin bypasses simultaneous limit but not max users limit (prevents server overload) |
-| AUTHZ-005 | Rate limiting in verifyClient | Progressive slowdown (1s to 30s) prevents authentication bypass via repeated connection attempts | Connection rate limit checked first, then auth rate limit with progressive delay |
-| AUTHZ-006 | PERMISSION_UPDATE messages for real-time sync | Heartbeat detects permission changes and sends update with added/removed channel arrays | Enables real-time UI updates (channel list refresh, access revoked warnings) |
-
-**From 02-04 execution:**
-
-| ID | Decision | Rationale | Impact |
-|----|----------|-----------|--------|
-| PUBSUB-001 | Dedicated Redis subscriber client for pub/sub | Redis v4 requires separate client instances for pub/sub operations | PermissionSyncManager creates its own subscriber client, matching ChannelStateManager pattern |
-| PUBSUB-002 | Exponential backoff retry for pub/sub failures | Network failures and Redis restarts should not crash permission sync; retry with increasing delays prevents server overload | Retry delays: 1s, 2s, 4s, 8s, 16s, 30s (cap); heartbeat is fallback if pub/sub down |
-| EVENT-001 | Event-to-channel mapping via Redis hash | Multi-channel event operations (emergency broadcast, event-wide pause) need to know which channels belong to which event | channel:events hash maps channelId -> eventId, enabling event-based queries |
-| EVENT-002 | Callback pattern for permission change notifications | Decouples PermissionSyncManager from WebSocket server; index.ts will wire callback in Plan 07 | Clean separation of concerns, easier testing, pluggable architecture |
-
-**From 02-05 execution:**
-
-| ID | Decision | Rationale | Impact |
-|----|----------|-----------|--------|
-| DISPATCH-001 | Dispatch can interrupt General users but not other Dispatch | Dispatch users have equal priority (no hierarchy within Dispatch role), but higher priority than General users | Prevents Dispatch-on-Dispatch interruption while enabling supervision of General users |
-| DISPATCH-002 | Emergency broadcast requires 2-second hold guard | Prevents accidental activation of event-wide broadcast which interrupts all speakers | Client must track button hold duration and only send message after threshold; reduces risk of mis-clicks |
-| DISPATCH-003 | Temporary channel join tracking for emergency broadcast | Dispatch user may be permanently in some channels; only temporary joins should be cleaned up | Emergency broadcast state tracks temporaryJoins Set, cleanup only leaves those channels |
-| DISPATCH-004 | getUserProducerId public method in SignalingHandlers | DispatchHandlers needs to pause/resume producers for interrupted speakers and Dispatch user | Exposes producer lookup without exposing entire userProducers map; clean encapsulation |
-| DISPATCH-005 | Delegation methods with role validation | Defense in depth - role check at entry point plus in handler implementation | Audit logs PERMISSION_DENIED at SignalingHandlers level for unauthorized attempts |
-
-**From 02-06 execution:**
-
-| ID | Decision | Rationale | Impact |
-|----|----------|-----------|--------|
-| ADMIN-001 | AdminHandlers uses disconnectUser callback pattern | Decouples admin operations from WebSocket server lifecycle, callback provided by Plan 07 | Clean separation of concerns, testable admin handlers |
-| ADMIN-002 | Admin and Dispatch both have force-disconnect, ban, unban privileges | Both roles need admin capabilities for event management | Role check validates DISPATCH or ADMIN (not just ADMIN) |
-| BAN-001 | Bans stored in Redis sorted set with score=expiresAt | Enables efficient expiry checking and auto-cleanup of expired bans | isUserBanned checks score >= now, permanent bans use MAX_SAFE_INTEGER score |
-| BAN-002 | Ban details stored in separate hash with TTL for temporary bans | Rich ban metadata (bannedBy, reason) separate from membership set | Hash expires automatically for temporary bans, permanent bans have no TTL |
-| SECURITY-001 | Security events trimmed to 5000 entries in Redis | Prevents unbounded growth while keeping recent history for queries | Older events exported to control-plane database via audit log |
-| RATE-001 | Rate limit status read from existing rl:conn, rl:auth, rl:fail keys | Leverage rate limiting infrastructure from Plan 02-02 | Admin dashboard can query active rate limits and monitor abuse |
-
-**From 02-07 execution:**
-
-| ID | Decision | Rationale | Impact |
-|----|----------|-----------|--------|
-| WIRE-001 | SecurityEventsManager wired via setter instead of constructor parameter | SignalingServer constructor already has 4 parameters; adding a 5th would increase complexity. Setter pattern allows clean initialization order | SecurityEventsManager can be optionally wired (graceful degradation if not set), cleaner constructor signature |
-| WIRE-002 | PermissionSyncManager started before HTTP server | Ensures permission updates published during server startup are not missed | Permission sync is active before first client connects, no race condition |
-| WIRE-003 | Ban check after JWT verification | Invalid tokens (most connection failures) don't need ban check; reduces Redis load | Optimized authentication flow - ban check only for valid JWTs |
-
-**From 02-08 execution:**
-
-| ID | Decision | Rationale | Impact |
-|----|----------|-----------|--------|
-| TEST-001 | Load test uses direct WebSocket connections instead of full browser automation | Simpler, faster, and focuses on server scalability rather than browser compatibility | Load test can run headless on CI/CD; separate E2E test page handles browser-specific verification |
-| TEST-002 | E2E test page uses simple token generation on client for demo purposes | Dev-only test page doesn't need production-grade token security; simplifies testing workflow | Test page can generate tokens without backend call; prod tokens still come from control-plane |
-| TEST-003 | Redis seeding endpoint is dev-only with NODE_ENV check | Production deployments should never expose test data seeding | Test page functional in dev mode only; prod servers return 404 for /dev/* routes |
-
-**From 03-01 execution:**
-
-| ID | Decision | Rationale | Impact |
-|----|----------|-----------|--------|
-| UI-01 | Channel names default to channelId for MVP (no lightweight name API for general users) | JWT from /api/router/token only contains channelIds; /api/events/:eventId/overview has names but is role-restricted (DISPATCH/ADMIN only) | General users see "channel-abc123" instead of "Security Team"; ChannelContext ready for enhancement when name API becomes available |
-| UI-02 | sessionStorage (not localStorage) for router token | SEC-04 requires session persistence across page refresh but automatic clear on tab close | User stays logged in during page refresh but session auto-clears when browser tab closes |
-| UI-03 | useAuth manages router JWT, not control-plane cookie auth | Existing app uses cookie-based auth (/api/auth/login); router JWT is separate token from /api/router/token containing channelIds for WebSocket auth | Cookie auth flow remains untouched; useAuth stores router token for mediasoup signaling connections |
-
-**From 03-02 execution:**
-
-| ID | Decision | Rationale | Impact |
-|----|----------|-----------|--------|
-| ARCH-004 | ConnectionManager built-in PTT methods replace PttController integration | ConnectionManager evolved to include complete PTT logic; PttController constructor requires SignalingClient, but ConnectionManager only exposes getMicrophoneManager() and getTransportClient() getters, not signaling client | Simpler architecture with fewer components; ChannelCard manages UI and calls ConnectionManager for audio/PTT logic directly |
-| UX-006 | Hold-to-talk PTT via native React event handlers | PttButton was designed for PttController integration (creates button DOM element dynamically); without PttController, cleaner to use React-native button with event handlers | Simpler React component, no DOM manipulation, easier to test; button behavior fully managed in React lifecycle |
-| UX-007 | Optimistic PTT UI with error revert pattern | Instant visual feedback (physical walkie-talkie feel) requires optimistic UI; if PTT denied (channel busy), button shows "Channel Busy" state for 3 seconds then reverts | Better UX with no perceived lag, simple error recovery via auto-revert, minimal code complexity |
-
-**From 03-04 execution:**
-
-| ID | Decision | Rationale | Impact |
-|----|----------|-----------|--------|
-| ARCH-005 | Separate global WebSocket for permissions (not ConnectionManager) | Permission updates are global (affect user's entire channel list), not channel-specific; ConnectionManager is designed for per-channel audio/PTT with WebRTC setup | Clear separation of concerns; permission WebSocket has no audio infrastructure; per-channel ConnectionManagers remain focused on audio/PTT; one additional lightweight WebSocket connection per user |
-| UX-008 | Function updater pattern for concurrent-safe channel list updates | Permission updates can arrive while user is interacting with UI; direct state updates can cause race conditions if multiple updates occur in quick succession | Concurrent-safe updates; permission changes always merge correctly with existing channel list using React's function updater pattern |
-
-**From 04-01 execution:**
-
-| ID | Decision | Rationale | Impact |
-|----|----------|-----------|--------|
-| DISPATCH-006 | DISPATCH and ADMIN roles bypass simultaneous channel limit with dispatchSimultaneousChannelLimit: 50 | Dispatch users need to monitor many channels simultaneously; general users limited to 10 for server resource management | handleJoinChannel now checks role before applying channel limit; enables multi-channel monitoring grid |
-| UI-009 | Consumer track-level muting (consumer.track.enabled = false) instead of HTMLAudioElement.muted | Per RESEARCH.md: track.enabled works at WebRTC transport level, silences instantly, keeps connection alive; HTMLAudioElement.muted only affects playback | Muted channels receive audio data but don't play it; faster unmute response, no reconnection overhead |
-| UI-010 | Activity indicators (pulsing dot + speaker name) visible on muted cards | Per LOCKED decision in 04-02 RESEARCH.md: dispatch users need to see activity even when audio muted for situational awareness | Muted cards dimmed to 0.6 opacity but activity pulse and speaker name still visible; CSS uses dispatch-card--muted and dispatch-card--active classes |
-| UI-011 | PTT button functional on muted channels | Per LOCKED decision: mute only affects incoming audio, not outgoing PTT; dispatch user can transmit to muted channel | isMuted prop does not affect PTT button disabled state; button remains enabled on muted cards |
-| UI-012 | Team-grouped channel grid with collapsible sections | Dispatch users monitor 10-50 channels; team grouping provides organizational structure | All team sections start expanded by default; collapse state not persisted |
-| UI-013 | localStorage for mute state persistence (key: cv.dispatch.muted.{eventId}) | Dispatch users want mute preferences to persist across page refreshes | Mute state is per-event, stored in localStorage, survives browser restarts |
-| UI-014 | Per-team mute toggle buttons in team section headers | Allows bulk muting/unmuting of all channels in a team with one click | Team mute button shows 'Muted' when ALL channels muted, else 'Unmuted' |
-| UI-015 | AdminDrawer slides from right (not center modal like SettingsDrawer) | Side drawer preserves context (channels visible) while accessing admin features | New UI pattern for dispatch console; SettingsDrawer remains center modal for other pages |
-| API-001 | Enhanced /api/router/token endpoint to include channelNames map | General users need channel names (not IDs); existing JWT only contains channelIds | All users (general + dispatch/admin) get channel names; lightweight solution (no new endpoint) |
-| API-002 | ADMIN users bypass event membership requirement in /api/router/token | Admin users should have full access to all events without needing explicit membership | ADMIN users get all channels in event with role='ADMIN'; non-admin users still require active membership |
-| API-003 | Configurable timeout per API call (default 10s, overview uses 30s) | Prisma connection pool cold start can cause slow responses exceeding 10s default timeout | apiFetch accepts options.timeout parameter; dispatch console overview uses 30s timeout |
+- Kotlin native for Android client (best performance, platform integration for background services, hardware button access, audio routing)
+- Scan mode bottom bar pattern (emulates two-way radio scan behavior)
+- Max 5 simultaneous channels for general users (bandwidth constraint on mobile)
+- No server changes for Android client (existing WebSocket/mediasoup protocol is client-agnostic)
 
 ### Pending Todos
-
-[From .planning/todos/pending/ — ideas captured during sessions]
 
 None yet.
 
 ### Blockers/Concerns
 
-[Issues that affect future work]
-
-- ~~Phase 1: Node.js upgrade from v8.16.0 to v20 LTS required for mediasoup compatibility (major dependency upgrade)~~ **RESOLVED in 01-01:** Successfully upgraded to Node.js v24.13.0, TypeScript 5.9.3, mediasoup 3.19.17
-- ~~Phase 1: Safari iOS-specific quirks need mobile testing beyond desktop Safari validation~~ **RESOLVED in 01-08:** Desktop Safari verified working in cross-browser testing; mobile Safari testing deferred to Phase 3/4
-- Phase 2: Multi-server state consistency strategy needs research for distributed Redis pub/sub pattern
-- Phase 2: Replace self-signed certificates with real TLS certificates for production deployment
+- Multi-server state consistency strategy needs research for distributed Redis pub/sub pattern (carried from Milestone 1)
+- Replace self-signed certificates with real TLS certificates for production deployment (carried from Milestone 1)
 
 ## Session Continuity
 
-Last session: 2026-02-07
-Stopped at: ALL PHASES COMPLETE — Milestone 1 finished
+Last session: 2026-02-08
+Stopped at: Defining requirements for Milestone v2.0
 Resume file: None
 
-**Phase 2 (User Management & Access Control) COMPLETE WITH VERIFICATION.**
-
-**Phase 3 (Browser UI for General Users) COMPLETE:**
-- ✓ 03-01: Session Management Foundation (Vite config, tokenStorage, useAuth, ChannelContext)
-- ✓ 03-02: Connection Management Hooks (useChannelConnection, ChannelCard with PTT)
-- ✓ 03-03: Channels Page (ChannelList, routing, CSS, My Channels link)
-- ✓ 03-04: Real-Time Permission Updates (usePermissionUpdates hook, global WebSocket)
-- ✓ 03-05: Build verification, Docker fixes, human checkpoint PASSED
-
-**Phase 4 (Dispatch Multi-Channel Monitoring) COMPLETE:**
-- ✓ 04-01: Dispatch channel limit bypass + DispatchChannelCard component with mute toggle
-- ✓ 04-02: DispatchConsole page with team-grouped grid, stats bar, AdminDrawer, mute persistence, channel name API
-- ✓ 04-03: Build verification, human checkpoint PASSED (3 fixes: timeout, 403 handling, admin UX)
-
-**ALL 4 PHASES COMPLETE. Milestone 1 finished.**
+**Milestone 1 (WebRTC Audio Rebuild + Web UI) COMPLETE:**
+- Phase 1: WebRTC Audio Foundation (8 plans)
+- Phase 2: User Management & Access Control (8 plans)
+- Phase 3: Browser UI for General Users (5 plans)
+- Phase 4: Dispatch Multi-Channel Monitoring (3 plans)
+- Total: 26 plans, ~4.2 hours execution time
