@@ -1324,6 +1324,8 @@ app.post("/api/router/token", requireAuth, requireProfileComplete, async (req, r
   const token = jwt.sign(
     {
       userId: req.user.id,
+      userName: req.user.displayName || req.user.email,
+      globalRole: req.user.globalRole,
       eventId,
       role,
       channelIds
