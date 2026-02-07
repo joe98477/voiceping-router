@@ -138,8 +138,13 @@ export class SignalingHandlers {
         return;
       }
 
-      // Enforce simultaneous channel limit (not applicable to Admin)
-      if (!isAdmin && ctx.channels.size >= config.channels.defaultSimultaneousChannelLimit) {
+      // Enforce simultaneous channel limit (role-aware)
+      const isDispatchOrAdmin = ctx.role === UserRole.DISPATCH || ctx.role === UserRole.ADMIN;
+      const channelLimit = isDispatchOrAdmin
+        ? config.channels.dispatchSimultaneousChannelLimit
+        : config.channels.defaultSimultaneousChannelLimit;
+
+      if (ctx.channels.size >= channelLimit) {
         logger.warn(`User ${ctx.userId} denied access to channel ${channelId} (simultaneous channel limit)`);
 
         // Audit log denial
@@ -153,11 +158,11 @@ export class SignalingHandlers {
             role: ctx.role,
             reason: 'simultaneous_channel_limit',
             currentChannelCount: ctx.channels.size,
-            limit: config.channels.defaultSimultaneousChannelLimit,
+            limit: channelLimit,
           },
         });
 
-        this.sendError(ctx, message.id, `Cannot join more than ${config.channels.defaultSimultaneousChannelLimit} channels simultaneously`);
+        this.sendError(ctx, message.id, `Cannot join more than ${channelLimit} channels simultaneously`);
         return;
       }
 

@@ -140,6 +140,7 @@ export const config = {
   channels: {
     defaultMaxUsersPerChannel: 100,
     defaultSimultaneousChannelLimit: 10,
+    dispatchSimultaneousChannelLimit: 50,
   },
 
   jitterBuffer: {
