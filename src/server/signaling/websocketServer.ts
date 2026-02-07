@@ -571,6 +571,13 @@ export class SignalingServer {
     try {
       // Get fresh permissions from Redis
       const freshChannelIds = await this.permissionManager.refreshPermissions(ctx.userId, ctx.eventId);
+
+      // If Redis returns empty but user has JWT-based channels, skip refresh
+      // This means Redis channel data was never synced from control-plane
+      if (freshChannelIds.length === 0 && ctx.authorizedChannels.size > 0) {
+        return;
+      }
+
       const freshChannels = new Set(freshChannelIds);
 
       // Find added channels
