@@ -364,6 +364,7 @@ const bootstrapAdmin = async () => {
 };
 
 const requireAuth = async (req, res, next) => {
+  console.log("[auth]", req.method, req.path, "sid:", req.sessionID, "cookie:", req.headers.cookie ? "present" : "MISSING", "userId:", req.session && req.session.userId);
   if (!req.session || !req.session.userId) {
     return res.status(401).json({ error: "Unauthorized" });
   }
@@ -538,13 +539,21 @@ app.post("/api/auth/login", async (req, res) => {
     return res.status(401).json({ error: "Invalid credentials" });
   }
   req.session.userId = user.id;
-  await new Promise((resolve, reject) => {
-    req.session.save((err) => (err ? reject(err) : resolve()));
-  });
+  console.log("[login] session id:", req.sessionID, "userId:", user.id);
+  try {
+    await new Promise((resolve, reject) => {
+      req.session.save((err) => (err ? reject(err) : resolve()));
+    });
+    console.log("[login] session saved OK");
+  } catch (saveErr) {
+    console.error("[login] session save FAILED:", saveErr);
+    return res.status(500).json({ error: "Session error" });
+  }
   const updated = await prisma.user.update({
     where: { id: user.id },
     data: { lastLoginAt: new Date() }
   });
+  console.log("[login] responding with Set-Cookie for sid:", req.sessionID);
   return res.json({
     id: updated.id,
     email: updated.email,
