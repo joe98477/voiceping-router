@@ -161,6 +161,33 @@ export class TransportManager {
   }
 
   /**
+   * Close transports for a user in a specific channel
+   */
+  async closeUserChannelTransports(userId: string, channelId: string): Promise<void> {
+    const prefix = `${userId}:${channelId}:`;
+    const keysToClose: string[] = [];
+
+    for (const key of this.transports.keys()) {
+      if (key.startsWith(prefix)) {
+        keysToClose.push(key);
+      }
+    }
+
+    for (const key of keysToClose) {
+      const transport = this.transports.get(key);
+      if (transport) {
+        transport.close();
+        this.transportIdToKey.delete(transport.id);
+        this.transports.delete(key);
+      }
+    }
+
+    if (keysToClose.length > 0) {
+      logger.info(`Closed ${keysToClose.length} transports for user ${userId} in channel ${channelId}`);
+    }
+  }
+
+  /**
    * Close all transports for a user (cleanup on disconnect)
    */
   async closeUserTransports(userId: string): Promise<void> {

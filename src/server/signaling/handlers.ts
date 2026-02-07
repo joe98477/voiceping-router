@@ -920,12 +920,17 @@ export class SignalingHandlers {
         }
       }
 
-      // Close all transports, producers, consumers
-      await this.transportManager.closeUserTransports(ctx.userId);
-      await this.producerConsumerManager.closeUserProducersAndConsumers(ctx.userId);
-
-      // Remove from all channels in session store
+      // Close transports, producers, consumers per-channel (not globally for user)
+      // Each channel has its own WebSocket connection, so only clean up THIS connection's channels
       for (const channelId of ctx.channels) {
+        await this.transportManager.closeUserChannelTransports(ctx.userId, channelId);
+        await this.producerConsumerManager.closeUserChannelProducersAndConsumers(ctx.userId, channelId);
+
+        // Clear user producer tracking for this channel
+        const producerKey = `${ctx.userId}:${channelId}`;
+        this.userProducers.delete(producerKey);
+
+        // Remove from session store
         await this.sessionStore.removeUserFromChannel(ctx.userId, channelId);
 
         // Notify channel members
@@ -939,12 +944,6 @@ export class SignalingHandlers {
             userName: ctx.userName,
           })
         );
-      }
-
-      // Clear user producer tracking
-      for (const channelId of ctx.channels) {
-        const producerKey = `${ctx.userId}:${channelId}`;
-        this.userProducers.delete(producerKey);
       }
 
       // Clear pending channel removals

@@ -254,6 +254,40 @@ export class ProducerConsumerManager {
   }
 
   /**
+   * Close producers and consumers for a user in a specific channel
+   */
+  async closeUserChannelProducersAndConsumers(userId: string, channelId: string): Promise<void> {
+    const producersToClose: string[] = [];
+    const consumersToClose: string[] = [];
+
+    for (const [id, metadata] of this.producers.entries()) {
+      if (metadata.userId === userId && metadata.channelId === channelId) {
+        producersToClose.push(id);
+      }
+    }
+
+    for (const [id, metadata] of this.consumers.entries()) {
+      if (metadata.userId === userId) {
+        consumersToClose.push(id);
+      }
+    }
+
+    for (const id of producersToClose) {
+      await this.closeProducer(id);
+    }
+
+    for (const id of consumersToClose) {
+      await this.closeConsumer(id);
+    }
+
+    if (producersToClose.length > 0 || consumersToClose.length > 0) {
+      logger.info(
+        `Closed ${producersToClose.length} producers and ${consumersToClose.length} consumers for user ${userId} in channel ${channelId}`
+      );
+    }
+  }
+
+  /**
    * Close all producers and consumers for a user (cleanup on disconnect)
    */
   async closeUserProducersAndConsumers(userId: string): Promise<void> {
