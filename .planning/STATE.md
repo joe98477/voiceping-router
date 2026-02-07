@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-08)
 ## Current Position
 
 Phase: 5 of 10 (Android Project Setup & WebRTC Foundation)
-Plan: 1 of 5 complete
+Plan: 2 of 5 complete
 Status: In progress
-Last activity: 2026-02-08 — Completed 05-01-PLAN.md (Android project foundation)
+Last activity: 2026-02-08 — Completed 05-02-PLAN.md (Authentication & login flow)
 
 Progress: [████████░░] 40% (Milestone 1 complete: 4/10 phases shipped)
 
@@ -48,13 +48,16 @@ Key decisions carrying forward to Milestone 2:
 - Max 5 simultaneous channels for general users (bandwidth constraint on mobile, sufficient for field worker use case)
 - No server changes for Android client (existing WebSocket/mediasoup protocol is client-agnostic)
 
-**Phase 5 Plan 01 Decisions:**
+**Phase 5 Decisions:**
 
 | Decision | Rationale | Phase | Plan |
 |----------|-----------|-------|------|
 | Use libmediasoup-android 0.7.0 (Maven Central) | Latest stable version, actively maintained, will validate compatibility in Plan 02 acceptance test | 05 | 01 |
 | Dark theme cyan accent (#00BCD4) | Radio-app feel, high visibility against dark background, WCAG AAA compliance | 05 | 01 |
 | Minimum SDK 26 (Android 8.0) | 89% device coverage, enables EncryptedSharedPreferences, stable WebRTC support | 05 | 01 |
+| Store credentials (email/password) for silent refresh | Server requires email/password for token refresh. EncryptedSharedPreferences secure (hardware-backed Keystore). Matches "always persist session" decision. | 05 | 02 |
+| Inline validation errors under fields | Per user decision. Errors stay visible, don't auto-dismiss like toasts. Better UX and accessibility. | 05 | 02 |
+| BuildConfig.SERVER_URL default 10.0.2.2:3000 | Android emulator's host loopback. Works out-of-box for dev, configurable for production. | 05 | 02 |
 
 ### Pending Todos
 
@@ -69,7 +72,7 @@ Deferred to future milestones:
 ## Session Continuity
 
 Last session: 2026-02-08
-Stopped at: Completed 05-01-PLAN.md (Android project foundation)
+Stopped at: Completed 05-02-PLAN.md (Authentication & login flow)
 Resume file: None
 
 **Milestone 1 (WebRTC Audio Rebuild + Web UI) COMPLETE:**
@@ -80,8 +83,9 @@ Resume file: None
 - Total: 26 plans, ~4.2 hours execution time
 
 **Milestone 2 (Android Client App) IN PROGRESS:**
-- Phase 5: Android Project Setup & WebRTC Foundation (1/5 plans complete)
+- Phase 5: Android Project Setup & WebRTC Foundation (2/5 plans complete)
   - 05-01: Android project foundation ✓
+  - 05-02: Authentication & login flow ✓
 - Phase 6: Single-Channel PTT & Audio Transmission (pending)
 - Phase 7: Foreground Service & Background Audio (pending)
 - Phase 8: Multi-Channel Monitoring & Scan Mode (pending)
