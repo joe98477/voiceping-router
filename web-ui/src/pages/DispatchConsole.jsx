@@ -116,12 +116,34 @@ const DispatchConsole = ({ user, onLogout }) => {
       setError('');
 
       try {
-        // Fetch overview and router token in parallel (reduces total wait time)
-        // Use 30s timeout for overview — Prisma connection pool can be slow on cold start
-        const [overviewData, tokenResponse] = await Promise.all([
-          apiFetch(`/api/events/${eventId}/overview`, { method: 'GET', timeout: 30000 }),
-          apiPost('/api/router/token', { eventId }),
-        ]);
+        // Step 1: Fetch overview (requires DISPATCH or ADMIN role)
+        // Use 30s timeout — Prisma connection pool can be slow on cold start
+        let overviewData;
+        try {
+          overviewData = await apiFetch(`/api/events/${eventId}/overview`, { method: 'GET', timeout: 30000 });
+        } catch (overviewErr) {
+          if (overviewErr.status === 403) {
+            setError('You need DISPATCH or ADMIN role to access the dispatch console.');
+          } else {
+            setError(overviewErr.message || 'Failed to load event overview');
+          }
+          setLoading(false);
+          return;
+        }
+
+        // Step 2: Fetch router token (requires active event membership)
+        let tokenResponse;
+        try {
+          tokenResponse = await apiPost('/api/router/token', { eventId });
+        } catch (tokenErr) {
+          if (tokenErr.status === 403) {
+            setError('You are not an active member of this event. Use Admin Settings to add yourself to the event first.');
+          } else {
+            setError(tokenErr.message || 'Failed to get router token');
+          }
+          setLoading(false);
+          return;
+        }
 
         if (!tokenResponse || !tokenResponse.token) {
           throw new Error('Invalid token response');
@@ -132,11 +154,7 @@ const DispatchConsole = ({ user, onLogout }) => {
         setToken(tokenResponse.token);
         setOverview(overviewData);
       } catch (err) {
-        if (err.status === 403) {
-          setError('You do not have dispatch access to this event.');
-        } else {
-          setError(err.message || 'Failed to load dispatch console');
-        }
+        setError(err.message || 'Failed to load dispatch console');
       } finally {
         setLoading(false);
       }
