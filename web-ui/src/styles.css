@@ -1359,3 +1359,204 @@ input[type="checkbox"] {
   font-size: 0.7rem;
   text-align: center;
 }
+
+/* Dispatch Console - Channel Grid */
+.channel-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.channel-grid__team-section {
+  display: grid;
+  gap: 8px;
+}
+
+.channel-grid__team-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border-radius: 10px;
+  cursor: pointer;
+  user-select: none;
+  border: 1px solid var(--border);
+}
+
+.channel-grid__team-name {
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  flex: 1;
+}
+
+.channel-grid__team-chevron {
+  font-size: 0.75rem;
+  color: var(--muted);
+  transition: transform 0.2s ease;
+}
+
+.channel-grid__team-chevron--collapsed {
+  transform: rotate(-90deg);
+}
+
+.channel-grid__team-mute-btn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: white;
+  cursor: pointer;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.channel-grid__team-mute-btn--all-muted {
+  background: #f7c2b6;
+  border-color: #f2b6ae;
+  color: #7f2c20;
+}
+
+.channel-grid__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.channel-grid__cards--collapsed {
+  display: none;
+}
+
+/* Admin Drawer (right-slide) */
+.admin-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 20, 24, 0.4);
+  z-index: 30;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.admin-drawer {
+  width: min(480px, 90vw);
+  height: 100vh;
+  background: var(--surface);
+  box-shadow: -8px 0 30px var(--shadow);
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  overflow: hidden;
+  animation: admin-drawer-slide-in 0.25s ease-out;
+}
+
+@keyframes admin-drawer-slide-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.admin-drawer__header {
+  padding: 20px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+
+.admin-drawer__tabs {
+  display: flex;
+  gap: 6px;
+  padding: 12px 24px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+}
+
+.admin-drawer__content {
+  padding: 16px 24px;
+  overflow: auto;
+}
+
+/* Dispatch Console - Stats Bar */
+.dispatch-stats {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
+  background: var(--surface);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px var(--shadow);
+  flex-wrap: wrap;
+}
+
+.dispatch-stats__item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.dispatch-stats__item strong {
+  font-weight: 700;
+}
+
+.dispatch-stats__divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+/* Dispatch Console - Page Layout */
+.dispatch-console {
+  min-height: 100vh;
+  padding: 16px 20px 40px;
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  gap: 14px;
+}
+
+.dispatch-console__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border-radius: 14px;
+  box-shadow: 0 8px 24px var(--shadow);
+}
+
+.dispatch-console__brand {
+  display: grid;
+  gap: 2px;
+}
+
+.dispatch-console__brand a {
+  font-size: 0.7rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.dispatch-console__brand a:hover {
+  color: var(--accent-2);
+}
+
+.dispatch-console__brand h1 {
+  margin: 0;
+  font-size: 1rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.dispatch-console__event-name {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.dispatch-console__actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
