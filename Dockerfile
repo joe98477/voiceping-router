@@ -48,9 +48,6 @@ COPY --from=builder /app/node_modules/mediasoup/worker/out/Release/mediasoup-wor
 # Copy compiled code from builder
 COPY --from=builder /app/dist ./dist
 
-# Copy audio assets (if they exist)
-COPY --from=builder /app/audio ./audio 2>/dev/null || true
-
 # Expose HTTP/WebSocket port
 EXPOSE 3000
 
