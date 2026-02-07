@@ -160,7 +160,7 @@ const Channels = ({ user, onLogout }) => {
 
       {/* Channel list (rendered when token and authUser available) */}
       {!loading && !error && token && authUser && (
-        <ChannelProvider user={authUser}>
+        <ChannelProvider user={authUser} channelNames={channelNames}>
           <ChannelListWithPermissions wsUrl={wsUrl} token={token} channelNames={channelNames} />
         </ChannelProvider>
       )}

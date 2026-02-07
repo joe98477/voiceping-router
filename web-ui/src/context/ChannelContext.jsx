@@ -15,7 +15,7 @@ const ChannelContext = createContext(null);
  * @param {object|null} props.user - Decoded JWT payload with channelIds array
  * @param {React.ReactNode} props.children - Child components
  */
-export const ChannelProvider = ({ user, children }) => {
+export const ChannelProvider = ({ user, channelNames, children }) => {
   // Channel list: [{ id: channelId, name: displayName }]
   // Names default to channelId (MVP limitation - no name API for general users)
   const [channels, setChannelsState] = useState([]);
@@ -31,11 +31,10 @@ export const ChannelProvider = ({ user, children }) => {
       return;
     }
 
-    // Map channelIds to { id, name } objects
-    // MVP: name defaults to id (awaiting future /api/events/:eventId/my-channels endpoint)
+    // Map channelIds to { id, name } objects using channelNames if available
     const channelList = user.channelIds.map((channelId) => ({
       id: channelId,
-      name: channelId, // TODO: Replace with real channel name when API available
+      name: (channelNames && channelNames[channelId]) || channelId,
     }));
 
     setChannelsState(channelList);
@@ -50,7 +49,7 @@ export const ChannelProvider = ({ user, children }) => {
       };
     });
     setChannelStates(initialStates);
-  }, [user]);
+  }, [user, channelNames]);
 
   /**
    * Update state for a specific channel (partial merge)

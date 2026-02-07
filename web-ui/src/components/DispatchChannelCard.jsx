@@ -192,15 +192,22 @@ const DispatchChannelCard = ({ channel, wsUrl, token, isMuted, onToggleMute }) =
         </button>
       </div>
 
-      {/* Activity row: Pulsing dot + speaker name (shown when channel busy) */}
+      {/* Activity row: Green pulsing dot when active, orange dot when idle */}
       <div className="dispatch-card__activity">
-        {channelState.isBusy && (
-          <>
-            <div className="dispatch-card__pulse" />
-            <div className="dispatch-card__speaker-name">
-              {channelState.speakerName || 'Unknown'}
-            </div>
-          </>
+        {connectionState === 'connected' && (
+          channelState.isBusy ? (
+            <>
+              <div className="dispatch-card__pulse" />
+              <div className="dispatch-card__speaker-name">
+                {channelState.speakerName || 'Unknown'}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="dispatch-card__idle-dot" />
+              <div className="dispatch-card__idle-label">Idle</div>
+            </>
+          )
         )}
       </div>
 

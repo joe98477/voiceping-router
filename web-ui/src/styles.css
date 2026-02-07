@@ -1143,24 +1143,49 @@ input[type="checkbox"] {
   flex-shrink: 0;
 }
 
-.channel-card__speaker {
-  background: rgba(228, 87, 46, 0.1);
+.channel-card__activity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 8px 12px;
   border-radius: 8px;
   font-size: 0.85rem;
   margin-bottom: 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  min-height: 20px;
 }
 
-.channel-card__speaker-icon {
-  color: var(--muted);
+.channel-card__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
-.channel-card__speaker-name {
+.channel-card__dot--active {
+  background: #4caf50;
+  animation: channel-pulse 1.2s ease-in-out infinite;
+  box-shadow: 0 0 6px rgba(76, 175, 80, 0.5);
+}
+
+.channel-card__dot--idle {
+  background: #ff9800;
+}
+
+@keyframes channel-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.8); }
+}
+
+.channel-card__activity-label {
   font-weight: 600;
-  color: var(--ink);
+}
+
+.channel-card__activity-label--active {
+  color: #4caf50;
+}
+
+.channel-card__activity-label--idle {
+  color: var(--muted);
 }
 
 .channel-card__ptt {
@@ -1307,10 +1332,23 @@ input[type="checkbox"] {
 
 .dispatch-card__speaker-name {
   font-weight: 600;
-  color: var(--ink);
+  color: #4caf50;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.dispatch-card__idle-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff9800;
+  flex-shrink: 0;
+}
+
+.dispatch-card__idle-label {
+  color: var(--muted);
+  font-size: 0.8rem;
 }
 
 .dispatch-card__ptt {

@@ -159,11 +159,22 @@ const ChannelCard = ({ channel, wsUrl, token }) => {
         </span>
       </div>
 
-      {/* Speaker indicator (shown when someone is transmitting) */}
-      {channelState.isBusy && (
-        <div className="channel-card__speaker">
-          <span className="channel-card__speaker-icon">🎙 Speaking:</span>
-          <span className="channel-card__speaker-name">{channelState.speakerName || 'Unknown'}</span>
+      {/* Activity indicator */}
+      {connectionState === 'connected' && (
+        <div className="channel-card__activity">
+          {channelState.isBusy ? (
+            <>
+              <div className="channel-card__dot channel-card__dot--active" />
+              <span className="channel-card__activity-label channel-card__activity-label--active">
+                {channelState.speakerName || 'Unknown'}
+              </span>
+            </>
+          ) : (
+            <>
+              <div className="channel-card__dot channel-card__dot--idle" />
+              <span className="channel-card__activity-label channel-card__activity-label--idle">Idle</span>
+            </>
+          )}
         </div>
       )}
 
