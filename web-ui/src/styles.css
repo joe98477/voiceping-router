@@ -1205,3 +1205,157 @@ input[type="checkbox"] {
     align-items: flex-start;
   }
 }
+
+/* ===== Phase 04: Dispatch Multi-Channel Monitoring ===== */
+
+/* Dispatch Monitoring - Compact Channel Card */
+.dispatch-card--compact {
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 10px 12px;
+  border: 2px solid transparent;
+  display: grid;
+  gap: 6px;
+  transition: border-color 0.3s ease, opacity 0.3s ease, box-shadow 0.3s ease;
+  min-width: 0;
+}
+
+.dispatch-card--compact.dispatch-card--muted {
+  opacity: 0.6;
+}
+
+.dispatch-card--compact.dispatch-card--active {
+  border-color: #4caf50;
+  box-shadow: 0 0 12px rgba(76, 175, 80, 0.35);
+}
+
+.dispatch-card--compact.dispatch-card--muted.dispatch-card--active {
+  border-color: rgba(76, 175, 80, 0.5);
+  box-shadow: 0 0 8px rgba(76, 175, 80, 0.2);
+}
+
+.dispatch-card__top-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dispatch-card__name {
+  font-weight: 600;
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.dispatch-card__status {
+  flex-shrink: 0;
+  font-size: 0.65rem;
+  padding: 2px 8px;
+}
+
+.dispatch-card__mute-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: white;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-size: 0.75rem;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.dispatch-card__mute-btn--muted {
+  background: #f7c2b6;
+  border-color: #f2b6ae;
+  color: #7f2c20;
+}
+
+.dispatch-card__mute-btn--unmuted {
+  background: #d5f1d3;
+  border-color: #b6e2b2;
+  color: #21612a;
+}
+
+.dispatch-card__activity {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  min-height: 20px;
+}
+
+.dispatch-card__pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4caf50;
+  animation: dispatch-pulse 1.2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes dispatch-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+
+.dispatch-card__speaker-name {
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dispatch-card__ptt {
+  margin-top: 2px;
+}
+
+.dispatch-card__ptt-btn {
+  width: 100%;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: none;
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  transition: background 0.15s ease;
+}
+
+.dispatch-card__ptt-btn--idle {
+  background: linear-gradient(135deg, #6cd3ff 0%, #2a7dd2 100%);
+  color: #071427;
+}
+
+.dispatch-card__ptt-btn--transmitting {
+  background: linear-gradient(135deg, #4caf50 0%, #2e7d32 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
+}
+
+.dispatch-card__ptt-btn--busy {
+  background: #f7c2b6;
+  color: #7f2c20;
+  cursor: not-allowed;
+}
+
+.dispatch-card__ptt-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dispatch-card__error {
+  color: var(--accent);
+  font-size: 0.7rem;
+  text-align: center;
+}
