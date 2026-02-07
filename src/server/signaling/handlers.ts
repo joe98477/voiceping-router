@@ -330,7 +330,7 @@ export class SignalingHandlers {
         throw new Error(`Router not found for channel ${channelId}`);
       }
 
-      this.sendResponse(ctx, message.id, { rtpCapabilities });
+      this.sendResponse(ctx, message.id, { routerRtpCapabilities: rtpCapabilities });
 
       logger.info(`Sent router capabilities to ${ctx.userId} for channel ${channelId}`);
     } catch (err) {
