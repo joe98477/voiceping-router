@@ -538,6 +538,9 @@ app.post("/api/auth/login", async (req, res) => {
     return res.status(401).json({ error: "Invalid credentials" });
   }
   req.session.userId = user.id;
+  await new Promise((resolve, reject) => {
+    req.session.save((err) => (err ? reject(err) : resolve()));
+  });
   const updated = await prisma.user.update({
     where: { id: user.id },
     data: { lastLoginAt: new Date() }
