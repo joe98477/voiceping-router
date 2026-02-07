@@ -28,19 +28,21 @@ export class RateLimiter {
 
     const redisClient = getRedisClient();
 
-    // Connection limiter: 20 WebSocket connections per IP per minute
+    // Connection limiter: 60 WebSocket connections per IP per minute
+    // Multi-channel dispatch creates one WebSocket per channel (can be 20+)
     this.connectionLimiter = new RateLimiterRedis({
       storeClient: redisClient,
       keyPrefix: 'rl:conn',
-      points: 20, // 20 connections
+      points: 60, // 60 connections
       duration: 60, // per minute
     });
 
-    // Auth limiter: 10 auth attempts per IP per 15 minutes
+    // Auth limiter: 40 auth attempts per IP per 15 minutes
+    // Each channel reconnection consumes an auth point
     this.authLimiter = new RateLimiterRedis({
       storeClient: redisClient,
       keyPrefix: 'rl:auth',
-      points: 10, // 10 attempts
+      points: 40, // 40 attempts
       duration: 900, // 15 minutes
     });
 

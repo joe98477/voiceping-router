@@ -49,6 +49,9 @@ export class ReconnectingSignalingClient implements ISignalingClient {
   private reconnectedHandlers = new Set<() => void>();
   private reconnectFailedHandlers = new Set<(error: Error) => void>();
 
+  // SignalingType event handlers - stored here so they survive reconnection
+  private signalingEventHandlers = new Map<string, Set<EventHandler>>();
+
   constructor(
     url: string,
     token: string,
@@ -202,6 +205,14 @@ export class ReconnectingSignalingClient implements ISignalingClient {
 
       // Create new SignalingClient for reconnection
       this.signalingClient = new SignalingClient(this.url, this.token);
+
+      // Re-register event handlers on new client
+      for (const [event, handlers] of this.signalingEventHandlers) {
+        for (const handler of handlers) {
+          this.signalingClient.on(event as SignalingType, handler);
+        }
+      }
+
       await this.signalingClient.connect();
 
       // Success
@@ -332,6 +343,12 @@ export class ReconnectingSignalingClient implements ISignalingClient {
     } else if (event === 'reconnectFailed') {
       this.reconnectFailedHandlers.add(callback as (error: Error) => void);
     } else {
+      // Store handler locally so it survives reconnection
+      if (!this.signalingEventHandlers.has(event)) {
+        this.signalingEventHandlers.set(event, new Set());
+      }
+      this.signalingEventHandlers.get(event)!.add(callback);
+
       // Delegate to underlying SignalingClient
       this.signalingClient.on(event as SignalingType, callback);
     }
@@ -352,6 +369,12 @@ export class ReconnectingSignalingClient implements ISignalingClient {
     } else if (event === 'reconnectFailed') {
       this.reconnectFailedHandlers.delete(callback as (error: Error) => void);
     } else {
+      // Remove from local storage
+      const handlers = this.signalingEventHandlers.get(event);
+      if (handlers) {
+        handlers.delete(callback);
+      }
+
       // Delegate to underlying SignalingClient
       this.signalingClient.off(event as SignalingType, callback);
     }
