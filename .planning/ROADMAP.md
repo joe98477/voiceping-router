@@ -95,8 +95,8 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 04-01-PLAN.md -- Server-side dispatch channel limit bypass, compact ChannelCard variant with mute toggle and activity indicator
-- [ ] 04-02-PLAN.md -- DispatchMonitoring page, ChannelGrid component, route wiring, navigation links, grid CSS
+- [ ] 04-01-PLAN.md -- Server-side dispatch channel limit bypass, compact DispatchChannelCard with mute toggle and activity indicators
+- [ ] 04-02-PLAN.md -- DispatchConsole page, ChannelGrid with team grouping, AdminDrawer, route wiring, navigation, mute persistence, channel names for general users
 - [ ] 04-03-PLAN.md -- Build verification, integration fixes, and visual verification checkpoint
 
 ## Progress
@@ -109,7 +109,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | 1. WebRTC Audio Foundation | 8/8 | ✓ Complete | 2026-02-06 |
 | 2. User Management & Access Control | 8/8 | ✓ Complete | 2026-02-06 |
 | 3. Browser UI for General Users | 5/5 | ✓ Complete | 2026-02-07 |
-| 4. Dispatch Multi-Channel Monitoring | 0/3 | Planned | - |
+| 4. Dispatch Multi-Channel Monitoring | 0/3 | Ready for execution | - |
 
 ---
 *Roadmap created: 2026-02-06*
