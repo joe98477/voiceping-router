@@ -13,8 +13,8 @@ This roadmap rebuilds the broken Opus-over-WebSocket audio subsystem with WebRTC
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: WebRTC Audio Foundation** - Prove WebRTC + mediasoup works with PTT audio under 300ms latency
-- [ ] **Phase 2: User Management & Access Control** - Role-based permissions and event/team/channel structure
-- [ ] **Phase 3: Browser UI for General Users** - Web interface for single-channel PTT communication
+- [x] **Phase 2: User Management & Access Control** - Role-based permissions and event/team/channel structure
+- [x] **Phase 3: Browser UI for General Users** - Web interface for single-channel PTT communication
 - [ ] **Phase 4: Dispatch Multi-Channel Monitoring** - Advanced dispatch console with selective channel monitoring
 
 ## Phase Details
@@ -76,11 +76,11 @@ Plans:
 **Plans**: 5 plans
 
 Plans:
-- [ ] 03-01-PLAN.md -- Vite config for TS imports, auth/session foundation: tokenStorage, useAuth hook, ChannelContext provider
-- [ ] 03-02-PLAN.md -- Connection & PTT: useChannelConnection hook, ChannelCard with PttController wrapper
-- [ ] 03-03-PLAN.md -- Page assembly: ChannelList, Channels page, route wiring, Events link, CSS styling
-- [ ] 03-04-PLAN.md -- PERMISSION_UPDATE: global WebSocket for real-time channel list sync
-- [ ] 03-05-PLAN.md -- Build verification, integration fixes, and visual verification checkpoint
+- [x] 03-01-PLAN.md -- Vite config for TS imports, auth/session foundation: tokenStorage, useAuth hook, ChannelContext provider
+- [x] 03-02-PLAN.md -- Connection & PTT: useChannelConnection hook, ChannelCard with PttController wrapper
+- [x] 03-03-PLAN.md -- Page assembly: ChannelList, Channels page, route wiring, Events link, CSS styling
+- [x] 03-04-PLAN.md -- PERMISSION_UPDATE: global WebSocket for real-time channel list sync
+- [x] 03-05-PLAN.md -- Build verification, integration fixes, and visual verification checkpoint
 
 ### Phase 4: Dispatch Multi-Channel Monitoring
 **Goal**: Dispatch users can monitor and communicate on multiple channels simultaneously
@@ -105,8 +105,8 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. WebRTC Audio Foundation | 8/8 | ✓ Complete | 2026-02-06 |
-| 2. User Management & Access Control | 0/8 | Planning complete | - |
-| 3. Browser UI for General Users | 0/5 | Planning complete | - |
+| 2. User Management & Access Control | 8/8 | ✓ Complete | 2026-02-06 |
+| 3. Browser UI for General Users | 5/5 | ✓ Complete | 2026-02-07 |
 | 4. Dispatch Multi-Channel Monitoring | 0/TBD | Not started | - |
 
 ---

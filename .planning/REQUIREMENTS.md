@@ -65,10 +65,10 @@ Requirements for audio subsystem rebuild and feature parity with current system.
 
 ### Browser UI
 
-- [ ] **UI-01**: Web UI displays user's assigned channels
-- [ ] **UI-02**: Web UI shows PTT button for each channel
-- [ ] **UI-03**: Web UI shows channel busy state
-- [ ] **UI-04**: Web UI shows active speaker in channel
+- [x] **UI-01**: Web UI displays user's assigned channels
+- [x] **UI-02**: Web UI shows PTT button for each channel
+- [x] **UI-03**: Web UI shows channel busy state
+- [x] **UI-04**: Web UI shows active speaker in channel
 - [ ] **UI-05**: Dispatch UI shows all monitored channels with mute toggles
 - [ ] **UI-06**: Dispatch UI indicates which channels have activity
 
@@ -184,10 +184,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SEC-05 | Phase 2 | Pending |
 | SYS-03 | Phase 2 | Pending |
 | SYS-04 | Phase 2 | Pending |
-| UI-01 | Phase 3 | Pending |
-| UI-02 | Phase 3 | Pending |
-| UI-03 | Phase 3 | Pending |
-| UI-04 | Phase 3 | Pending |
+| UI-01 | Phase 3 | Complete |
+| UI-02 | Phase 3 | Complete |
+| UI-03 | Phase 3 | Complete |
+| UI-04 | Phase 3 | Complete |
 | DISP-01 | Phase 4 | Pending |
 | DISP-02 | Phase 4 | Pending |
 | DISP-03 | Phase 4 | Pending |
