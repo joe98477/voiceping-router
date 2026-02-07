@@ -1295,6 +1295,14 @@ app.post("/api/router/token", requireAuth, requireProfileComplete, async (req, r
     select: { channelId: true }
   });
   const channelIds = channelMemberships.map((entry) => entry.channelId);
+
+  // Fetch channel names for general users (Phase 04-02)
+  const channelsData = await prisma.channel.findMany({
+    where: { id: { in: channelIds } },
+    select: { id: true, name: true }
+  });
+  const channelNames = Object.fromEntries(channelsData.map(c => [c.id, c.name]));
+
   const token = jwt.sign(
     {
       userId: req.user.id,
@@ -1305,7 +1313,7 @@ app.post("/api/router/token", requireAuth, requireProfileComplete, async (req, r
     ROUTER_JWT_SECRET,
     { expiresIn: "12h" }
   );
-  res.json({ token });
+  res.json({ token, channelNames });
 });
 
 const waitForDatabase = async () => {

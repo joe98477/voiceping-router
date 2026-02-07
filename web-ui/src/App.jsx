@@ -4,6 +4,7 @@ import { apiGet, apiGetStatus, apiPost } from "./api.js";
 import Login from "./pages/Login.jsx";
 import Events from "./pages/Events.jsx";
 import Console from "./pages/Console.jsx";
+import DispatchConsole from "./pages/DispatchConsole.jsx";
 import Channels from "./pages/Channels.jsx";
 import Admin from "./pages/Admin.jsx";
 import SystemSettings from "./pages/SystemSettings.jsx";
@@ -143,7 +144,7 @@ const App = () => {
             needsSetup ? (
               <Navigate to="/first-run" replace />
             ) : (
-              <Console user={user} onLogout={handleLogout} />
+              <DispatchConsole user={user} onLogout={handleLogout} />
             )
           ) : (
             <Navigate to="/login" replace />

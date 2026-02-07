@@ -32,8 +32,18 @@ const getWsUrl = () => {
  * Inner component that uses ChannelContext and usePermissionUpdates
  * Must be rendered inside ChannelProvider to access setChannels
  */
-const ChannelListWithPermissions = ({ wsUrl, token }) => {
+const ChannelListWithPermissions = ({ wsUrl, token, channelNames }) => {
   const { setChannels } = useChannels();
+
+  // Apply channel names on mount
+  useEffect(() => {
+    if (channelNames && Object.keys(channelNames).length > 0) {
+      setChannels(prev => prev.map(ch => ({
+        ...ch,
+        name: channelNames[ch.id] || ch.id
+      })));
+    }
+  }, [channelNames, setChannels]);
 
   // Handle permission updates from global WebSocket
   const handlePermissionUpdate = useCallback(({ added, removed }) => {
@@ -41,12 +51,15 @@ const ChannelListWithPermissions = ({ wsUrl, token }) => {
       // Remove revoked channels
       const filtered = prevChannels.filter((ch) => !(removed || []).includes(ch.id));
 
-      // Add new channels (with channelId as name for MVP)
-      const newChannels = (added || []).map((id) => ({ id, name: id }));
+      // Add new channels (use channelNames if available, else channelId)
+      const newChannels = (added || []).map((id) => ({
+        id,
+        name: channelNames?.[id] || id
+      }));
 
       return [...filtered, ...newChannels];
     });
-  }, [setChannels]);
+  }, [setChannels, channelNames]);
 
   // Connect to permission update WebSocket
   usePermissionUpdates(wsUrl, token, handlePermissionUpdate);
@@ -69,6 +82,7 @@ const Channels = ({ user, onLogout }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [token, setToken] = useState(null);
+  const [channelNames, setChannelNames] = useState(null);
   const [wsUrl] = useState(getWsUrl());
 
   // Fetch router token on mount
@@ -87,6 +101,11 @@ const Channels = ({ user, onLogout }) => {
         // Store token in useAuth hook (sessionStorage persistence)
         login(response.token);
         setToken(response.token);
+
+        // Store channel names if provided (Phase 04-02)
+        if (response.channelNames) {
+          setChannelNames(response.channelNames);
+        }
       } catch (err) {
         if (err.status === 403) {
           setError('You are not active in this event. Contact an administrator for access.');
@@ -142,7 +161,7 @@ const Channels = ({ user, onLogout }) => {
       {/* Channel list (rendered when token and authUser available) */}
       {!loading && !error && token && authUser && (
         <ChannelProvider user={authUser}>
-          <ChannelListWithPermissions wsUrl={wsUrl} token={token} />
+          <ChannelListWithPermissions wsUrl={wsUrl} token={token} channelNames={channelNames} />
         </ChannelProvider>
       )}
     </div>

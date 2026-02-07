@@ -91,7 +91,7 @@ const Events = ({ user, onLogout }) => {
                   My Channels
                 </Link>
                 <Link className="btn btn--secondary" to={`/event/${event.id}/dispatch`}>
-                  Dispatch View
+                  Dispatch Console
                 </Link>
                 {user.globalRole === "ADMIN" ? (
                   <Link className="btn btn--primary" to={`/event/${event.id}/admin`}>
