@@ -1,23 +1,14 @@
 # Roadmap: VoicePing PTT Communications Platform
 
-## Overview
+## Milestones
 
-This roadmap rebuilds the broken Opus-over-WebSocket audio subsystem with WebRTC and mediasoup SFU while preserving all existing user management and event structure. Phase 1 proves WebRTC audio works in a single channel, Phase 2 adds role-based access control and organizational structure, Phase 3 delivers a functional browser UI for general users, and Phase 4 implements advanced dispatch multi-channel monitoring. The journey progresses from technical validation to feature completeness, addressing critical audio reliability issues while maintaining all current working capabilities.
+- ✅ **v1.0 WebRTC Audio Rebuild + Web UI** - Phases 1-4 (shipped 2026-02-07)
+- 🚧 **v2.0 Android Client App** - Phases 5-10 (in progress)
 
 ## Phases
 
-**Phase Numbering:**
-- Integer phases (1, 2, 3): Planned milestone work
-- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
-
-Decimal phases appear between their surrounding integers in numeric order.
-
-- [x] **Phase 1: WebRTC Audio Foundation** - Prove WebRTC + mediasoup works with PTT audio under 300ms latency
-- [x] **Phase 2: User Management & Access Control** - Role-based permissions and event/team/channel structure
-- [x] **Phase 3: Browser UI for General Users** - Web interface for single-channel PTT communication
-- [x] **Phase 4: Dispatch Multi-Channel Monitoring** - Advanced dispatch console with selective channel monitoring
-
-## Phase Details
+<details>
+<summary>✅ v1.0 WebRTC Audio Rebuild + Web UI (Phases 1-4) - SHIPPED 2026-02-07</summary>
 
 ### Phase 1: WebRTC Audio Foundation
 **Goal**: Prove WebRTC audio transmission works reliably with target latency achieved for PTT use case
@@ -47,7 +38,7 @@ Plans:
 **Requirements**: AUTH-01, AUTH-02, AUTH-03, AUTH-04, AUTH-05, AUTH-06, AUTH-07, AUTH-08, AUTH-09, EVNT-01, EVNT-02, EVNT-03, EVNT-04, EVNT-05, EVNT-06, SEC-03, SEC-04, SEC-05, SYS-03, SYS-04
 **Success Criteria** (what must be TRUE):
   1. Admin user can create events and assign users to Admin, Dispatch, or General roles
-  2. Dispatch user can create teams and channels within assigned events only
+  2. Dispatch user can create teams and assign users to channels
   3. Dispatch user can assign and remove users from channels
   4. General user can only PTT on channels they are assigned to
   5. User authorization is checked before granting channel access
@@ -55,14 +46,14 @@ Plans:
 **Plans**: 8 plans
 
 Plans:
-- [ ] 02-01-PLAN.md -- Auth foundation: enhanced JWT claims, PermissionManager, AuditLogger, extended types/protocol
-- [ ] 02-02-PLAN.md -- Rate limiter (progressive slowdown), jitter buffer config, worker pool optimization
-- [ ] 02-03-PLAN.md -- Channel authorization enforcement: permission-checked join, heartbeat refresh, graceful revocation
-- [ ] 02-04-PLAN.md -- Real-time permission sync via Redis pub/sub, enhanced channel state with event association
-- [ ] 02-05-PLAN.md -- Dispatch PTT priority interrupt and emergency broadcast (all-channel override)
-- [ ] 02-06-PLAN.md -- Force-disconnect, security events backend, ban/unban management
-- [ ] 02-07-PLAN.md -- Integration: wire all Phase 2 modules, complete message routing, permission sync callback
-- [ ] 02-08-PLAN.md -- Load testing (100 concurrent users), E2E test page, Phase 2 verification
+- [x] 02-01-PLAN.md -- Auth foundation: enhanced JWT claims, PermissionManager, AuditLogger, extended types/protocol
+- [x] 02-02-PLAN.md -- Rate limiter (progressive slowdown), jitter buffer config, worker pool optimization
+- [x] 02-03-PLAN.md -- Channel authorization enforcement: permission-checked join, heartbeat refresh, graceful revocation
+- [x] 02-04-PLAN.md -- Real-time permission sync via Redis pub/sub, enhanced channel state with event association
+- [x] 02-05-PLAN.md -- Dispatch PTT priority interrupt and emergency broadcast (all-channel override)
+- [x] 02-06-PLAN.md -- Force-disconnect, security events backend, ban/unban management
+- [x] 02-07-PLAN.md -- Integration: wire all Phase 2 modules, complete message routing, permission sync callback
+- [x] 02-08-PLAN.md -- Load testing (100 concurrent users), E2E test page, Phase 2 verification
 
 ### Phase 3: Browser UI for General Users
 **Goal**: Web interface enables general users to see assigned channels and communicate via PTT
@@ -99,18 +90,141 @@ Plans:
 - [x] 04-02-PLAN.md -- DispatchConsole page, ChannelGrid with team grouping, AdminDrawer, route wiring, navigation, mute persistence, channel names for general users
 - [x] 04-03-PLAN.md -- Build verification, integration fixes, and visual verification checkpoint
 
+</details>
+
+### 🚧 v2.0 Android Client App (In Progress)
+
+**Milestone Goal:** Native Android app that turns a phone into a pocket two-way radio for general users — screen off, device in pocket, triggered by headset PTT button, audio through headset.
+
+#### Phase 5: Android Project Setup & WebRTC Foundation
+**Goal**: Android app connects to existing mediasoup server and receives audio
+**Depends on**: Phase 4 (v1.0 shipped)
+**Requirements**: APP-01, APP-02, APP-03, APP-04, APP-05
+**Success Criteria** (what must be TRUE):
+  1. User can install and launch native Android app on device (API 26+)
+  2. User can login with email/password and receive JWT token
+  3. User can select active event from event picker screen
+  4. User sees channel list grouped by team with team labels
+  5. App remembers last selected event on next launch
+  6. App successfully connects to mediasoup server via WebSocket and joins a channel
+  7. App receives audio from server through mediasoup Consumer (device speaker plays audio)
+**Plans**: TBD
+
+Plans:
+- [ ] 05-01: TBD
+- [ ] 05-02: TBD
+
+#### Phase 6: Single-Channel PTT & Audio Transmission
+**Goal**: User can transmit and receive PTT audio in a single channel with full bidirectional flow
+**Depends on**: Phase 5
+**Requirements**: APTT-01, APTT-02, APTT-03, APTT-04, APTT-05, APTT-06, AUD-01
+**Success Criteria** (what must be TRUE):
+  1. User can press and hold PTT button in channel to transmit audio (mic to server)
+  2. User can release PTT button to stop transmission
+  3. User sees busy state when channel is occupied (speaker name + pulse animation)
+  4. User hears received audio from monitored channel through device speaker
+  5. User sees speaker name and animated indicator for active transmissions
+  6. User gets optimistic PTT feedback (instant visual response on press, reverts if denied by server)
+  7. User can toggle between earpiece and speaker audio output
+**Plans**: TBD
+
+Plans:
+- [ ] 06-01: TBD
+- [ ] 06-02: TBD
+
+#### Phase 7: Foreground Service & Background Audio
+**Goal**: App functions as pocket radio with screen off and lock screen PTT operation
+**Depends on**: Phase 6
+**Requirements**: BG-01, BG-02, BG-03, BG-04, AUD-04, AUD-05
+**Success Criteria** (what must be TRUE):
+  1. App runs as foreground service keeping WebSocket and audio alive when screen is off
+  2. Persistent notification shows active channel name and provides PTT controls
+  3. User can operate PTT from lock screen via hardware button (intent broadcast)
+  4. Partial wake lock keeps CPU alive for audio processing when screen is locked
+  5. Audio playback continues through foreground service with screen off (pocket radio mode)
+  6. Audio pauses during incoming phone calls and automatically resumes after call ends
+  7. App survives Android Doze mode with wake lock and heartbeat management
+**Plans**: TBD
+
+Plans:
+- [ ] 07-01: TBD
+- [ ] 07-02: TBD
+
+#### Phase 8: Multi-Channel Monitoring & Scan Mode
+**Goal**: User can monitor up to 5 channels simultaneously with automatic scan mode switching
+**Depends on**: Phase 7
+**Requirements**: SCAN-01, SCAN-02, SCAN-03, SCAN-04, SCAN-05, SCAN-06, SCAN-07, SCAN-08
+**Success Criteria** (what must be TRUE):
+  1. User can monitor up to 5 channels simultaneously with mixed audio playback
+  2. User can set a primary/default channel for monitoring
+  3. Bottom bar shows primary channel with PTT button by default
+  4. Bottom bar auto-switches to active channel when someone transmits (scan mode active)
+  5. Bottom bar drops back to primary channel after transmission ends (configurable delay)
+  6. User can manually tap bottom bar to switch between monitored channels
+  7. Unmonitored/muted channels unsubscribe from audio to save bandwidth
+  8. User can configure scan mode behavior in settings (auto-switch delay, enable/disable)
+**Plans**: TBD
+
+Plans:
+- [ ] 08-01: TBD
+- [ ] 08-02: TBD
+
+#### Phase 9: Hardware PTT & Bluetooth Integration
+**Goal**: User can operate PTT via hardware buttons and Bluetooth headset for hands-free operation
+**Depends on**: Phase 8
+**Requirements**: HW-01, HW-02, HW-03, HW-04, HW-05, AUD-02, AUD-03, APP-06
+**Success Criteria** (what must be TRUE):
+  1. User can map volume keys as PTT button (configurable in settings)
+  2. User can use dedicated PTT button on rugged phones (Sonim, Kyocera)
+  3. User can map Bluetooth headset PTT button to trigger transmission
+  4. User can configure hardware button mapping in settings screen
+  5. Hardware PTT button targets current bottom-bar channel (scan mode aware)
+  6. Audio auto-routes to Bluetooth headset when Bluetooth device is connected
+  7. User can adjust volume per channel independently
+  8. App can auto-start as foreground service on device boot (optional setting, off by default)
+**Plans**: TBD
+
+Plans:
+- [ ] 09-01: TBD
+- [ ] 09-02: TBD
+
+#### Phase 10: Network Resilience & UX Polish
+**Goal**: Production-ready app with cellular network resilience and polished user experience
+**Depends on**: Phase 9
+**Requirements**: NET-01, NET-02, NET-03, NET-04, UX-01, UX-02, UX-03, UX-04
+**Success Criteria** (what must be TRUE):
+  1. App auto-reconnects silently after network loss without user intervention
+  2. App handles WiFi to cellular handoff gracefully without dropping audio
+  3. App shows offline state with cached channel list when disconnected
+  4. App shows small reconnecting indicator during reconnection attempts
+  5. User feels haptic feedback for PTT press, release, busy, and transmission events
+  6. User sees network quality indicator (latency, connection status) in UI
+  7. User can view transmission history (last 10-20 transmissions) when tapping into a channel
+  8. Settings screen provides controls for scan mode, button mapping, audio output, and auto-start
+**Plans**: TBD
+
+Plans:
+- [ ] 10-01: TBD
+- [ ] 10-02: TBD
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10
 
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 1. WebRTC Audio Foundation | 8/8 | ✓ Complete | 2026-02-06 |
-| 2. User Management & Access Control | 8/8 | ✓ Complete | 2026-02-06 |
-| 3. Browser UI for General Users | 5/5 | ✓ Complete | 2026-02-07 |
-| 4. Dispatch Multi-Channel Monitoring | 3/3 | ✓ Complete | 2026-02-07 |
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
+| 1. WebRTC Audio Foundation | v1.0 | 8/8 | Complete | 2026-02-07 |
+| 2. User Management & Access Control | v1.0 | 8/8 | Complete | 2026-02-07 |
+| 3. Browser UI for General Users | v1.0 | 5/5 | Complete | 2026-02-07 |
+| 4. Dispatch Multi-Channel Monitoring | v1.0 | 3/3 | Complete | 2026-02-07 |
+| 5. Android Project Setup & WebRTC Foundation | v2.0 | 0/TBD | Not started | - |
+| 6. Single-Channel PTT & Audio Transmission | v2.0 | 0/TBD | Not started | - |
+| 7. Foreground Service & Background Audio | v2.0 | 0/TBD | Not started | - |
+| 8. Multi-Channel Monitoring & Scan Mode | v2.0 | 0/TBD | Not started | - |
+| 9. Hardware PTT & Bluetooth Integration | v2.0 | 0/TBD | Not started | - |
+| 10. Network Resilience & UX Polish | v2.0 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-02-06*
-*Last updated: 2026-02-07*
+*Last updated: 2026-02-08 after v2.0 roadmap creation*
