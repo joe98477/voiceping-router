@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-06)
 
 **Core value:** Reliable, secure real-time audio communication for coordinating 1000+ distributed team members during high-profile events where security and uptime are critical
-**Current focus:** Phase 3 COMPLETE — Phase 4 next (Dispatch Multi-Channel Monitoring)
+**Current focus:** ALL PHASES COMPLETE — Milestone 1 finished
 
 ## Current Position
 
-Phase: 4 of 4 (Dispatch Multi-Channel Monitoring) — IN PROGRESS
-Plan: 02 of 04 complete
-Status: In progress
-Last activity: 2026-02-07 — Completed 04-02-PLAN.md (DispatchConsole page with team-grouped grid and channel name API)
+Phase: 4 of 4 (Dispatch Multi-Channel Monitoring) — COMPLETE
+Plan: 03 of 03 complete
+Status: ALL PHASES COMPLETE
+Last activity: 2026-02-07 — Phase 4 complete, human checkpoint approved
 
-Progress: [█████████░] 88% (23 plans complete)
+Progress: [██████████] 100% (26 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 23
-- Average duration: 9.1 minutes
-- Total execution time: 3.5 hours
+- Total plans completed: 26
+- Average duration: 9.6 minutes
+- Total execution time: ~4.2 hours
 
 **By Phase:**
 
@@ -30,11 +30,11 @@ Progress: [█████████░] 88% (23 plans complete)
 | 01 | 8 | 93 min | 11.6 min |
 | 02 | 8 | 38 min | 4.8 min |
 | 03 | 5 | 73 min | 14.6 min |
-| 04 | 2 | 9 min | 4.5 min |
+| 04 | 3 | 44 min | 14.7 min |
 
 **Recent Trend:**
-- Last 5 plans: 03-03 (3 min), 03-04 (4 min), 03-05 (~60 min), 04-01 (4 min), 04-02 (5 min)
-- Trend: Non-interactive plans consistently fast (3-5 min); 03-05 was interactive Docker debugging outlier (~60 min)
+- Last 5 plans: 03-05 (~60 min), 04-01 (4 min), 04-02 (5 min), 04-03 (~30 min)
+- Trend: Non-interactive plans consistently fast (3-5 min); checkpoint plans with human interaction + fixes take 30-60 min
 
 *Updated after each plan completion*
 
@@ -249,6 +249,8 @@ Recent decisions affecting current work:
 | UI-014 | Per-team mute toggle buttons in team section headers | Allows bulk muting/unmuting of all channels in a team with one click | Team mute button shows 'Muted' when ALL channels muted, else 'Unmuted' |
 | UI-015 | AdminDrawer slides from right (not center modal like SettingsDrawer) | Side drawer preserves context (channels visible) while accessing admin features | New UI pattern for dispatch console; SettingsDrawer remains center modal for other pages |
 | API-001 | Enhanced /api/router/token endpoint to include channelNames map | General users need channel names (not IDs); existing JWT only contains channelIds | All users (general + dispatch/admin) get channel names; lightweight solution (no new endpoint) |
+| API-002 | ADMIN users bypass event membership requirement in /api/router/token | Admin users should have full access to all events without needing explicit membership | ADMIN users get all channels in event with role='ADMIN'; non-admin users still require active membership |
+| API-003 | Configurable timeout per API call (default 10s, overview uses 30s) | Prisma connection pool cold start can cause slow responses exceeding 10s default timeout | apiFetch accepts options.timeout parameter; dispatch console overview uses 30s timeout |
 
 ### Pending Todos
 
@@ -267,8 +269,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-07T07:13:00Z
-Stopped at: Completed 04-02-PLAN.md (DispatchConsole page with team-grouped grid and channel name API)
+Last session: 2026-02-07
+Stopped at: ALL PHASES COMPLETE — Milestone 1 finished
 Resume file: None
 
 **Phase 2 (User Management & Access Control) COMPLETE WITH VERIFICATION.**
@@ -280,9 +282,9 @@ Resume file: None
 - ✓ 03-04: Real-Time Permission Updates (usePermissionUpdates hook, global WebSocket)
 - ✓ 03-05: Build verification, Docker fixes, human checkpoint PASSED
 
-**Phase 4 (Dispatch Multi-Channel Monitoring) IN PROGRESS:**
+**Phase 4 (Dispatch Multi-Channel Monitoring) COMPLETE:**
 - ✓ 04-01: Dispatch channel limit bypass + DispatchChannelCard component with mute toggle
 - ✓ 04-02: DispatchConsole page with team-grouped grid, stats bar, AdminDrawer, mute persistence, channel name API
-- Next: 04-03, 04-04 (remaining plans in Phase 4)
+- ✓ 04-03: Build verification, human checkpoint PASSED (3 fixes: timeout, 403 handling, admin UX)
 
-**Known issue:** Request timeouts after ~5 minutes of runtime (likely Prisma connection pool or Redis). Infrastructure concern, not blocker for Phase 4.
+**ALL 4 PHASES COMPLETE. Milestone 1 finished.**
