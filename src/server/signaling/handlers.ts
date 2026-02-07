@@ -460,6 +460,10 @@ export class SignalingHandlers {
         channelId
       );
 
+      // Resume server-side consumer so RTP flows from producer to client
+      // Client-side consumer.resume() only resumes locally; server must resume independently
+      await this.producerConsumerManager.resumeConsumer(consumerInfo.id);
+
       this.sendResponse(ctx, message.id, consumerInfo);
 
       logger.info(`Created consumer ${consumerInfo.id} for ${ctx.userId} consuming ${producerId}`);
