@@ -446,10 +446,10 @@ export class SignalingHandlers {
         throw new Error('channelId, producerId, and rtpCapabilities are required');
       }
 
-      // Get user's receive transport
-      const transport = this.transportManager.getTransport(producerId);
+      // Get receiver's recv transport
+      const transport = this.transportManager.getUserChannelTransport(ctx.userId, channelId, 'recv');
       if (!transport) {
-        throw new Error('Transport not found for consume operation');
+        throw new Error('Receive transport not found for consume operation');
       }
 
       const consumerInfo = await this.producerConsumerManager.createConsumer(
@@ -510,10 +510,10 @@ export class SignalingHandlers {
         // Send success response
         this.sendResponse(ctx, message.id, { success: true, state: result.state });
 
-        // Broadcast speaker change to channel
+        // Broadcast speaker change to channel (include producerId for audio consumption)
         this.broadcastToChannel(
           channelId,
-          createMessage(SignalingType.SPEAKER_CHANGED, result.state as any),
+          createMessage(SignalingType.SPEAKER_CHANGED, { ...result.state, producerId } as any),
           ctx.userId
         );
       } else {

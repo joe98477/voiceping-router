@@ -40,6 +40,10 @@ export class ConnectionManager {
   private audioTrack: MediaStreamTrack | null = null;
   private producerId: string | null = null;
 
+  // Audio playback for incoming audio
+  private activeAudioElement: HTMLAudioElement | null = null;
+  private activeConsumerProducerId: string | null = null;
+
   constructor(options: ConnectionManagerOptions) {
     this.options = options;
     this.channelId = options.channelId;
@@ -218,15 +222,70 @@ export class ConnectionManager {
   }
 
   /**
-   * Handle speaker changed events
+   * Handle speaker changed events from server broadcast
    */
   private handleSpeakerChanged(data: Record<string, unknown>): void {
-    const userId = data.userId as string | null;
-    const userName = data.userName as string | null;
-    console.log('Speaker changed:', userId, userName);
+    const userId = data.currentSpeaker as string | null;
+    const userName = data.speakerName as string | null;
+    const producerId = data.producerId as string | null;
+    const isBusy = data.isBusy as boolean;
+    console.log('Speaker changed:', userId, userName, 'producerId:', producerId);
+
+    // Notify UI callback
     if (this.options.onSpeakerChanged) {
       this.options.onSpeakerChanged(userId, userName);
     }
+
+    // Handle audio consumption
+    if (isBusy && producerId && userId) {
+      this.startConsuming(producerId);
+    } else {
+      this.stopConsuming();
+    }
+  }
+
+  /**
+   * Start consuming audio from a remote producer
+   */
+  private async startConsuming(producerId: string): Promise<void> {
+    if (!this.transportClient || !this.device) return;
+
+    // Already consuming this producer
+    if (this.activeConsumerProducerId === producerId) return;
+
+    // Stop any existing consumption first
+    this.stopConsuming();
+
+    try {
+      const rtpCapabilities = this.device.getDevice().rtpCapabilities;
+      const result = await this.transportClient.consumeAudio(producerId, this.channelId, rtpCapabilities);
+
+      // Create audio element and play
+      const audioElement = new Audio();
+      audioElement.srcObject = new MediaStream([result.track]);
+      audioElement.autoplay = true;
+      await audioElement.play().catch(err => {
+        console.warn('Audio autoplay blocked:', err);
+      });
+
+      this.activeAudioElement = audioElement;
+      this.activeConsumerProducerId = producerId;
+      console.log(`Consuming audio from producer ${producerId}`);
+    } catch (error) {
+      console.error('Failed to consume audio:', error);
+    }
+  }
+
+  /**
+   * Stop consuming audio
+   */
+  private stopConsuming(): void {
+    if (this.activeAudioElement) {
+      this.activeAudioElement.pause();
+      this.activeAudioElement.srcObject = null;
+      this.activeAudioElement = null;
+    }
+    this.activeConsumerProducerId = null;
   }
 
   /**
@@ -246,9 +305,13 @@ export class ConnectionManager {
       // Request PTT lock from server
       const response = await this.signalingClient.pttStart(this.channelId);
 
+      // Check for denial (server sends success: false for denials)
+      if (response.data && response.data.denied) {
+        const speakerName = response.data.currentSpeakerName as string || 'Another user';
+        throw new Error(`${speakerName} is speaking`);
+      }
+
       if (response.error) {
-        // PTT denied (someone else is speaking)
-        console.log('PTT denied:', response.error);
         throw new Error(response.error);
       }
 
@@ -264,6 +327,14 @@ export class ConnectionManager {
 
       this.isTransmitting = true;
       console.log('PTT transmission started');
+
+      // Self-update: notify UI that we are the speaker
+      if (this.options.onSpeakerChanged) {
+        const state = response.data?.state as Record<string, unknown> | undefined;
+        const userName = state?.speakerName as string || 'You';
+        const userId = state?.currentSpeaker as string || null;
+        this.options.onSpeakerChanged(userId, userName);
+      }
     } catch (error) {
       console.error('Failed to start transmitting:', error);
       throw error;
@@ -298,6 +369,11 @@ export class ConnectionManager {
 
       this.isTransmitting = false;
       console.log('PTT transmission stopped');
+
+      // Self-update: notify UI that no one is speaking
+      if (this.options.onSpeakerChanged) {
+        this.options.onSpeakerChanged(null, null);
+      }
     } catch (error) {
       console.error('Failed to stop transmitting:', error);
       throw error;
@@ -315,6 +391,9 @@ export class ConnectionManager {
       if (this.isTransmitting) {
         await this.stopTransmitting();
       }
+
+      // Stop audio consumption
+      this.stopConsuming();
 
       // Leave channel
       if (this.signalingClient && this.connectionState !== 'error') {

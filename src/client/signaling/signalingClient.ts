@@ -20,7 +20,7 @@ export interface ISignalingClient {
   createTransport(channelId: string, direction: 'send' | 'recv'): Promise<SignalingMessage>;
   connectTransport(transportId: string, dtlsParameters: object): Promise<SignalingMessage>;
   produce(transportId: string, kind: string, rtpParameters: object, channelId: string): Promise<SignalingMessage>;
-  consume(channelId: string, producerId: string): Promise<SignalingMessage>;
+  consume(channelId: string, producerId: string, rtpCapabilities?: object): Promise<SignalingMessage>;
   pttStart(channelId: string): Promise<SignalingMessage>;
   pttStop(channelId: string): Promise<SignalingMessage>;
 }
@@ -246,8 +246,8 @@ export class SignalingClient implements ISignalingClient {
     return this.request(SignalingType.PRODUCE, { transportId, kind, rtpParameters, channelId });
   }
 
-  async consume(channelId: string, producerId: string): Promise<SignalingMessage> {
-    return this.request(SignalingType.CONSUME, { channelId, producerId });
+  async consume(channelId: string, producerId: string, rtpCapabilities?: object): Promise<SignalingMessage> {
+    return this.request(SignalingType.CONSUME, { channelId, producerId, rtpCapabilities });
   }
 
   async pttStart(channelId: string): Promise<SignalingMessage> {

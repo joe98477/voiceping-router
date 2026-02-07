@@ -446,8 +446,8 @@ export class ReconnectingSignalingClient implements ISignalingClient {
     return this.request(SignalingType.PRODUCE, { transportId, kind, rtpParameters, channelId });
   }
 
-  async consume(channelId: string, producerId: string): Promise<SignalingMessage> {
-    return this.request(SignalingType.CONSUME, { channelId, producerId });
+  async consume(channelId: string, producerId: string, rtpCapabilities?: object): Promise<SignalingMessage> {
+    return this.request(SignalingType.CONSUME, { channelId, producerId, rtpCapabilities });
   }
 
   async pttStart(channelId: string): Promise<SignalingMessage> {

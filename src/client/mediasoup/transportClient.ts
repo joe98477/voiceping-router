@@ -164,14 +164,15 @@ export class TransportClient {
    */
   async consumeAudio(
     producerId: string,
-    channelId: string
+    channelId: string,
+    rtpCapabilities?: object
   ): Promise<{ consumer: Consumer; track: MediaStreamTrack }> {
     if (!this.recvTransport) {
       throw new Error('Receive transport not created. Call createRecvTransport() first.');
     }
 
-    // Request consumer creation from server
-    const response = await this.signalingClient.consume(channelId, producerId);
+    // Request consumer creation from server (include rtpCapabilities for server-side validation)
+    const response = await this.signalingClient.consume(channelId, producerId, rtpCapabilities);
 
     if (!response.data) {
       throw new Error('Server did not return consumer parameters');

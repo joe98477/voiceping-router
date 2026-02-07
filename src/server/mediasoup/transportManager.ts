@@ -108,6 +108,18 @@ export class TransportManager {
   }
 
   /**
+   * Get transport by user, channel, and direction
+   */
+  getUserChannelTransport(
+    userId: string,
+    channelId: string,
+    direction: 'send' | 'recv'
+  ): mediasoupTypes.WebRtcTransport | null {
+    const key = `${userId}:${channelId}:${direction}`;
+    return this.transports.get(key) || null;
+  }
+
+  /**
    * Close and remove transport
    */
   async closeTransport(transportId: string): Promise<void> {

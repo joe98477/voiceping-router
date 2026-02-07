@@ -58,14 +58,14 @@ export const useChannelConnection = (channelId, wsUrl, token) => {
         setError(err.message || 'Connection error');
       },
 
-      // Channel state update handler (isBusy, speakerId, speakerName)
+      // Channel state update handler (isBusy, currentSpeaker, speakerName)
       onChannelStateUpdate: (channelState) => {
         console.log(`[${channelId}] Channel state update:`, channelState);
 
-        // Update ChannelContext with new state
+        // Update ChannelContext with new state (server uses currentSpeaker, UI uses speakerId)
         updateChannelState(channelId, {
           isBusy: channelState.isBusy || false,
-          speakerId: channelState.speakerId || null,
+          speakerId: channelState.currentSpeaker || null,
           speakerName: channelState.speakerName || null,
         });
       },
