@@ -4,7 +4,7 @@
  * This token contains channelIds and is used for WebSocket authentication
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getToken, saveToken, removeToken } from '../utils/tokenStorage.js';
 
 /**
@@ -87,7 +87,7 @@ export const useAuth = () => {
    * Authenticate with router JWT token
    * @param {string} newToken - JWT token from /api/router/token
    */
-  const login = (newToken) => {
+  const login = useCallback((newToken) => {
     if (!newToken || typeof newToken !== 'string') {
       console.error('Invalid token provided to login');
       return;
@@ -107,16 +107,16 @@ export const useAuth = () => {
     saveToken(newToken);
     setToken(newToken);
     setUser(payload);
-  };
+  }, []);
 
   /**
    * Clear authentication state
    */
-  const logout = () => {
+  const logout = useCallback(() => {
     removeToken();
     setToken(null);
     setUser(null);
-  };
+  }, []);
 
   return {
     user,
