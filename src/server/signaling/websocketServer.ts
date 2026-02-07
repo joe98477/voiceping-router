@@ -75,6 +75,12 @@ export class SignalingServer {
       server,
       path: '/ws',
       verifyClient: this.verifyClient.bind(this),
+      // Select 'voiceping' subprotocol from client's offered list
+      // Client sends ['voiceping', jwtToken] — we accept 'voiceping' as the protocol
+      handleProtocols: (protocols: Set<string>) => {
+        if (protocols.has('voiceping')) return 'voiceping';
+        return false;
+      },
     });
 
     this.wss.on('connection', this.handleConnection.bind(this));
@@ -140,17 +146,25 @@ export class SignalingServer {
       token = url.searchParams.get('token') || undefined;
     }
 
-    // 3. Check sec-websocket-protocol header (legacy compatibility)
+    // 3. Check sec-websocket-protocol header
+    // Client sends: new WebSocket(url, ['voiceping', jwtToken])
+    // Token is any non-'voiceping' subprotocol (raw JWT starting with eyJ...)
     if (!token) {
       const protocols = info.req.headers['sec-websocket-protocol'];
       if (protocols) {
-        const protocolArray = Array.isArray(protocols) ? protocols : [protocols];
-        for (const protocol of protocolArray) {
-          // Format: "token-<jwt>"
+        // sec-websocket-protocol header is comma-separated string
+        const protocolList = typeof protocols === 'string'
+          ? protocols.split(',').map(p => p.trim())
+          : protocols;
+        for (const protocol of protocolList) {
+          if (protocol === 'voiceping') continue;
+          // Support both raw JWT and legacy "token-<jwt>" format
           if (protocol.startsWith('token-')) {
             token = protocol.substring(6);
-            break;
+          } else {
+            token = protocol;
           }
+          break;
         }
       }
     }
