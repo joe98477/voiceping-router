@@ -108,11 +108,14 @@ Plans:
   5. App remembers last selected event on next launch
   6. App successfully connects to mediasoup server via WebSocket and joins a channel
   7. App receives audio from server through mediasoup Consumer (device speaker plays audio)
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
-- [ ] 05-01: TBD
-- [ ] 05-02: TBD
+- [ ] 05-01-PLAN.md -- Android project scaffolding: Gradle, Hilt, Material 3 dark theme, domain models, app shell
+- [ ] 05-02-PLAN.md -- Auth & Login: TokenManager, AuthApi, AuthRepository, LoginScreen, auto-login, loading screen
+- [ ] 05-03-PLAN.md -- Networking: SignalingClient (WebSocket), MediasoupClient, AudioRouter, signaling DTOs
+- [ ] 05-04-PLAN.md -- Event picker & Channel list: EventPickerScreen, ChannelListScreen, BottomBar, ProfileDrawer, ConnectionBanner
+- [ ] 05-05-PLAN.md -- Channel join & audio receive: ChannelRepository, join/leave use cases, speaker changes, end-to-end integration + verification
 
 #### Phase 6: Single-Channel PTT & Audio Transmission
 **Goal**: User can transmit and receive PTT audio in a single channel with full bidirectional flow
@@ -218,7 +221,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 2. User Management & Access Control | v1.0 | 8/8 | Complete | 2026-02-07 |
 | 3. Browser UI for General Users | v1.0 | 5/5 | Complete | 2026-02-07 |
 | 4. Dispatch Multi-Channel Monitoring | v1.0 | 3/3 | Complete | 2026-02-07 |
-| 5. Android Project Setup & WebRTC Foundation | v2.0 | 0/TBD | Not started | - |
+| 5. Android Project Setup & WebRTC Foundation | v2.0 | 0/5 | Not started | - |
 | 6. Single-Channel PTT & Audio Transmission | v2.0 | 0/TBD | Not started | - |
 | 7. Foreground Service & Background Audio | v2.0 | 0/TBD | Not started | - |
 | 8. Multi-Channel Monitoring & Scan Mode | v2.0 | 0/TBD | Not started | - |
