@@ -83,32 +83,7 @@ export class ConnectionManager {
       this.setConnectionState('connecting', 'Connecting to server...');
       await this.signalingClient.connect();
 
-      // Step 3: Create mediasoup device and load with server capabilities
-      this.setConnectionState('connecting', 'Loading device capabilities...');
-      this.device = new MediasoupDevice(this.signalingClient);
-      await this.device.load(this.channelId);
-
-      // Step 4: Request microphone access
-      this.setConnectionState('connecting', 'Requesting microphone access...');
-      this.microphoneManager = new MicrophoneManager();
-      this.audioTrack = await this.microphoneManager.getAudioTrack();
-
-      // Mute by default (PTT not pressed)
-      this.microphoneManager.muteTrack();
-
-      // Step 5: Create transport client
-      this.transportClient = new TransportClient(this.device, this.signalingClient);
-
-      // Step 6: Create WebRTC transports
-      this.setConnectionState('connecting', 'Creating WebRTC transports...');
-      await this.transportClient.createSendTransport(this.channelId);
-      await this.transportClient.createRecvTransport(this.channelId);
-
-      // Step 7: Produce audio
-      this.setConnectionState('connecting', 'Setting up audio stream...');
-      this.producerId = await this.transportClient.produceAudio(this.audioTrack, this.channelId);
-
-      // Step 8: Join channel
+      // Step 3: Join channel (creates mediasoup router on server)
       this.setConnectionState('connecting', 'Joining channel...');
       const joinResponse = await this.signalingClient.joinChannel(this.channelId);
 
@@ -119,6 +94,31 @@ export class ConnectionManager {
           this.options.onChannelStateUpdate(this.currentChannelState);
         }
       }
+
+      // Step 4: Create mediasoup device and load with server capabilities
+      this.setConnectionState('connecting', 'Loading device capabilities...');
+      this.device = new MediasoupDevice(this.signalingClient);
+      await this.device.load(this.channelId);
+
+      // Step 5: Request microphone access
+      this.setConnectionState('connecting', 'Requesting microphone access...');
+      this.microphoneManager = new MicrophoneManager();
+      this.audioTrack = await this.microphoneManager.getAudioTrack();
+
+      // Mute by default (PTT not pressed)
+      this.microphoneManager.muteTrack();
+
+      // Step 6: Create transport client
+      this.transportClient = new TransportClient(this.device, this.signalingClient);
+
+      // Step 7: Create WebRTC transports
+      this.setConnectionState('connecting', 'Creating WebRTC transports...');
+      await this.transportClient.createSendTransport(this.channelId);
+      await this.transportClient.createRecvTransport(this.channelId);
+
+      // Step 8: Produce audio
+      this.setConnectionState('connecting', 'Setting up audio stream...');
+      this.producerId = await this.transportClient.produceAudio(this.audioTrack, this.channelId);
 
       // Step 9: Connection complete
       this.setConnectionState('connected', 'Connected successfully');
