@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.VoicePing" parent="Theme.Material3.Dark.NoActionBar">
-        <!-- Material 3 dark theme applied via Compose -->
+    <style name="Theme.VoicePing" parent="android:Theme.Material.NoActionBar">
+        <!-- Dark background for Compose-only app (all UI via VoicePingTheme) -->
+        <item name="android:colorBackground">#121212</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">false</item>
