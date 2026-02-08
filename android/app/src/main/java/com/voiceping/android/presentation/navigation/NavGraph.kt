@@ -53,9 +53,8 @@ fun NavGraph(
 
         composable(Routes.LOADING) {
             LoadingScreen(
-                onConnected = {
-                    // Check if saved event exists - navigate accordingly
-                    val savedEventId = preferencesManager.getLastEventId()
+                onConnected = { savedEventId ->
+                    // Navigate based on saved event from LoadingViewModel
                     val destination = if (savedEventId != null) {
                         Routes.channelsRoute(savedEventId)
                     } else {
@@ -64,6 +63,12 @@ fun NavGraph(
 
                     navController.navigate(destination) {
                         popUpTo(Routes.LOADING) { inclusive = true }
+                    }
+                },
+                onLogout = {
+                    // Clear tokens and navigate to login
+                    navController.navigate(Routes.LOGIN) {
+                        popUpTo(0) { inclusive = true }
                     }
                 }
             )

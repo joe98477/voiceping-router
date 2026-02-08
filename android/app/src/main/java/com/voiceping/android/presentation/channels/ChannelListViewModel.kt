@@ -1,14 +1,18 @@
 package com.voiceping.android.presentation.channels
 
+import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.voiceping.android.data.network.SignalingClient
+import com.voiceping.android.data.repository.ChannelRepository
 import com.voiceping.android.data.repository.EventRepository
 import com.voiceping.android.data.storage.PreferencesManager
 import com.voiceping.android.domain.model.Channel
 import com.voiceping.android.domain.model.ConnectionState
 import com.voiceping.android.domain.model.User
+import com.voiceping.android.domain.usecase.JoinChannelUseCase
+import com.voiceping.android.domain.usecase.LeaveChannelUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,6 +24,9 @@ import javax.inject.Inject
 class ChannelListViewModel @Inject constructor(
     private val eventRepository: EventRepository,
     private val signalingClient: SignalingClient,
+    private val channelRepository: ChannelRepository,
+    private val joinChannelUseCase: JoinChannelUseCase,
+    private val leaveChannelUseCase: LeaveChannelUseCase,
     private val preferencesManager: PreferencesManager,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -30,9 +37,7 @@ class ChannelListViewModel @Inject constructor(
     private val _joinedChannel = MutableStateFlow<Channel?>(null)
     val joinedChannel: StateFlow<Channel?> = _joinedChannel.asStateFlow()
 
-    private val _currentSpeaker = MutableStateFlow<User?>(null)
-    val currentSpeaker: StateFlow<User?> = _currentSpeaker.asStateFlow()
-
+    val currentSpeaker: StateFlow<User?> = channelRepository.currentSpeaker
     val connectionState: StateFlow<ConnectionState> = signalingClient.connectionState
 
     private val eventId: String? = savedStateHandle.get<String>("eventId")
@@ -40,6 +45,18 @@ class ChannelListViewModel @Inject constructor(
 
     init {
         eventId?.let { loadChannels(it) }
+
+        // Observe ChannelRepository.joinedChannelId to sync with _joinedChannel
+        viewModelScope.launch {
+            channelRepository.joinedChannelId.collect { joinedId ->
+                if (joinedId == null) {
+                    _joinedChannel.value = null
+                } else {
+                    // Find the channel with this ID in our channels list
+                    _joinedChannel.value = _channels.value.find { it.id == joinedId }
+                }
+            }
+        }
     }
 
     fun loadChannels(eventId: String) {
@@ -57,19 +74,35 @@ class ChannelListViewModel @Inject constructor(
 
             if (current?.id == channel.id) {
                 // Leave current channel
+                Log.d("ChannelListViewModel", "Leaving channel: ${channel.name}")
+                val result = leaveChannelUseCase(channel.id)
+                if (result.isFailure) {
+                    Log.e("ChannelListViewModel", "Failed to leave channel", result.exceptionOrNull())
+                }
                 _joinedChannel.value = null
-                _currentSpeaker.value = null
-                // TODO: Call leaveChannel() when implemented in Plan 05
             } else {
                 // Phase 5: single channel only - leave previous, join new
                 if (current != null) {
-                    // TODO: Call leaveChannel() for current when implemented in Plan 05
+                    Log.d("ChannelListViewModel", "Leaving previous channel: ${current.name}")
+                    leaveChannelUseCase(current.id)
                 }
 
                 // Join new channel
-                _joinedChannel.value = channel
-                // TODO: Call joinChannel() when implemented in Plan 05
+                Log.d("ChannelListViewModel", "Joining channel: ${channel.name}")
+                val result = joinChannelUseCase(channel.id)
+                if (result.isSuccess) {
+                    _joinedChannel.value = channel
+                } else {
+                    Log.e("ChannelListViewModel", "Failed to join channel", result.exceptionOrNull())
+                    // TODO: Show error to user (Plan 06 or later)
+                }
             }
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        // Disconnect from all channels on ViewModel cleanup
+        channelRepository.disconnectAll()
     }
 }
