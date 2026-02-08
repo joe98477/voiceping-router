@@ -83,10 +83,7 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.google.code.gson:gson:2.11.0")
 
-    // WebRTC
-    implementation("io.getstream:stream-webrtc-android:1.3.9")
-
-    // mediasoup (crow-misia wrapper)
+    // mediasoup (crow-misia wrapper, bundles WebRTC)
     implementation("io.github.crow-misia.libmediasoup-android:libmediasoup-android:0.7.0")
 
     // Security
