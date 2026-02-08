@@ -1,0 +1,143 @@
+package com.voiceping.android.presentation.channels
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.voiceping.android.domain.model.ConnectionState
+import com.voiceping.android.presentation.channels.components.BottomBar
+import com.voiceping.android.presentation.channels.components.ChannelRow
+import com.voiceping.android.presentation.channels.components.TeamHeader
+import com.voiceping.android.presentation.shell.ConnectionBanner
+import com.voiceping.android.presentation.shell.ProfileDrawer
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ChannelListScreen(
+    viewModel: ChannelListViewModel = hiltViewModel(),
+    onSwitchEvent: () -> Unit = {},
+    onSettings: () -> Unit = {},
+    onLogout: () -> Unit = {}
+) {
+    val channels by viewModel.channels.collectAsState()
+    val connectionState by viewModel.connectionState.collectAsState()
+    val joinedChannel by viewModel.joinedChannel.collectAsState()
+    val currentSpeaker by viewModel.currentSpeaker.collectAsState()
+
+    var drawerOpen by remember { mutableStateOf(false) }
+
+    ProfileDrawer(
+        isOpen = drawerOpen,
+        onDismiss = { drawerOpen = false },
+        userName = "User Name",
+        userEmail = "user@example.com",
+        appVersion = "1.0.0",
+        onSwitchEvent = {
+            drawerOpen = false
+            onSwitchEvent()
+        },
+        onSettings = {
+            drawerOpen = false
+            onSettings()
+        },
+        onLogout = {
+            drawerOpen = false
+            onLogout()
+        }
+    ) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Channels") },
+                    actions = {
+                        // Connection status dot
+                        Box(
+                            modifier = Modifier
+                                .size(12.dp)
+                                .background(
+                                    color = when (connectionState) {
+                                        ConnectionState.CONNECTED -> androidx.compose.ui.graphics.Color.Green
+                                        ConnectionState.CONNECTING -> androidx.compose.ui.graphics.Color.Yellow
+                                        ConnectionState.FAILED -> androidx.compose.ui.graphics.Color.Red
+                                        else -> androidx.compose.ui.graphics.Color.Gray
+                                    },
+                                    shape = CircleShape
+                                )
+                        )
+
+                        Spacer(modifier = Modifier.width(16.dp))
+
+                        // Profile icon
+                        IconButton(onClick = { drawerOpen = true }) {
+                            Icon(Icons.Default.Person, contentDescription = "Profile")
+                        }
+                    }
+                )
+            },
+            bottomBar = {
+                BottomBar(
+                    joinedChannel = joinedChannel,
+                    currentSpeaker = currentSpeaker
+                )
+            }
+        ) { paddingValues ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .background(MaterialTheme.colorScheme.background)
+            ) {
+                // Connection banner at top
+                ConnectionBanner(connectionState = connectionState)
+
+                // Channel list grouped by team
+                val channelsByTeam = channels.groupBy { it.teamName }
+
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    channelsByTeam.forEach { (teamName, teamChannels) ->
+                        // Team header
+                        item {
+                            TeamHeader(teamName = teamName)
+                        }
+
+                        // Channels in team
+                        items(teamChannels) { channel ->
+                            ChannelRow(
+                                channel = channel,
+                                isJoined = channel.id == joinedChannel?.id,
+                                onToggle = { viewModel.toggleChannel(channel) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

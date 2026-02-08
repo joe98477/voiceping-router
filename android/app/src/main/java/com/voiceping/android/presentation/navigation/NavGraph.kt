@@ -1,17 +1,15 @@
 package com.voiceping.android.presentation.navigation
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
 import com.voiceping.android.data.storage.PreferencesManager
+import com.voiceping.android.presentation.channels.ChannelListScreen
+import com.voiceping.android.presentation.events.EventPickerScreen
 import com.voiceping.android.presentation.loading.LoadingScreen
 import com.voiceping.android.presentation.login.LoginScreen
 import com.voiceping.android.presentation.login.LoginViewModel
@@ -21,7 +19,9 @@ object Routes {
     const val LOGIN = "login"
     const val LOADING = "loading"
     const val EVENTS = "events"
-    const val CHANNELS = "channels"
+    const val CHANNELS = "channels/{eventId}"
+
+    fun channelsRoute(eventId: String) = "channels/$eventId"
 }
 
 @Composable
@@ -57,7 +57,7 @@ fun NavGraph(
                     // Check if saved event exists - navigate accordingly
                     val savedEventId = preferencesManager.getLastEventId()
                     val destination = if (savedEventId != null) {
-                        Routes.CHANNELS
+                        Routes.channelsRoute(savedEventId)
                     } else {
                         Routes.EVENTS
                     }
@@ -70,41 +70,37 @@ fun NavGraph(
         }
 
         composable(Routes.EVENTS) {
-            EventPickerScreen()
+            EventPickerScreen(
+                onEventSelected = { eventId ->
+                    navController.navigate(Routes.channelsRoute(eventId)) {
+                        popUpTo(Routes.EVENTS) { inclusive = true }
+                    }
+                }
+            )
         }
 
-        composable(Routes.CHANNELS) {
-            ChannelListScreen()
+        composable(
+            route = Routes.CHANNELS,
+            arguments = listOf(
+                navArgument("eventId") { type = NavType.StringType }
+            )
+        ) {
+            ChannelListScreen(
+                onSwitchEvent = {
+                    navController.navigate(Routes.EVENTS) {
+                        popUpTo(Routes.CHANNELS) { inclusive = true }
+                    }
+                },
+                onSettings = {
+                    // TODO: Navigate to settings screen in future phase
+                },
+                onLogout = {
+                    // TODO: Clear tokens and navigate to login
+                    navController.navigate(Routes.LOGIN) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
+            )
         }
-    }
-}
-
-// Placeholder screens - will be implemented in Plans 04-05
-
-@Composable
-fun EventPickerScreen() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = "Event Picker (Placeholder)",
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-    }
-}
-
-@Composable
-fun ChannelListScreen() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = "Channel List (Placeholder)",
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onSurface
-        )
     }
 }
