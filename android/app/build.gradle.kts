@@ -16,7 +16,7 @@ android {
         versionCode = 1
         versionName = "1.0.0"
 
-        buildConfigField("String", "SERVER_URL", "\"https://10.0.2.2:3000\"")
+        buildConfigField("String", "SERVER_URL", "\"http://192.168.100.147:3000\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
