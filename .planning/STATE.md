@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-08)
 ## Current Position
 
 Phase: 5 of 10 (Android Project Setup & WebRTC Foundation)
-Plan: 3 of 5 complete
+Plan: 4 of 5 complete
 Status: In progress
-Last activity: 2026-02-08 — Completed 05-03-PLAN.md (Networking layer)
+Last activity: 2026-02-08 — Completed 05-04-PLAN.md (UI screens: Event picker, Channel list, App shell)
 
-Progress: [████████░░] 40% (Milestone 1 complete: 4/10 phases shipped, Milestone 2: 3/5 Phase 5 plans complete)
+Progress: [████████░░] 44% (Milestone 1 complete: 4/10 phases shipped, Milestone 2: 4/5 Phase 5 plans complete)
 
 ## Performance Metrics
 
@@ -62,6 +62,10 @@ Key decisions carrying forward to Milestone 2:
 | 10-second timeout for signaling requests | Prevents hanging on server failures, generous buffer for network latency | 05 | 03 |
 | 25-second heartbeat interval | Balances disconnect detection (within 30s) with battery efficiency | 05 | 03 |
 | MediasoupClient pattern skeleton with TODOs | Exact library API uncertain, pattern documents architecture for Plan 05 integration | 05 | 03 |
+| Team grouping using groupBy in Composable | Channels.groupBy { it.teamName } provides simple in-memory grouping. Channel lists are small (<50 per event). | 05 | 04 |
+| ProfileDrawer custom implementation (not ModalNavigationDrawer) | Material 3 ModalNavigationDrawer only supports left-to-right. User decision requires right-to-left slide. AnimatedVisibility provides correct behavior. | 05 | 04 |
+| Connection status dot in TopAppBar actions | Separate dot + spacer before icon (simpler than overlay). Functional requirement met. | 05 | 04 |
+| TODO markers for channel join/leave logic | ChannelListViewModel.toggleChannel() has TODOs for actual join/leave calls. Plan 05 will implement SignalingClient integration. | 05 | 04 |
 
 ### Pending Todos
 
@@ -76,7 +80,7 @@ Deferred to future milestones:
 ## Session Continuity
 
 Last session: 2026-02-08
-Stopped at: Completed 05-03-PLAN.md (Networking layer)
+Stopped at: Completed 05-04-PLAN.md (UI screens: Event picker, Channel list, App shell)
 Resume file: None
 
 **Milestone 1 (WebRTC Audio Rebuild + Web UI) COMPLETE:**
@@ -87,12 +91,12 @@ Resume file: None
 - Total: 26 plans, ~4.2 hours execution time
 
 **Milestone 2 (Android Client App) IN PROGRESS:**
-- Phase 5: Android Project Setup & WebRTC Foundation (3/5 plans complete)
+- Phase 5: Android Project Setup & WebRTC Foundation (4/5 plans complete)
   - 05-01: Android project foundation ✓
   - 05-02: Authentication & login flow ✓
   - 05-03: Networking layer (WebSocket signaling, mediasoup client) ✓
-  - 05-04: Channel join & audio playback (pending)
-  - 05-05: Channel list UI with team grouping (pending)
+  - 05-04: UI screens (Event picker, Channel list, App shell) ✓
+  - 05-05: Channel join & audio playback integration (pending)
 - Phase 6: Single-Channel PTT & Audio Transmission (pending)
 - Phase 7: Foreground Service & Background Audio (pending)
 - Phase 8: Multi-Channel Monitoring & Scan Mode (pending)
