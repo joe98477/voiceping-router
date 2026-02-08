@@ -57,9 +57,11 @@ class LoadingViewModel @Inject constructor(
                 // 2. Get server URL from BuildConfig
                 val serverUrl = BuildConfig.SERVER_URL
 
-                // 3. Connect to WebSocket server
+                // 3. Connect to WebSocket server with JWT token
+                val token = tokenManager.getToken()
+                    ?: throw IllegalStateException("No token available")
                 Log.d("LoadingViewModel", "Connecting to WebSocket: $serverUrl")
-                signalingClient.connect(serverUrl)
+                signalingClient.connect(serverUrl, token)
 
                 // 4. Wait for connection to be established (with 15-second timeout)
                 withTimeout(15_000) {
