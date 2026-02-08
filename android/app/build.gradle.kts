@@ -2,7 +2,7 @@ plugins {
     id("com.android.application")
     id("com.google.dagger.hilt.android")
     id("org.jetbrains.kotlin.plugin.compose")
-    id("kotlin-kapt")
+    id("com.google.devtools.ksp")
 }
 
 android {
@@ -76,7 +76,7 @@ dependencies {
 
     // Hilt DI
     implementation("com.google.dagger:hilt-android:2.59.1")
-    kapt("com.google.dagger:hilt-compiler:2.59.1")
+    ksp("com.google.dagger:hilt-compiler:2.59.1")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
 
     // Networking
@@ -106,9 +106,4 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
-}
-
-// Allow references to generated code
-kapt {
-    correctErrorTypes = true
 }
