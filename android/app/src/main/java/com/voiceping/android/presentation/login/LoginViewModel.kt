@@ -63,8 +63,7 @@ class LoginViewModel @Inject constructor(
     }
 
     fun checkAutoLogin(): Boolean {
-        val token = tokenManager.getToken()
-        return token != null && !tokenManager.isTokenExpired()
+        return tokenManager.getStoredCredentials() != null
     }
 }
 

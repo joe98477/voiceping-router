@@ -70,7 +70,7 @@ class SignalingClient @Inject constructor(
      * Server's handleProtocols callback extracts the token.
      */
     suspend fun connect(serverUrl: String, token: String) {
-        val wsUrl = if (serverUrl.endsWith("/ws")) serverUrl else "$serverUrl/ws"
+        val wsUrl = serverUrl.trimEnd('/') + "/ws"
 
         val request = Request.Builder()
             .url(wsUrl)

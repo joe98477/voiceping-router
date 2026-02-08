@@ -44,6 +44,9 @@ fun NavGraph(
         composable(Routes.LOGIN) {
             LoginScreen(
                 onLoginSuccess = {
+                    // After login, go to Loading which will:
+                    // - re-establish session (already done by login)
+                    // - check saved eventId → route to events or channels
                     navController.navigate(Routes.LOADING) {
                         popUpTo(Routes.LOGIN) { inclusive = true }
                     }
@@ -54,7 +57,6 @@ fun NavGraph(
         composable(Routes.LOADING) {
             LoadingScreen(
                 onConnected = { savedEventId ->
-                    // Navigate based on saved event from LoadingViewModel
                     val destination = if (savedEventId != null) {
                         Routes.channelsRoute(savedEventId)
                     } else {
@@ -66,7 +68,6 @@ fun NavGraph(
                     }
                 },
                 onLogout = {
-                    // Clear tokens and navigate to login
                     navController.navigate(Routes.LOGIN) {
                         popUpTo(0) { inclusive = true }
                     }
@@ -77,7 +78,9 @@ fun NavGraph(
         composable(Routes.EVENTS) {
             EventPickerScreen(
                 onEventSelected = { eventId ->
-                    navController.navigate(Routes.channelsRoute(eventId)) {
+                    // Event selected and saved to prefs by EventPickerViewModel.
+                    // Navigate to Loading which will get router token + connect WS.
+                    navController.navigate(Routes.LOADING) {
                         popUpTo(Routes.EVENTS) { inclusive = true }
                     }
                 }
@@ -92,6 +95,8 @@ fun NavGraph(
         ) {
             ChannelListScreen(
                 onSwitchEvent = {
+                    // Clear saved event so Loading goes to event picker
+                    preferencesManager.clearLastEventId()
                     navController.navigate(Routes.EVENTS) {
                         popUpTo(Routes.CHANNELS) { inclusive = true }
                     }
@@ -100,7 +105,6 @@ fun NavGraph(
                     // TODO: Navigate to settings screen in future phase
                 },
                 onLogout = {
-                    // TODO: Clear tokens and navigate to login
                     navController.navigate(Routes.LOGIN) {
                         popUpTo(0) { inclusive = true }
                     }

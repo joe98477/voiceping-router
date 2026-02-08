@@ -870,6 +870,35 @@ app.get("/api/events", requireAuth, requireProfileComplete, async (req, res) => 
   return res.json(memberships.map((m) => m.event));
 });
 
+app.get("/api/events/:eventId/channels", requireAuth, requireProfileComplete, async (req, res) => {
+  const { eventId } = req.params;
+
+  if (req.user.globalRole === "ADMIN") {
+    const channels = await prisma.channel.findMany({
+      where: { eventId },
+      include: { team: true },
+      orderBy: { sortOrder: "asc" }
+    });
+    return res.json(channels.map((c) => ({
+      id: c.id,
+      name: c.name,
+      teamId: c.team?.id || c.teamId || null,
+      teamName: c.team?.name || null
+    })));
+  }
+
+  const channelMemberships = await prisma.channelMembership.findMany({
+    where: { userId: req.user.id, status: "ACTIVE", channel: { eventId } },
+    include: { channel: { include: { team: true } } }
+  });
+  res.json(channelMemberships.map((m) => ({
+    id: m.channel.id,
+    name: m.channel.name,
+    teamId: m.channel.team?.id || m.channel.teamId || null,
+    teamName: m.channel.team?.name || null
+  })));
+});
+
 app.post("/api/events/:eventId/teams", requireAuth, requireProfileComplete, requireDispatchOrAdmin, async (req, res) => {
   const { eventId } = req.params;
   const { name } = req.body || {};

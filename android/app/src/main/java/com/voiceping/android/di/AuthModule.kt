@@ -3,9 +3,6 @@ package com.voiceping.android.di
 import com.google.gson.Gson
 import com.voiceping.android.BuildConfig
 import com.voiceping.android.data.api.AuthApi
-import com.voiceping.android.data.repository.AuthRepository
-import com.voiceping.android.data.storage.PreferencesManager
-import com.voiceping.android.data.storage.TokenManager
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn

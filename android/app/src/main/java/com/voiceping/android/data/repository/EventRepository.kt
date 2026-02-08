@@ -1,7 +1,6 @@
 package com.voiceping.android.data.repository
 
 import com.voiceping.android.data.api.EventApi
-import com.voiceping.android.data.storage.TokenManager
 import com.voiceping.android.domain.model.Channel
 import com.voiceping.android.domain.model.Event
 import kotlinx.coroutines.Dispatchers
@@ -11,17 +10,12 @@ import javax.inject.Singleton
 
 @Singleton
 class EventRepository @Inject constructor(
-    private val eventApi: EventApi,
-    private val tokenManager: TokenManager
+    private val eventApi: EventApi
 ) {
 
     suspend fun getEvents(): Result<List<Event>> = withContext(Dispatchers.IO) {
         try {
-            val token = tokenManager.getToken() ?: return@withContext Result.failure(
-                Exception("No authentication token")
-            )
-
-            val response = eventApi.getEvents("Bearer $token")
+            val response = eventApi.getEvents()
             val events = response.map { dto ->
                 Event(
                     id = dto.id,
@@ -37,11 +31,7 @@ class EventRepository @Inject constructor(
 
     suspend fun getChannelsForEvent(eventId: String): Result<List<Channel>> = withContext(Dispatchers.IO) {
         try {
-            val token = tokenManager.getToken() ?: return@withContext Result.failure(
-                Exception("No authentication token")
-            )
-
-            val response = eventApi.getChannels("Bearer $token", eventId)
+            val response = eventApi.getChannels(eventId)
             val channels = response.map { dto ->
                 Channel(
                     id = dto.id,

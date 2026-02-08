@@ -2,19 +2,20 @@ package com.voiceping.android.data.network.dto
 
 import com.voiceping.android.domain.model.User
 
+/**
+ * Matches control-plane POST /api/auth/login response.
+ * Authentication is session-based (cookies), not JWT.
+ */
 data class LoginResponse(
-    val token: String,
-    val expiresIn: Int,
-    val userId: String,
-    val userName: String,
-    val eventId: String?,
-    val channelIds: List<String>?,
+    val id: String,
+    val email: String,
+    val displayName: String?,
     val globalRole: String,
-    val eventRole: String?
+    val mustChangePassword: Boolean
 ) {
     fun toUser() = User(
-        id = userId,
-        name = userName,
-        email = "" // Email not returned from login response, stored separately
+        id = id,
+        name = displayName ?: email,
+        email = email
     )
 }

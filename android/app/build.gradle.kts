@@ -16,7 +16,7 @@ android {
         versionCode = 1
         versionName = "1.0.0"
 
-        buildConfigField("String", "SERVER_URL", "\"https://app-connect-voice.cloud-loop.com\"")
+        buildConfigField("String", "SERVER_URL", "\"https://app-connect-voice.cloud-loop.com/\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

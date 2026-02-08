@@ -44,48 +44,66 @@ class LoadingViewModel @Inject constructor(
     private fun connectToServer() {
         viewModelScope.launch {
             try {
-                // 1. Check if token needs refresh
-                if (tokenManager.needsRefresh()) {
-                    Log.d("LoadingViewModel", "Token needs refresh, attempting silent refresh")
-                    val refreshResult = authRepository.refreshTokenWithRetry()
-                    if (refreshResult.isFailure) {
-                        _uiState.value = LoadingUiState.Failed("Session expired. Please login again.")
+                // 1. Re-establish session with stored credentials (cookies are in-memory,
+                //    so we need to re-login on each app start / Loading screen entry)
+                val credentials = tokenManager.getStoredCredentials()
+                if (credentials != null) {
+                    Log.d(TAG, "Re-establishing session with stored credentials")
+                    val loginResult = authRepository.login(credentials.email, credentials.password)
+                    if (loginResult.isFailure) {
+                        _uiState.value = LoadingUiState.Failed("Login failed. Please sign in again.")
                         return@launch
                     }
                 }
 
-                // 2. Get server URL from BuildConfig
-                val serverUrl = BuildConfig.SERVER_URL
+                // 2. Check for saved event ID
+                val savedEventId = preferencesManager.getLastEventId()
 
-                // 3. Connect to WebSocket server with JWT token
-                val token = tokenManager.getToken()
-                    ?: throw IllegalStateException("No token available")
-                Log.d("LoadingViewModel", "Connecting to WebSocket: $serverUrl")
+                if (savedEventId == null) {
+                    // No saved event — navigate to event picker (no WS needed yet)
+                    Log.d(TAG, "No saved event, navigating to event picker")
+                    _uiState.value = LoadingUiState.Connected(null)
+                    return@launch
+                }
+
+                // 3. Get router token for the saved event (JWT for WebSocket auth)
+                Log.d(TAG, "Getting router token for event: $savedEventId")
+                val tokenResult = authRepository.getRouterToken(savedEventId)
+                if (tokenResult.isFailure) {
+                    Log.w(TAG, "Failed to get router token, clearing saved event", tokenResult.exceptionOrNull())
+                    // Event might have been removed or user lost access — go to event picker
+                    preferencesManager.clearLastEventId()
+                    _uiState.value = LoadingUiState.Connected(null)
+                    return@launch
+                }
+
+                // 4. Connect to WebSocket server with JWT token
+                val serverUrl = BuildConfig.SERVER_URL
+                val token = tokenResult.getOrThrow()
+                Log.d(TAG, "Connecting to WebSocket: $serverUrl")
                 signalingClient.connect(serverUrl, token)
 
-                // 4. Wait for connection to be established (with 15-second timeout)
+                // 5. Wait for connection to be established (with 15-second timeout)
                 withTimeout(15_000) {
                     signalingClient.connectionState
                         .first { it == ConnectionState.CONNECTED }
                 }
 
-                Log.d("LoadingViewModel", "WebSocket connected, initializing mediasoup")
+                Log.d(TAG, "WebSocket connected, initializing mediasoup")
 
-                // 5. Initialize mediasoup Device
+                // 6. Initialize mediasoup Device
                 try {
                     mediasoupClient.initialize()
-                    Log.d("LoadingViewModel", "Mediasoup initialized successfully")
+                    Log.d(TAG, "Mediasoup initialized successfully")
                 } catch (e: Exception) {
-                    // Log warning but continue - initialize can be retried on channel join
-                    Log.w("LoadingViewModel", "Mediasoup initialization failed, will retry on channel join", e)
+                    Log.w(TAG, "Mediasoup initialization failed, will retry on channel join", e)
                 }
 
-                // 6. Emit connected state with saved event ID
-                val savedEventId = preferencesManager.getLastEventId()
+                // 7. Emit connected state with saved event ID
                 _uiState.value = LoadingUiState.Connected(savedEventId)
 
             } catch (e: Exception) {
-                Log.e("LoadingViewModel", "Connection failed", e)
+                Log.e(TAG, "Connection failed", e)
                 _uiState.value = LoadingUiState.Failed(e.message ?: "Connection failed")
             }
         }
@@ -94,5 +112,9 @@ class LoadingViewModel @Inject constructor(
     fun retry() {
         _uiState.value = LoadingUiState.Connecting
         connectToServer()
+    }
+
+    companion object {
+        private const val TAG = "LoadingViewModel"
     }
 }
