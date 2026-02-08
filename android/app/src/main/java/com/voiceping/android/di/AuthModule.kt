@@ -37,22 +37,4 @@ object AuthModule {
     fun provideAuthApi(retrofit: Retrofit): AuthApi {
         return retrofit.create(AuthApi::class.java)
     }
-
-    @Provides
-    @Singleton
-    fun provideTokenManager(tokenManager: TokenManager): TokenManager {
-        return tokenManager
-    }
-
-    @Provides
-    @Singleton
-    fun providePreferencesManager(preferencesManager: PreferencesManager): PreferencesManager {
-        return preferencesManager
-    }
-
-    @Provides
-    @Singleton
-    fun provideAuthRepository(authRepository: AuthRepository): AuthRepository {
-        return authRepository
-    }
 }
