@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-02-08)
 
 ## Current Position
 
-Phase: 5 of 10 (Android Project Setup & WebRTC Foundation)
-Plan: 5 of 5 complete
-Status: Phase complete
-Last activity: 2026-02-08 — Completed 05-05-PLAN.md (Channel join & audio playback integration)
+Phase: 6 of 10 (Single-Channel PTT & Audio Transmission)
+Plan: 1 of 5 complete
+Status: In progress
+Last activity: 2026-02-10 — Completed 06-01-PLAN.md (PTT domain models & settings foundation)
 
-Progress: [█████████░] 50% (Milestone 1 complete: 4/10 phases shipped, Milestone 2: 5/5 Phase 5 plans complete)
+Progress: [█████████░] 51% (Milestone 1 complete: 4/10 phases shipped, Milestone 2: 5/5 Phase 5 complete, 1/5 Phase 6 complete)
 
 ## Performance Metrics
 
@@ -35,6 +35,12 @@ Progress: [█████████░] 50% (Milestone 1 complete: 4/10 phase
 **Trend:** Stable (Milestone 1 complete)
 
 *Updated after Milestone 1 completion*
+
+**Milestone 2 Phase 6:**
+
+| Plan | Duration (s) | Tasks | Files |
+|------|--------------|-------|-------|
+| 06-01 | 200 | 2 | 7 |
 
 ## Accumulated Context
 
@@ -70,6 +76,17 @@ Key decisions carrying forward to Milestone 2:
 | LoadingViewModel auto-initiates connection in init block | Connection starts immediately when LoadingScreen appears. Early connection start reduces perceived latency. | 05 | 05 |
 | Failed connection shows Retry and Logout buttons | Per user decision: retry 2-3 times silently, then show clear message with user control. Retry allows manual retry, Logout provides escape. | 05 | 05 |
 
+**Phase 6 Decisions:**
+
+| Decision | Rationale | Phase | Plan |
+|----------|-----------|-------|------|
+| Use DataStore over SharedPreferences | Type-safe Flow API, async by default, better error handling, modern Kotlin-first API | 06 | 01 |
+| PTT defaults: PRESS_AND_HOLD mode, SPEAKER output, roger beep ON | PRESS_AND_HOLD more intuitive for new users, SPEAKER matches walkie-talkie UX, roger beep is classic radio feedback | 06 | 01 |
+| Cached sync accessors for audio thread | DataStore caches after first read, runBlocking safe in this context, required for audio thread where Flow collection impractical | 06 | 01 |
+| DTMF tones for PTT/roger beep | Already built into ToneGenerator, familiar to radio users, distinct frequencies | 06 | 01 |
+| Buzz-pause-buzz error vibration pattern | Distinct from press confirmation (single pulse), immediately recognizable as error | 06 | 01 |
+| Error tone always plays (no toggle) | User must know PTT was denied, non-negotiable UX requirement | 06 | 01 |
+
 ### Pending Todos
 
 None yet.
@@ -82,8 +99,8 @@ Deferred to future milestones:
 
 ## Session Continuity
 
-Last session: 2026-02-08
-Stopped at: Completed 05-05-PLAN.md (Channel join & audio playback integration) - Phase 5 complete, awaiting human verification
+Last session: 2026-02-10
+Stopped at: Completed 06-01-PLAN.md (PTT domain models & settings foundation)
 Resume file: None
 
 **Milestone 1 (WebRTC Audio Rebuild + Web UI) COMPLETE:**
@@ -99,8 +116,13 @@ Resume file: None
   - 05-02: Authentication & login flow ✓
   - 05-03: Networking layer (WebSocket signaling, mediasoup client) ✓
   - 05-04: UI screens (Event picker, Channel list, App shell) ✓
-  - 05-05: Channel join & audio playback integration ✓ (awaiting human verification)
-- Phase 6: Single-Channel PTT & Audio Transmission (pending)
+  - 05-05: Channel join & audio playback integration ✓
+- Phase 6: Single-Channel PTT & Audio Transmission (1/5 plans complete)
+  - 06-01: PTT domain models & settings foundation ✓
+  - 06-02: PTT state machine & server integration (pending)
+  - 06-03: PTT UI & animations (pending)
+  - 06-04: Microphone capture & transmission (pending)
+  - 06-05: Settings screen (pending)
 - Phase 7: Foreground Service & Background Audio (pending)
 - Phase 8: Multi-Channel Monitoring & Scan Mode (pending)
 - Phase 9: Hardware PTT & Bluetooth Integration (pending)
