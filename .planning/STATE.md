@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-08)
 
 **Core value:** Reliable, secure real-time audio communication for coordinating 1000+ distributed team members during high-profile events where security and uptime are critical
-**Current focus:** Milestone v2.0 — Android Client App (Phase 5)
+**Current focus:** Milestone v2.0 — Android Client App (Phase 6)
 
 ## Current Position
 
 Phase: 6 of 10 (Single-Channel PTT & Audio Transmission)
-Plan: 4 of 5 complete
-Status: In progress
-Last activity: 2026-02-10 — Completed 06-04-PLAN.md (PTT Integration: Wire Components End-to-End)
+Plan: 5 of 5 complete (code plans done, human verification deferred)
+Status: Phase complete (awaiting on-device verification)
+Last activity: 2026-02-10 — Completed static analysis audit, all build errors fixed
 
-Progress: [█████████░] 54% (Milestone 1 complete: 4/10 phases shipped, Milestone 2: 5/5 Phase 5 complete, 4/5 Phase 6 complete)
+Progress: [██████████] 60% (Milestone 1 complete: 4/10 phases shipped, Milestone 2: Phase 5 complete, Phase 6 code complete)
 
 ## Performance Metrics
 
@@ -108,7 +108,7 @@ Deferred to future milestones:
 ## Session Continuity
 
 Last session: 2026-02-10
-Stopped at: Completed 06-04-PLAN.md (PTT Integration: Wire Components End-to-End)
+Stopped at: Phase 6 code complete + static analysis audit. 06-05 human verification deferred (no Android Studio access).
 Resume file: None
 
 **Milestone 1 (WebRTC Audio Rebuild + Web UI) COMPLETE:**
@@ -125,12 +125,13 @@ Resume file: None
   - 05-03: Networking layer (WebSocket signaling, mediasoup client) ✓
   - 05-04: UI screens (Event picker, Channel list, App shell) ✓
   - 05-05: Channel join & audio playback integration ✓
-- Phase 6: Single-Channel PTT & Audio Transmission (4/5 plans complete)
+- Phase 6: Single-Channel PTT & Audio Transmission (5/5 code plans complete, awaiting device verification)
   - 06-01: PTT domain models & settings foundation ✓
-  - 06-02: PTT state machine & server integration ✓
-  - 06-03: PTT UI & animations ✓
+  - 06-02: PTT core engine (PttManager, AudioCapture, send transport) ✓
+  - 06-03: PTT UI (PttButton, BottomBar, ChannelRow speaker indicators) ✓
   - 06-04: PTT Integration: Wire Components End-to-End ✓
-  - 06-05: Settings screen (pending)
+  - 06-05: Human verification on device (deferred - no Android Studio)
+  - Static analysis audit: 5 errors + 2 warnings fixed ✓
 - Phase 7: Foreground Service & Background Audio (pending)
 - Phase 8: Multi-Channel Monitoring & Scan Mode (pending)
 - Phase 9: Hardware PTT & Bluetooth Integration (pending)
