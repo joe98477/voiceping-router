@@ -127,13 +127,16 @@ Plans:
   3. User sees busy state when channel is occupied (speaker name + pulse animation)
   4. User hears received audio from monitored channel through device speaker
   5. User sees speaker name and animated indicator for active transmissions
-  6. User gets optimistic PTT feedback (instant visual response on press, reverts if denied by server)
+  6. User gets PTT feedback (server-confirmed visual response on press, error tone + haptic if denied)
   7. User can toggle between earpiece and speaker audio output
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
-- [ ] 06-01: TBD
-- [ ] 06-02: TBD
+- [ ] 06-01-PLAN.md -- PTT domain models, DataStore settings, TonePlayer, HapticFeedback
+- [ ] 06-02-PLAN.md -- PTT engine: PttManager state machine, AudioCaptureManager, send transport, AudioRouter enhancement
+- [ ] 06-03-PLAN.md -- PTT UI: PttButton composable, BottomBar update, ChannelRow speaker indicators
+- [ ] 06-04-PLAN.md -- Integration: wire PttManager to ChannelRepository/ViewModel, settings in ProfileDrawer, toggle mode enforcement
+- [ ] 06-05-PLAN.md -- Human verification: all 7 success criteria on device
 
 #### Phase 7: Foreground Service & Background Audio
 **Goal**: App functions as pocket radio with screen off and lock screen PTT operation
@@ -222,7 +225,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 3. Browser UI for General Users | v1.0 | 5/5 | Complete | 2026-02-07 |
 | 4. Dispatch Multi-Channel Monitoring | v1.0 | 3/3 | Complete | 2026-02-07 |
 | 5. Android Project Setup & WebRTC Foundation | v2.0 | 0/5 | Not started | - |
-| 6. Single-Channel PTT & Audio Transmission | v2.0 | 0/TBD | Not started | - |
+| 6. Single-Channel PTT & Audio Transmission | v2.0 | 0/5 | Not started | - |
 | 7. Foreground Service & Background Audio | v2.0 | 0/TBD | Not started | - |
 | 8. Multi-Channel Monitoring & Scan Mode | v2.0 | 0/TBD | Not started | - |
 | 9. Hardware PTT & Bluetooth Integration | v2.0 | 0/TBD | Not started | - |
@@ -230,4 +233,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 ---
 *Roadmap created: 2026-02-06*
-*Last updated: 2026-02-08 after v2.0 roadmap creation*
+*Last updated: 2026-02-10 after Phase 6 planning*
