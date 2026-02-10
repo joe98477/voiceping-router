@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-08)
 ## Current Position
 
 Phase: 7 of 10 (Foreground Service & Background Audio)
-Plan: 2 of 3 complete
-Status: In progress
-Last activity: 2026-02-10 — Completed 07-02: Phone call detection & PTT interruption
+Plan: 3 of 3 complete
+Status: Complete
+Last activity: 2026-02-10 — Completed 07-03: Service lifecycle & phone call integration
 
-Progress: [███████████] 65% (Milestone 1 complete: 4/10 phases shipped, Milestone 2: Phase 5-6 complete, Phase 7: 2/3 plans)
+Progress: [████████████] 70% (Milestone 1 complete: 4/10 phases shipped, Milestone 2: Phase 5-6-7 complete, Phase 8 next)
 
 ## Performance Metrics
 
@@ -49,8 +49,9 @@ Progress: [███████████] 65% (Milestone 1 complete: 4/10 ph
 
 | Plan | Duration (s) | Tasks | Files |
 |------|--------------|-------|-------|
+| 07-01 | 255 | 2 | 4 |
 | 07-02 | 137 | 2 | 2 |
-| Phase 07 P01 | 255 | 2 tasks | 4 files |
+| 07-03 | 168 | 2 | 3 |
 
 ## Accumulated Context
 
@@ -112,6 +113,9 @@ Key decisions carrying forward to Milestone 2:
 - [Phase 07]: IMPORTANCE_LOW notification channel for ChannelMonitoringService (unobtrusive like music player)
 - [Phase 07]: START_NOT_STICKY for ChannelMonitoringService (no auto-restart after force-kill)
 - [Phase 07]: DTMF_A double beep for call interruption (distinct from roger beep DTMF_0 and error PROP_BEEP2)
+- [Phase 07]: Service starts ONLY on first channel join (not on login/launch), stops on leave/disconnect
+- [Phase 07]: Phone call pause uses consumer close pattern (immediate, no fade)
+- [Phase 07]: Battery optimization prompt triggered after first successful join (when service starts)
 
 ### Pending Todos
 
@@ -126,7 +130,7 @@ Deferred to future milestones:
 ## Session Continuity
 
 Last session: 2026-02-10
-Stopped at: Completed 07-02-PLAN.md (Phone call detection & PTT interruption)
+Stopped at: Completed 07-03-PLAN.md (Service lifecycle & phone call integration)
 Resume file: None
 
 **Milestone 1 (WebRTC Audio Rebuild + Web UI) COMPLETE:**
@@ -150,8 +154,10 @@ Resume file: None
   - 06-04: PTT Integration: Wire Components End-to-End ✓
   - 06-05: Human verification on device (deferred - no Android Studio)
   - Static analysis audit: 5 errors + 2 warnings fixed ✓
-- Phase 7: Foreground Service & Background Audio (2/3 plans complete)
+- Phase 7: Foreground Service & Background Audio (3/3 plans complete) ✓
+  - 07-01: Foreground service & notification controls ✓
   - 07-02: Phone call detection & PTT interruption ✓
+  - 07-03: Service lifecycle & phone call integration ✓
 - Phase 8: Multi-Channel Monitoring & Scan Mode (pending)
 - Phase 9: Hardware PTT & Bluetooth Integration (pending)
 - Phase 10: Network Resilience & UX Polish (pending)
