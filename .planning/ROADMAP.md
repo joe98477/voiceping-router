@@ -150,11 +150,12 @@ Plans:
   5. Audio playback continues through foreground service with screen off (pocket radio mode)
   6. Audio pauses during incoming phone calls and automatically resumes after call ends
   7. App survives Android Doze mode with wake lock and heartbeat management
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 07-01: TBD
-- [ ] 07-02: TBD
+- [ ] 07-01-PLAN.md -- Service infrastructure: ChannelMonitoringService, NotificationActionReceiver, manifest, call interruption beep
+- [ ] 07-02-PLAN.md -- Audio focus & phone call handling: AudioRouter focus listener, PttManager forceReleasePtt
+- [ ] 07-03-PLAN.md -- Integration: service lifecycle in ChannelRepository, phone call wiring, mute state, battery optimization prompt
 
 #### Phase 8: Multi-Channel Monitoring & Scan Mode
 **Goal**: User can monitor up to 5 channels simultaneously with automatic scan mode switching
