@@ -129,6 +129,30 @@ class TonePlayer @Inject constructor(
     }
 
     /**
+     * Play call interruption beep - distinct double beep when phone call interrupts PTT.
+     *
+     * Tone: Two DTMF_A tones (697 Hz + 1633 Hz) separated by 100ms pause
+     * Configurable: No (always plays - user must know PTT was interrupted)
+     * Purpose: Signals to other channel users that the speaker was interrupted
+     *          by a phone call (distinct from normal roger beep which means
+     *          intentional stop)
+     */
+    fun playCallInterruptionBeep() {
+        try {
+            // Always play (no toggle) - signals call interruption to other users
+            // First beep
+            toneGenerator?.startTone(ToneGenerator.TONE_DTMF_A, 100)
+            // Schedule second beep after pause
+            // Note: ToneGenerator.startTone is async, so we use Thread.sleep for timing
+            Thread.sleep(200) // 100ms tone + 100ms pause
+            toneGenerator?.startTone(ToneGenerator.TONE_DTMF_A, 100)
+            Log.d(TAG, "Playing call interruption double beep")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error playing call interruption beep", e)
+        }
+    }
+
+    /**
      * Cleanup ToneGenerator resources.
      * Call when TonePlayer is no longer needed.
      */
