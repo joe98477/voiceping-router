@@ -50,6 +50,7 @@ Progress: [███████████] 65% (Milestone 1 complete: 4/10 ph
 | Plan | Duration (s) | Tasks | Files |
 |------|--------------|-------|-------|
 | 07-02 | 137 | 2 | 2 |
+| Phase 07 P01 | 255 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -108,6 +109,9 @@ Key decisions carrying forward to Milestone 2:
 | Use AUDIOFOCUS_LOSS_TRANSIENT to detect phone calls without READ_PHONE_STATE permission | Avoids dangerous permission, works for incoming/outgoing calls, reliable signal for phone call start/end | 07 | 02 |
 | Separate forceReleasePtt() from releasePtt() for distinct audio feedback | Normal release uses onPttReleased (roger beep), force release uses onPttInterrupted (double beep). Two code paths keep audio feedback distinct. | 07 | 02 |
 | Enable automatic ducking with setWillPauseWhenDucked(false) | API 26+ feature for automatic volume reduction during transient sounds (navigation, notifications). Radio audio continues during ducking events. | 07 | 02 |
+- [Phase 07]: IMPORTANCE_LOW notification channel for ChannelMonitoringService (unobtrusive like music player)
+- [Phase 07]: START_NOT_STICKY for ChannelMonitoringService (no auto-restart after force-kill)
+- [Phase 07]: DTMF_A double beep for call interruption (distinct from roger beep DTMF_0 and error PROP_BEEP2)
 
 ### Pending Todos
 
