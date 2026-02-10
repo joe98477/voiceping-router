@@ -5,14 +5,19 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Event
@@ -23,13 +28,19 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.voiceping.android.domain.model.AudioRoute
+import com.voiceping.android.domain.model.PttMode
+import kotlin.math.roundToInt
 
 @Composable
 fun ProfileDrawer(
@@ -38,6 +49,18 @@ fun ProfileDrawer(
     userName: String,
     userEmail: String,
     appVersion: String = "1.0.0",
+    pttMode: PttMode = PttMode.PRESS_AND_HOLD,
+    audioRoute: AudioRoute = AudioRoute.SPEAKER,
+    toggleMaxDuration: Int = 60,
+    pttStartToneEnabled: Boolean = true,
+    rogerBeepEnabled: Boolean = true,
+    rxSquelchEnabled: Boolean = false,
+    onPttModeChanged: (PttMode) -> Unit = {},
+    onAudioRouteChanged: (AudioRoute) -> Unit = {},
+    onToggleMaxDurationChanged: (Int) -> Unit = {},
+    onPttStartToneChanged: (Boolean) -> Unit = {},
+    onRogerBeepChanged: (Boolean) -> Unit = {},
+    onRxSquelchChanged: (Boolean) -> Unit = {},
     onSwitchEvent: () -> Unit = {},
     onSettings: () -> Unit = {},
     onLogout: () -> Unit = {},
@@ -65,7 +88,7 @@ fun ProfileDrawer(
                 // Drawer panel (right side)
                 Surface(
                     modifier = Modifier
-                        .width(300.dp)
+                        .width(320.dp)
                         .fillMaxSize()
                         .align(Alignment.CenterEnd),
                     color = MaterialTheme.colorScheme.surface,
@@ -74,6 +97,7 @@ fun ProfileDrawer(
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
                             .padding(16.dp)
                     ) {
                         // Close button
@@ -101,7 +125,183 @@ fun ProfileDrawer(
                         Spacer(modifier = Modifier.height(24.dp))
                         HorizontalDivider()
 
+                        // PTT Settings Section
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "PTT Settings",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // PTT Mode
+                        Column(modifier = Modifier.padding(horizontal = 8.dp)) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .selectable(
+                                        selected = pttMode == PttMode.PRESS_AND_HOLD,
+                                        onClick = { onPttModeChanged(PttMode.PRESS_AND_HOLD) }
+                                    )
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = pttMode == PttMode.PRESS_AND_HOLD,
+                                    onClick = { onPttModeChanged(PttMode.PRESS_AND_HOLD) }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Press and Hold")
+                            }
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .selectable(
+                                        selected = pttMode == PttMode.TOGGLE,
+                                        onClick = { onPttModeChanged(PttMode.TOGGLE) }
+                                    )
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = pttMode == PttMode.TOGGLE,
+                                    onClick = { onPttModeChanged(PttMode.TOGGLE) }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Toggle")
+                            }
+
+                            // Toggle max duration slider (only show when TOGGLE mode selected)
+                            if (pttMode == PttMode.TOGGLE) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Max Duration: $toggleMaxDuration seconds",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Slider(
+                                    value = toggleMaxDuration.toFloat(),
+                                    onValueChange = { onToggleMaxDurationChanged(it.roundToInt()) },
+                                    valueRange = 30f..120f,
+                                    steps = 17, // (120-30)/5 - 1 = 17 steps for 5-second increments
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                        HorizontalDivider()
+
+                        // Audio Output Section
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Audio Output",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Column(modifier = Modifier.padding(horizontal = 8.dp)) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .selectable(
+                                        selected = audioRoute == AudioRoute.SPEAKER,
+                                        onClick = { onAudioRouteChanged(AudioRoute.SPEAKER) }
+                                    )
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = audioRoute == AudioRoute.SPEAKER,
+                                    onClick = { onAudioRouteChanged(AudioRoute.SPEAKER) }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Speaker")
+                            }
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .selectable(
+                                        selected = audioRoute == AudioRoute.EARPIECE,
+                                        onClick = { onAudioRouteChanged(AudioRoute.EARPIECE) }
+                                    )
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = audioRoute == AudioRoute.EARPIECE,
+                                    onClick = { onAudioRouteChanged(AudioRoute.EARPIECE) }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Earpiece")
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                        HorizontalDivider()
+
+                        // Audio Tones Section
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Audio Tones",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // PTT Start Tone
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("PTT Start Tone")
+                            Switch(
+                                checked = pttStartToneEnabled,
+                                onCheckedChange = onPttStartToneChanged
+                            )
+                        }
+
+                        // Roger Beep
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Roger Beep")
+                            Switch(
+                                checked = rogerBeepEnabled,
+                                onCheckedChange = onRogerBeepChanged
+                            )
+                        }
+
+                        // RX Squelch
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("RX Squelch")
+                            Switch(
+                                checked = rxSquelchEnabled,
+                                onCheckedChange = onRxSquelchChanged
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                        HorizontalDivider()
+
                         // Menu items
+                        Spacer(modifier = Modifier.height(8.dp))
                         ListItem(
                             headlineContent = { Text("Switch Event") },
                             leadingContent = { Icon(Icons.Default.Event, contentDescription = null) },
@@ -114,7 +314,7 @@ fun ProfileDrawer(
                             modifier = Modifier.clickable(onClick = onSettings)
                         )
 
-                        Spacer(modifier = Modifier.weight(1f))
+                        Spacer(modifier = Modifier.height(16.dp))
 
                         HorizontalDivider()
 

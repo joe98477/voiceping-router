@@ -12,6 +12,7 @@ import com.voiceping.android.service.AudioCaptureService
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -77,6 +78,13 @@ class PttManager @Inject constructor(
     var onPttReleased: (() -> Unit)? = null
 
     /**
+     * Toggle mode configuration (set by ViewModel from SettingsRepository)
+     */
+    var maxToggleDuration: Int = 60
+    var currentPttMode: com.voiceping.android.domain.model.PttMode = com.voiceping.android.domain.model.PttMode.PRESS_AND_HOLD
+    private var maxDurationJob: Job? = null
+
+    /**
      * Request PTT from server.
      *
      * CRITICAL: NOT optimistic. State goes Idle -> Requesting -> (Transmitting | Denied).
@@ -133,6 +141,16 @@ class PttManager @Inject constructor(
                     // Step 8: Notify callback (Plan 04 will wire in tone/haptic)
                     onPttGranted?.invoke()
 
+                    // Step 9: If TOGGLE mode, start max duration timer
+                    if (currentPttMode == com.voiceping.android.domain.model.PttMode.TOGGLE) {
+                        maxDurationJob?.cancel()
+                        maxDurationJob = scope.launch {
+                            delay(maxToggleDuration * 1000L)
+                            Log.d(TAG, "Toggle mode max duration reached, auto-releasing PTT")
+                            releasePtt()
+                        }
+                    }
+
                     Log.d(TAG, "PTT transmission started")
 
                 } else {
@@ -168,28 +186,32 @@ class PttManager @Inject constructor(
         Log.d(TAG, "Releasing PTT")
 
         try {
-            // Step 1: Notify callback (Plan 04 will wire in tone/haptic)
+            // Step 1: Cancel max duration timer if active
+            maxDurationJob?.cancel()
+            maxDurationJob = null
+
+            // Step 2: Notify callback (Plan 04 will wire in tone/haptic)
             onPttReleased?.invoke()
 
-            // Step 2: Stop audio capture
+            // Step 3: Stop audio capture
             audioCaptureManager.stopCapture()
 
-            // Step 3: Stop producing
+            // Step 4: Stop producing
             mediasoupClient.stopProducing()
 
-            // Step 4: Stop foreground service
+            // Step 5: Stop foreground service
             val stopIntent = Intent(context, AudioCaptureService::class.java).apply {
                 action = AudioCaptureService.ACTION_STOP
             }
             context.startService(stopIntent)
 
-            // Step 5: Send PTT_STOP to server
+            // Step 6: Send PTT_STOP to server
             signalingClient.send(
                 SignalingType.PTT_STOP,
                 mapOf("channelId" to currentChannelId!!)
             )
 
-            // Step 6: Reset state
+            // Step 7: Reset state
             _pttState.value = PttState.Idle
             transmissionStartTime = 0
             currentChannelId = null

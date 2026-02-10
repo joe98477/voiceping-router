@@ -25,8 +25,8 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import com.voiceping.android.data.ptt.PttState
 import com.voiceping.android.domain.model.PttMode
-import com.voiceping.android.domain.model.PttState
 
 /**
  * PTT button composable with press-and-hold/toggle modes, pulse animations, and elapsed time.

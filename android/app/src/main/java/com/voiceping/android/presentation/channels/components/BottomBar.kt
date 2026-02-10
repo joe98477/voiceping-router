@@ -15,9 +15,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.voiceping.android.data.ptt.PttState
 import com.voiceping.android.domain.model.Channel
 import com.voiceping.android.domain.model.PttMode
-import com.voiceping.android.domain.model.PttState
 import com.voiceping.android.domain.model.User
 
 @Composable
