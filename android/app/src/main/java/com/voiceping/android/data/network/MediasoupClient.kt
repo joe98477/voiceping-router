@@ -13,19 +13,19 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * mediasoup Device wrapper for receive-only audio.
+ * mediasoup Device wrapper for bidirectional audio (send + receive).
  *
  * Handles:
  * - Device creation and RTP capabilities loading
- * - Receive transport creation
- * - Audio consumer management
+ * - Receive transport creation and audio consumption
+ * - Send transport creation and audio production (PTT)
  *
  * NOTE: This implementation provides the pattern for mediasoup integration.
- * The actual libmediasoup-android library classes (Device, RecvTransport, Consumer)
- * will be connected when testing on a physical device, as the exact API may differ
- * from documentation. This skeleton allows Plan 05 to handle actual library wiring.
+ * The actual libmediasoup-android library classes (Device, SendTransport, RecvTransport,
+ * Producer, Consumer) will be connected when testing on a physical device, as the exact
+ * API may differ from documentation. This skeleton allows library wiring.
  *
- * Key pattern: Device -> load capabilities -> create RecvTransport -> consume
+ * Key pattern: Device -> load capabilities -> create transports -> produce/consume
  */
 @Singleton
 class MediasoupClient @Inject constructor(
@@ -36,7 +36,9 @@ class MediasoupClient @Inject constructor(
     // For now, using Any? to represent the library objects
     private var device: Any? = null
     private var recvTransport: Any? = null
+    private var sendTransport: Any? = null
     private val consumers = mutableMapOf<String, Any>()
+    private var audioProducer: Any? = null
 
     private val _isInitialized = MutableStateFlow(false)
     val isInitialized: StateFlow<Boolean> = _isInitialized.asStateFlow()
@@ -234,29 +236,212 @@ class MediasoupClient @Inject constructor(
     }
 
     /**
+     * Create send transport for PTT audio transmission.
+     *
+     * Steps:
+     * 1. Request CREATE_TRANSPORT from server with channelId and direction="send"
+     * 2. Create SendTransport with server's transport parameters
+     * 3. Set up transport listener for DTLS connection and produce events
+     *
+     * @param channelId The channel to create transport for
+     * @throws Exception if transport creation fails
+     */
+    suspend fun createSendTransport(channelId: String) = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "Creating send transport for channel: $channelId")
+
+            // Step 1: Request transport from server (direction="send")
+            val transportResponse = signalingClient.request(
+                SignalingType.CREATE_TRANSPORT,
+                mapOf(
+                    "channelId" to channelId,
+                    "direction" to "send"
+                )
+            )
+
+            val transportData = transportResponse.data
+                ?: throw IllegalStateException("No transport data in response")
+
+            val transportId = transportData["id"] as? String
+                ?: throw IllegalStateException("No transport id")
+            val iceParameters = transportData["iceParameters"] as? String
+                ?: throw IllegalStateException("No iceParameters")
+            val iceCandidates = transportData["iceCandidates"] as? String
+                ?: throw IllegalStateException("No iceCandidates")
+            val dtlsParameters = transportData["dtlsParameters"] as? String
+                ?: throw IllegalStateException("No dtlsParameters")
+
+            Log.d(TAG, "Send transport parameters received: id=$transportId")
+
+            // Step 2 & 3: Create SendTransport with listener
+            // TODO: Integrate actual libmediasoup-android library
+            // sendTransport = device?.createSendTransport(
+            //     listener = object : SendTransport.Listener {
+            //         override fun onConnect(transport: Transport, dtlsParameters: String): String {
+            //             runBlocking {
+            //                 signalingClient.request(
+            //                     SignalingType.CONNECT_TRANSPORT,
+            //                     mapOf(
+            //                         "transportId" to transportId,
+            //                         "dtlsParameters" to dtlsParameters
+            //                     )
+            //                 )
+            //             }
+            //             return ""
+            //         }
+            //
+            //         override fun onProduce(
+            //             transport: Transport,
+            //             kind: String,
+            //             rtpParameters: String,
+            //             appData: String
+            //         ): String {
+            //             return runBlocking {
+            //                 val produceResponse = signalingClient.request(
+            //                     SignalingType.PRODUCE,
+            //                     mapOf(
+            //                         "kind" to kind,
+            //                         "rtpParameters" to rtpParameters
+            //                     )
+            //                 )
+            //                 produceResponse.data?.get("id") as? String
+            //                     ?: throw IllegalStateException("No producer id in response")
+            //             }
+            //         }
+            //
+            //         override fun onConnectionStateChange(
+            //             transport: Transport,
+            //             connectionState: TransportState
+            //         ) {
+            //             Log.d(TAG, "Send transport state: $connectionState")
+            //         }
+            //     },
+            //     id = transportId,
+            //     iceParameters = iceParameters,
+            //     iceCandidates = iceCandidates,
+            //     dtlsParameters = dtlsParameters
+            // )
+
+            Log.d(TAG, "Send transport created successfully")
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to create send transport", e)
+            throw e
+        }
+    }
+
+    /**
+     * Start producing audio (PTT transmission).
+     *
+     * Configures Opus codec with PTT-optimized settings:
+     * - Mono (opusStereo=false)
+     * - DTX enabled for silence suppression
+     * - FEC enabled for packet loss recovery
+     * - 48kHz playback rate
+     * - 20ms ptime
+     *
+     * @throws Exception if producer creation fails
+     */
+    suspend fun startProducing() = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "Starting audio producer")
+
+            // TODO: Integrate actual libmediasoup-android library
+            // Opus codec configuration for PTT
+            // audioProducer = sendTransport?.produce(
+            //     listener = object : Producer.Listener {
+            //         override fun onTransportClose(producer: Producer) {
+            //             audioProducer = null
+            //             Log.d(TAG, "Producer transport closed")
+            //         }
+            //     },
+            //     track = null, // Will be set to audio track from AudioRecord
+            //     codecOptions = mapOf(
+            //         "opusStereo" to false,
+            //         "opusDtx" to true,
+            //         "opusFec" to true,
+            //         "opusMaxPlaybackRate" to 48000,
+            //         "opusPtime" to 20
+            //     ),
+            //     appData = ""
+            // )
+
+            Log.d(TAG, "Audio producer started")
+
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start producer", e)
+            throw e
+        }
+    }
+
+    /**
+     * Send captured audio data to producer.
+     *
+     * Called by PttManager's audio capture callback to forward PCM buffers.
+     * Producer handles Opus encoding internally.
+     *
+     * @param buffer PCM audio buffer from AudioRecord
+     * @param length Number of bytes in buffer
+     */
+    fun sendAudioData(buffer: ByteArray, length: Int) {
+        // TODO: Integrate actual libmediasoup-android library
+        // Forward buffer to audioProducer
+        // Producer will handle Opus encoding and RTP packetization
+        // audioProducer?.send(buffer, length)
+    }
+
+    /**
+     * Stop producing audio (PTT release).
+     */
+    fun stopProducing() {
+        try {
+            // TODO: Integrate actual libmediasoup-android library
+            // audioProducer?.close()
+            audioProducer = null
+            Log.d(TAG, "Audio producer stopped")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping producer", e)
+        }
+    }
+
+    /**
      * Clean up all mediasoup resources.
      *
      * CRITICAL: Disposal order matters to prevent memory leaks.
-     * Order: consumers first, then transport, then device (device persists).
+     * Order: producers first, consumers, send transport, recv transport, device (device persists).
      */
     fun cleanup() {
         Log.d(TAG, "Cleaning up mediasoup resources")
 
-        // Step 1: Close all consumers FIRST
+        // Step 1: Close producer FIRST
+        audioProducer?.let {
+            // TODO: Integrate actual libmediasoup-android library
+            // (it as Producer).close()
+        }
+        audioProducer = null
+
+        // Step 2: Close all consumers
         consumers.values.forEach {
             // TODO: Integrate actual libmediasoup-android library
             // (it as Consumer).close()
         }
         consumers.clear()
 
-        // Step 2: Close transport AFTER consumers
+        // Step 3: Close send transport
+        sendTransport?.let {
+            // TODO: Integrate actual libmediasoup-android library
+            // (it as SendTransport).close()
+        }
+        sendTransport = null
+
+        // Step 4: Close recv transport
         recvTransport?.let {
             // TODO: Integrate actual libmediasoup-android library
             // (it as RecvTransport).close()
         }
         recvTransport = null
 
-        // Step 3: DO NOT dispose device (shared across channels)
+        // Step 5: DO NOT dispose device (shared across channels)
         // Device persists for lifetime of MediasoupClient singleton
 
         Log.d(TAG, "Cleanup complete")
