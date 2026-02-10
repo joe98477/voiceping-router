@@ -153,9 +153,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 07-01-PLAN.md -- Service infrastructure: ChannelMonitoringService, NotificationActionReceiver, manifest, call interruption beep
-- [ ] 07-02-PLAN.md -- Audio focus & phone call handling: AudioRouter focus listener, PttManager forceReleasePtt
-- [ ] 07-03-PLAN.md -- Integration: service lifecycle in ChannelRepository, phone call wiring, mute state, battery optimization prompt
+- [x] 07-01-PLAN.md -- Service infrastructure: ChannelMonitoringService, NotificationActionReceiver, manifest, call interruption beep
+- [x] 07-02-PLAN.md -- Audio focus & phone call handling: AudioRouter focus listener, PttManager forceReleasePtt
+- [x] 07-03-PLAN.md -- Integration: service lifecycle in ChannelRepository, phone call wiring, mute state, battery optimization prompt
 
 #### Phase 8: Multi-Channel Monitoring & Scan Mode
 **Goal**: User can monitor up to 5 channels simultaneously with automatic scan mode switching
@@ -225,13 +225,13 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 2. User Management & Access Control | v1.0 | 8/8 | Complete | 2026-02-07 |
 | 3. Browser UI for General Users | v1.0 | 5/5 | Complete | 2026-02-07 |
 | 4. Dispatch Multi-Channel Monitoring | v1.0 | 3/3 | Complete | 2026-02-07 |
-| 5. Android Project Setup & WebRTC Foundation | v2.0 | 0/5 | Not started | - |
-| 6. Single-Channel PTT & Audio Transmission | v2.0 | 0/5 | Not started | - |
-| 7. Foreground Service & Background Audio | v2.0 | 0/TBD | Not started | - |
+| 5. Android Project Setup & WebRTC Foundation | v2.0 | 5/5 | Complete | 2026-02-09 |
+| 6. Single-Channel PTT & Audio Transmission | v2.0 | 5/5 | Complete | 2026-02-10 |
+| 7. Foreground Service & Background Audio | v2.0 | 3/3 | Complete | 2026-02-11 |
 | 8. Multi-Channel Monitoring & Scan Mode | v2.0 | 0/TBD | Not started | - |
 | 9. Hardware PTT & Bluetooth Integration | v2.0 | 0/TBD | Not started | - |
 | 10. Network Resilience & UX Polish | v2.0 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-02-06*
-*Last updated: 2026-02-10 after Phase 6 planning*
+*Last updated: 2026-02-11 after Phase 7 execution*
