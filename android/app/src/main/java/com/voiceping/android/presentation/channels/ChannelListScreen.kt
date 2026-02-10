@@ -1,6 +1,9 @@
 package com.voiceping.android.presentation.channels
 
 import android.Manifest
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -32,6 +35,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.voiceping.android.data.ptt.PttState
@@ -64,7 +68,10 @@ fun ChannelListScreen(
     val rogerBeepEnabled by viewModel.rogerBeepEnabled.collectAsState()
     val rxSquelchEnabled by viewModel.rxSquelchEnabled.collectAsState()
     val needsMicPermission by viewModel.needsMicPermission.collectAsState()
+    val showBatteryPrompt by viewModel.showBatteryOptimizationPrompt.collectAsState()
+    val isMuted by viewModel.isMuted.collectAsState()
 
+    val context = LocalContext.current
     var drawerOpen by remember { mutableStateOf(false) }
 
     // Transmission duration ticker (updates every second during transmission)
@@ -77,6 +84,24 @@ fun ChannelListScreen(
             }
         } else {
             transmissionDuration = 0L
+        }
+    }
+
+    // Battery optimization launcher
+    val batteryOptimizationLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { _ ->
+        // Result doesn't matter — user either allowed or denied. Dismiss either way.
+        viewModel.dismissBatteryOptimizationPrompt()
+    }
+
+    // Launch battery optimization dialog when prompted
+    LaunchedEffect(showBatteryPrompt) {
+        if (showBatteryPrompt) {
+            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = Uri.parse("package:${context.packageName}")
+            }
+            batteryOptimizationLauncher.launch(intent)
         }
     }
 

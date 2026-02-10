@@ -20,6 +20,7 @@ import com.voiceping.android.domain.model.User
 import com.voiceping.android.domain.usecase.JoinChannelUseCase
 import com.voiceping.android.domain.usecase.LeaveChannelUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -39,6 +40,7 @@ class ChannelListViewModel @Inject constructor(
     private val pttManager: PttManager,
     private val settingsRepository: SettingsRepository,
     private val audioRouter: AudioRouter,
+    @ApplicationContext private val context: Context,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -70,6 +72,14 @@ class ChannelListViewModel @Inject constructor(
     // Mic permission tracking
     private val _needsMicPermission = MutableStateFlow(false)
     val needsMicPermission: StateFlow<Boolean> = _needsMicPermission.asStateFlow()
+
+    // Battery optimization tracking
+    private val _showBatteryOptimizationPrompt = MutableStateFlow(false)
+    val showBatteryOptimizationPrompt: StateFlow<Boolean> = _showBatteryOptimizationPrompt.asStateFlow()
+    private var hasCheckedBatteryOptimization = false
+
+    // Expose muted state from ChannelRepository
+    val isMuted: StateFlow<Boolean> = channelRepository.isMuted
 
     private val eventId: String? = savedStateHandle.get<String>("eventId")
         ?: preferencesManager.getLastEventId()
@@ -135,6 +145,13 @@ class ChannelListViewModel @Inject constructor(
                 val result = joinChannelUseCase(channel.id)
                 if (result.isSuccess) {
                     _joinedChannel.value = channel
+
+                    // Check battery optimization on first channel join
+                    // User decision: prompt when user first joins a channel (when service starts)
+                    if (!hasCheckedBatteryOptimization) {
+                        checkBatteryOptimization()
+                        hasCheckedBatteryOptimization = true
+                    }
                 } else {
                     Log.e("ChannelListViewModel", "Failed to join channel", result.exceptionOrNull())
                     // TODO: Show error to user (Plan 06 or later)
@@ -226,6 +243,18 @@ class ChannelListViewModel @Inject constructor(
     // Get transmission duration for UI display
     fun getTransmissionDuration(): Long {
         return pttManager.getTransmissionDurationSeconds()
+    }
+
+    private fun checkBatteryOptimization() {
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        val packageName = context.packageName
+        if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
+            _showBatteryOptimizationPrompt.value = true
+        }
+    }
+
+    fun dismissBatteryOptimizationPrompt() {
+        _showBatteryOptimizationPrompt.value = false
     }
 
     override fun onCleared() {
