@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-08)
 ## Current Position
 
 Phase: 6 of 10 (Single-Channel PTT & Audio Transmission)
-Plan: 1 of 5 complete
+Plan: 2 of 5 complete
 Status: In progress
-Last activity: 2026-02-10 — Completed 06-01-PLAN.md (PTT domain models & settings foundation)
+Last activity: 2026-02-10 — Completed 06-02-PLAN.md (PTT Core Engine)
 
-Progress: [█████████░] 51% (Milestone 1 complete: 4/10 phases shipped, Milestone 2: 5/5 Phase 5 complete, 1/5 Phase 6 complete)
+Progress: [█████████░] 52% (Milestone 1 complete: 4/10 phases shipped, Milestone 2: 5/5 Phase 5 complete, 2/5 Phase 6 complete)
 
 ## Performance Metrics
 
@@ -41,6 +41,7 @@ Progress: [█████████░] 51% (Milestone 1 complete: 4/10 phase
 | Plan | Duration (s) | Tasks | Files |
 |------|--------------|-------|-------|
 | 06-01 | 200 | 2 | 7 |
+| 06-02 | 444 | 2 | 5 |
 
 ## Accumulated Context
 
