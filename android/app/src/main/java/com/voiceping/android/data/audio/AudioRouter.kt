@@ -26,6 +26,49 @@ class AudioRouter @Inject constructor(
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private var audioFocusRequest: AudioFocusRequest? = null
 
+    // Phone call detection callbacks (wired by ChannelRepository in Plan 03)
+    var onPhoneCallStarted: (() -> Unit)? = null
+    var onPhoneCallEnded: (() -> Unit)? = null
+
+    // Track phone call state
+    private var isInPhoneCall = false
+
+    private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+        when (focusChange) {
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                // Phone call started (incoming or outgoing)
+                // User decision: immediate pause of all channel audio (no fade)
+                Log.d(TAG, "Audio focus lost (transient): phone call detected")
+                isInPhoneCall = true
+                onPhoneCallStarted?.invoke()
+            }
+            AudioManager.AUDIOFOCUS_GAIN -> {
+                if (isInPhoneCall) {
+                    // Phone call ended — resume audio
+                    // User decision: auto-resume channel audio immediately, no delay
+                    Log.d(TAG, "Audio focus regained after phone call: resuming")
+                    isInPhoneCall = false
+                    onPhoneCallEnded?.invoke()
+                } else {
+                    Log.d(TAG, "Audio focus regained (not from phone call)")
+                }
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                // Another app wants to duck (e.g., navigation prompt)
+                // User decision: duck other audio apps, restore volume after
+                // System handles ducking automatically on API 26+ when setWillPauseWhenDucked(false)
+                Log.d(TAG, "Audio focus: ducking for transient sound")
+            }
+            AudioManager.AUDIOFOCUS_LOSS -> {
+                // Permanent loss (e.g., music app started playing)
+                // User decision: duck our audio, don't pause. Radio takes priority but doesn't kill music.
+                // Note: With AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK, music apps duck us,
+                // but if they request permanent focus, we log it. Audio continues playing.
+                Log.d(TAG, "Audio focus lost permanently: another app claimed focus")
+            }
+        }
+    }
+
     /**
      * Set audio routing to earpiece (default for receive-only mode).
      *
@@ -66,11 +109,13 @@ class AudioRouter @Inject constructor(
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                     .build()
             )
+            .setWillPauseWhenDucked(false) // Enable automatic ducking (API 26+)
+            .setOnAudioFocusChangeListener(audioFocusChangeListener)
             .build()
 
         val result = audioManager.requestAudioFocus(focusRequest)
         if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-            Log.d(TAG, "Audio focus granted")
+            Log.d(TAG, "Audio focus granted (with phone call listener)")
             audioFocusRequest = focusRequest
         } else {
             Log.w(TAG, "Audio focus request failed: $result")
@@ -86,7 +131,13 @@ class AudioRouter @Inject constructor(
             Log.d(TAG, "Audio focus released")
             audioFocusRequest = null
         }
+        isInPhoneCall = false
     }
+
+    /**
+     * Check if currently in a phone call (detected via audio focus loss).
+     */
+    fun isInPhoneCall(): Boolean = isInPhoneCall
 
     /**
      * Reset audio mode to normal (when leaving channel).
