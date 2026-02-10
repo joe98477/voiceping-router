@@ -27,7 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -68,15 +68,15 @@ fun ChannelListScreen(
     var drawerOpen by remember { mutableStateOf(false) }
 
     // Transmission duration ticker (updates every second during transmission)
-    var transmissionDuration by remember { mutableIntStateOf(0) }
+    var transmissionDuration by remember { mutableLongStateOf(0L) }
     LaunchedEffect(pttState) {
         if (pttState is PttState.Transmitting) {
             while (true) {
-                transmissionDuration = viewModel.getTransmissionDuration().toInt()
+                transmissionDuration = viewModel.getTransmissionDuration()
                 delay(1000)
             }
         } else {
-            transmissionDuration = 0
+            transmissionDuration = 0L
         }
     }
 
@@ -193,6 +193,7 @@ fun ChannelListScreen(
                                 channel = channel,
                                 isJoined = channel.id == joinedChannel?.id,
                                 lastSpeaker = if (channel.id == joinedChannel?.id) lastSpeaker else null,
+                                lastSpeakerVisible = channel.id == joinedChannel?.id && lastSpeaker != null,
                                 onToggle = { viewModel.toggleChannel(channel) }
                             )
                         }

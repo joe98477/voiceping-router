@@ -185,42 +185,41 @@ class PttManager @Inject constructor(
 
         Log.d(TAG, "Releasing PTT")
 
-        try {
-            // Step 1: Cancel max duration timer if active
-            maxDurationJob?.cancel()
-            maxDurationJob = null
+        // Step 1: Cancel max duration timer if active
+        maxDurationJob?.cancel()
+        maxDurationJob = null
 
-            // Step 2: Notify callback (Plan 04 will wire in tone/haptic)
-            onPttReleased?.invoke()
+        // Step 2: Notify callback (tone/haptic feedback)
+        onPttReleased?.invoke()
 
-            // Step 3: Stop audio capture
-            audioCaptureManager.stopCapture()
+        // Step 3: Reset state immediately (UI responsive)
+        _pttState.value = PttState.Idle
+        val channelId = currentChannelId
+        transmissionStartTime = 0
+        currentChannelId = null
 
-            // Step 4: Stop producing
-            mediasoupClient.stopProducing()
+        // Step 4: Cleanup on IO thread (stopCapture joins thread for up to 1s)
+        scope.launch {
+            try {
+                audioCaptureManager.stopCapture()
+                mediasoupClient.stopProducing()
 
-            // Step 5: Stop foreground service
-            val stopIntent = Intent(context, AudioCaptureService::class.java).apply {
-                action = AudioCaptureService.ACTION_STOP
+                val stopIntent = Intent(context, AudioCaptureService::class.java).apply {
+                    action = AudioCaptureService.ACTION_STOP
+                }
+                context.startService(stopIntent)
+
+                channelId?.let {
+                    signalingClient.send(
+                        SignalingType.PTT_STOP,
+                        mapOf("channelId" to it)
+                    )
+                }
+
+                Log.d(TAG, "PTT released")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error during PTT release cleanup", e)
             }
-            context.startService(stopIntent)
-
-            // Step 6: Send PTT_STOP to server
-            signalingClient.send(
-                SignalingType.PTT_STOP,
-                mapOf("channelId" to currentChannelId!!)
-            )
-
-            // Step 7: Reset state
-            _pttState.value = PttState.Idle
-            transmissionStartTime = 0
-            currentChannelId = null
-
-            Log.d(TAG, "PTT released")
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Error releasing PTT", e)
-            _pttState.value = PttState.Idle
         }
     }
 
