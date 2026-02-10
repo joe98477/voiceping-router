@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-08)
 
 **Core value:** Reliable, secure real-time audio communication for coordinating 1000+ distributed team members during high-profile events where security and uptime are critical
-**Current focus:** Milestone v2.0 — Android Client App (Phase 6)
+**Current focus:** Milestone v2.0 — Android Client App (Phase 7)
 
 ## Current Position
 
-Phase: 6 of 10 (Single-Channel PTT & Audio Transmission)
-Plan: 5 of 5 complete (code plans done, human verification deferred)
-Status: Phase complete (awaiting on-device verification)
-Last activity: 2026-02-10 — Completed static analysis audit, all build errors fixed
+Phase: 7 of 10 (Foreground Service & Background Audio)
+Plan: 2 of 3 complete
+Status: In progress
+Last activity: 2026-02-10 — Completed 07-02: Phone call detection & PTT interruption
 
-Progress: [██████████] 60% (Milestone 1 complete: 4/10 phases shipped, Milestone 2: Phase 5 complete, Phase 6 code complete)
+Progress: [███████████] 65% (Milestone 1 complete: 4/10 phases shipped, Milestone 2: Phase 5-6 complete, Phase 7: 2/3 plans)
 
 ## Performance Metrics
 
@@ -44,6 +44,12 @@ Progress: [██████████] 60% (Milestone 1 complete: 4/10 phase
 | 06-02 | 444 | 2 | 5 |
 | 06-03 | 125 | 2 | 3 |
 | 06-04 | 332 | 3 | 7 |
+
+**Milestone 2 Phase 7:**
+
+| Plan | Duration (s) | Tasks | Files |
+|------|--------------|-------|-------|
+| 07-02 | 137 | 2 | 2 |
 
 ## Accumulated Context
 
@@ -95,6 +101,14 @@ Key decisions carrying forward to Milestone 2:
 | Toggle mode auto-release enforcement | Max duration (30-120s configurable) prevents accidental long transmissions in toggle mode | 06 | 04 |
 | Settings UI in ProfileDrawer | Per user decision: settings drawer/side panel. All PTT settings grouped: mode, audio output, tone toggles | 06 | 04 |
 
+**Phase 7 Decisions:**
+
+| Decision | Rationale | Phase | Plan |
+|----------|-----------|-------|------|
+| Use AUDIOFOCUS_LOSS_TRANSIENT to detect phone calls without READ_PHONE_STATE permission | Avoids dangerous permission, works for incoming/outgoing calls, reliable signal for phone call start/end | 07 | 02 |
+| Separate forceReleasePtt() from releasePtt() for distinct audio feedback | Normal release uses onPttReleased (roger beep), force release uses onPttInterrupted (double beep). Two code paths keep audio feedback distinct. | 07 | 02 |
+| Enable automatic ducking with setWillPauseWhenDucked(false) | API 26+ feature for automatic volume reduction during transient sounds (navigation, notifications). Radio audio continues during ducking events. | 07 | 02 |
+
 ### Pending Todos
 
 None yet.
@@ -108,7 +122,7 @@ Deferred to future milestones:
 ## Session Continuity
 
 Last session: 2026-02-10
-Stopped at: Phase 6 code complete + static analysis audit. 06-05 human verification deferred (no Android Studio access).
+Stopped at: Completed 07-02-PLAN.md (Phone call detection & PTT interruption)
 Resume file: None
 
 **Milestone 1 (WebRTC Audio Rebuild + Web UI) COMPLETE:**
@@ -132,7 +146,8 @@ Resume file: None
   - 06-04: PTT Integration: Wire Components End-to-End ✓
   - 06-05: Human verification on device (deferred - no Android Studio)
   - Static analysis audit: 5 errors + 2 warnings fixed ✓
-- Phase 7: Foreground Service & Background Audio (pending)
+- Phase 7: Foreground Service & Background Audio (2/3 plans complete)
+  - 07-02: Phone call detection & PTT interruption ✓
 - Phase 8: Multi-Channel Monitoring & Scan Mode (pending)
 - Phase 9: Hardware PTT & Bluetooth Integration (pending)
 - Phase 10: Network Resilience & UX Polish (pending)
