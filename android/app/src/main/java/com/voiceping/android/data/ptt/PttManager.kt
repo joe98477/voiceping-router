@@ -78,6 +78,12 @@ class PttManager @Inject constructor(
     var onPttReleased: (() -> Unit)? = null
 
     /**
+     * Callback for phone call interruption (Plan 07-03 will wire TonePlayer.playCallInterruptionBeep())
+     * Distinct from onPttReleased which plays roger beep (intentional stop).
+     */
+    var onPttInterrupted: (() -> Unit)? = null
+
+    /**
      * Toggle mode configuration (set by ViewModel from SettingsRepository)
      */
     var maxToggleDuration: Int = 60
@@ -219,6 +225,63 @@ class PttManager @Inject constructor(
                 Log.d(TAG, "PTT released")
             } catch (e: Exception) {
                 Log.e(TAG, "Error during PTT release cleanup", e)
+            }
+        }
+    }
+
+    /**
+     * Force-release PTT due to phone call interruption.
+     *
+     * Distinct from normal releasePtt():
+     * - Uses onPttInterrupted callback (double beep) instead of onPttReleased (roger beep)
+     * - Signals to other users that speaker was interrupted by phone call
+     *
+     * User decision: "If user was transmitting during call: force-release PTT with
+     * a distinct double beep (different from normal roger beep) to signal call
+     * interruption to other users"
+     */
+    fun forceReleasePtt() {
+        if (_pttState.value !is PttState.Transmitting) {
+            Log.d(TAG, "Not transmitting, nothing to force-release")
+            return
+        }
+
+        Log.d(TAG, "Force-releasing PTT (phone call interruption)")
+
+        // Step 1: Cancel max duration timer if active
+        maxDurationJob?.cancel()
+        maxDurationJob = null
+
+        // Step 2: Play call interruption beep (distinct from roger beep)
+        onPttInterrupted?.invoke()
+
+        // Step 3: Reset state immediately
+        _pttState.value = PttState.Idle
+        val channelId = currentChannelId
+        transmissionStartTime = 0
+        currentChannelId = null
+
+        // Step 4: Cleanup on IO thread
+        scope.launch {
+            try {
+                audioCaptureManager.stopCapture()
+                mediasoupClient.stopProducing()
+
+                val stopIntent = Intent(context, AudioCaptureService::class.java).apply {
+                    action = AudioCaptureService.ACTION_STOP
+                }
+                context.startService(stopIntent)
+
+                channelId?.let {
+                    signalingClient.send(
+                        SignalingType.PTT_STOP,
+                        mapOf("channelId" to it)
+                    )
+                }
+
+                Log.d(TAG, "PTT force-released (phone call interruption)")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error during force PTT release cleanup", e)
             }
         }
     }
