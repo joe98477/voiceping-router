@@ -41,6 +41,8 @@ class ChannelMonitoringService : Service() {
 
     private var currentChannelName: String? = null
     private var isMuted = false
+    private var monitoringCount: Int = 0
+    private var pttTargetChannelId: String? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
@@ -48,6 +50,8 @@ class ChannelMonitoringService : Service() {
                 Log.d(TAG, "Starting channel monitoring foreground service")
                 val channelName = intent.getStringExtra(EXTRA_CHANNEL_NAME)
                 currentChannelName = channelName
+                monitoringCount = intent.getIntExtra(EXTRA_MONITORING_COUNT, 0)
+                pttTargetChannelId = intent.getStringExtra(EXTRA_PTT_TARGET_CHANNEL_ID)
                 createNotificationChannel()
                 val notification = buildNotification(channelName, isMuted)
                 startForegroundService(notification)
@@ -55,10 +59,16 @@ class ChannelMonitoringService : Service() {
 
             ACTION_UPDATE_CHANNEL -> {
                 val newChannelName = intent?.getStringExtra(EXTRA_CHANNEL_NAME)
-                // Only update if channel name changed (per user decision: minimal updates)
-                if (newChannelName != null && newChannelName != currentChannelName) {
-                    Log.d(TAG, "Updating channel notification: $currentChannelName -> $newChannelName")
+                val newMonitoringCount = intent?.getIntExtra(EXTRA_MONITORING_COUNT, 0) ?: 0
+                val newPttTargetChannelId = intent?.getStringExtra(EXTRA_PTT_TARGET_CHANNEL_ID)
+
+                // Update if any value changed
+                if (newChannelName != null &&
+                    (newChannelName != currentChannelName || newMonitoringCount != monitoringCount || newPttTargetChannelId != pttTargetChannelId)) {
+                    Log.d(TAG, "Updating channel notification: $currentChannelName -> $newChannelName (monitoring: $newMonitoringCount)")
                     currentChannelName = newChannelName
+                    monitoringCount = newMonitoringCount
+                    pttTargetChannelId = newPttTargetChannelId
                     updateNotification(newChannelName)
                 }
             }
@@ -162,8 +172,15 @@ class ChannelMonitoringService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
+        // Build notification title with monitoring count
+        val title = if (monitoringCount > 0) {
+            "$channelName (monitoring $monitoringCount others)"
+        } else {
+            channelName ?: "VoicePing"
+        }
+
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(channelName ?: "VoicePing")
+            .setContentTitle(title)
             .setContentText("Monitoring")
             .setSmallIcon(R.drawable.ic_logo)
             .setOngoing(true) // Persistent, cannot swipe away
@@ -203,6 +220,8 @@ class ChannelMonitoringService : Service() {
 
         // Intent extras
         const val EXTRA_CHANNEL_NAME = "channel_name"
+        const val EXTRA_MONITORING_COUNT = "monitoring_count"
+        const val EXTRA_PTT_TARGET_CHANNEL_ID = "ptt_target_channel_id"
 
         // Notification
         private const val CHANNEL_ID = "channel_monitoring"
