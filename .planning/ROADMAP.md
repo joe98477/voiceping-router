@@ -173,10 +173,10 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 08-01-PLAN.md -- Domain models (ChannelMonitoringState, ScanModeState, PttTargetMode, AudioMixMode) + SettingsRepository scan mode persistence
-- [ ] 08-02-PLAN.md -- ChannelRepository multi-channel conversion (Map<String, ChannelMonitoringState>, per-channel consumers, mute/unmute) + notification update
-- [ ] 08-03-PLAN.md -- ChannelListViewModel scan mode logic + BottomBar/ChannelRow/ChannelListScreen UI updates
-- [ ] 08-04-PLAN.md -- ProfileDrawer scan mode settings + per-channel volume dialog
+- [x] 08-01-PLAN.md -- Domain models (ChannelMonitoringState, ScanModeState, PttTargetMode, AudioMixMode) + SettingsRepository scan mode persistence
+- [x] 08-02-PLAN.md -- ChannelRepository multi-channel conversion (Map<String, ChannelMonitoringState>, per-channel consumers, mute/unmute) + notification update
+- [x] 08-03-PLAN.md -- ChannelListViewModel scan mode logic + BottomBar/ChannelRow/ChannelListScreen UI updates
+- [x] 08-04-PLAN.md -- ProfileDrawer scan mode settings + per-channel volume dialog
 
 #### Phase 9: Hardware PTT & Bluetooth Integration
 **Goal**: User can operate PTT via hardware buttons and Bluetooth headset for hands-free operation
@@ -230,10 +230,10 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 5. Android Project Setup & WebRTC Foundation | v2.0 | 5/5 | Complete | 2026-02-09 |
 | 6. Single-Channel PTT & Audio Transmission | v2.0 | 5/5 | Complete | 2026-02-10 |
 | 7. Foreground Service & Background Audio | v2.0 | 3/3 | Complete | 2026-02-11 |
-| 8. Multi-Channel Monitoring & Scan Mode | v2.0 | 0/TBD | Not started | - |
+| 8. Multi-Channel Monitoring & Scan Mode | v2.0 | 4/4 | Complete | 2026-02-11 |
 | 9. Hardware PTT & Bluetooth Integration | v2.0 | 0/TBD | Not started | - |
 | 10. Network Resilience & UX Polish | v2.0 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-02-06*
-*Last updated: 2026-02-11 after Phase 7 execution*
+*Last updated: 2026-02-11 after Phase 8 execution*
