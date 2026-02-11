@@ -316,6 +316,19 @@ class ChannelListViewModel @Inject constructor(
         channelRepository.unmuteAllChannels()
     }
 
+    // Per-channel control
+    fun muteChannel(channelId: String) = viewModelScope.launch {
+        channelRepository.muteChannel(channelId)
+    }
+
+    fun unmuteChannel(channelId: String) = viewModelScope.launch {
+        channelRepository.unmuteChannel(channelId)
+    }
+
+    fun setChannelVolume(channelId: String, volume: Float) = viewModelScope.launch {
+        channelRepository.setChannelVolume(channelId, volume)
+    }
+
     // Get transmission duration for UI display
     fun getTransmissionDuration(): Long {
         return pttManager.getTransmissionDurationSeconds()

@@ -8,9 +8,10 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,10 +20,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Checkbox
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,96 +38,150 @@ import androidx.compose.ui.unit.dp
 import com.voiceping.android.domain.model.Channel
 import com.voiceping.android.domain.model.User
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ChannelRow(
     channel: Channel,
     isJoined: Boolean,
+    isPrimary: Boolean,
+    isMuted: Boolean,
+    currentSpeaker: User?,
+    lastSpeaker: User?,
+    lastSpeakerVisible: Boolean,
     onToggle: () -> Unit,
-    lastSpeaker: User? = null,
-    lastSpeakerVisible: Boolean = false
+    onLongPress: () -> Unit,
+    onSettingsClick: () -> Unit = {}
 ) {
-    // Determine if this channel is active (has current speaker)
-    val isActiveChannel = channel.currentSpeaker != null
+    // Determine if this channel is active (has current speaker, and not muted)
+    val isActiveChannel = currentSpeaker != null && !isMuted
 
-    // Animate cyan border color when channel becomes active
+    // Animate cyan border color when channel becomes active (not for muted channels)
     val borderColor by animateColorAsState(
         targetValue = if (isActiveChannel) Color(0xFF00BCD4) else Color.Transparent,
         animationSpec = tween(300),
         label = "borderColor"
     )
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(
-                width = 2.dp,
-                color = borderColor,
-                shape = RoundedCornerShape(8.dp)
-            )
-            .clickable(onClick = onToggle)
-            .padding(16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+
+    // Visual state: filled for joined, outlined for unjoined
+    val backgroundColor = if (isJoined) {
+        MaterialTheme.colorScheme.surfaceVariant
+    } else {
+        Color.Transparent
+    }
+
+    val outlineColor = if (!isJoined) {
+        MaterialTheme.colorScheme.outline
+    } else {
+        Color.Transparent
+    }
+
+    Box(
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = channel.name,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    color = backgroundColor,
+                    shape = RoundedCornerShape(8.dp)
+                )
+                .border(
+                    width = if (!isJoined) 1.dp else 2.dp,
+                    color = if (!isJoined) outlineColor else borderColor,
+                    shape = RoundedCornerShape(8.dp)
+                )
+                .combinedClickable(
+                    onClick = onToggle,
+                    onLongClick = onLongPress
+                )
+                .padding(16.dp)
+                .alpha(if (isMuted) 0.5f else 1.0f),  // Dimmed when muted
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = channel.name,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
 
-            // Speaker indicator with pulsing animation
-            if (channel.currentSpeaker != null) {
-                Spacer(modifier = Modifier.padding(top = 4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Pulsing cyan animation on speaker name
-                    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-                    val pulseAlpha by infiniteTransition.animateFloat(
-                        initialValue = 0.6f,
-                        targetValue = 1.0f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(800),
-                            repeatMode = RepeatMode.Reverse
-                        ),
-                        label = "pulseAlpha"
-                    )
+                // Speaker indicator with pulsing animation (not shown when muted)
+                if (currentSpeaker != null && !isMuted) {
+                    Spacer(modifier = Modifier.padding(top = 4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Pulsing cyan animation on speaker name
+                        val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+                        val pulseAlpha by infiniteTransition.animateFloat(
+                            initialValue = 0.6f,
+                            targetValue = 1.0f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(800),
+                                repeatMode = RepeatMode.Reverse
+                            ),
+                            label = "pulseAlpha"
+                        )
 
-                    Text(
-                        text = channel.currentSpeaker.name,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.alpha(pulseAlpha)
-                    )
+                        Text(
+                            text = currentSpeaker.name,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.alpha(pulseAlpha)
+                        )
+                    }
+                } else if (lastSpeakerVisible && lastSpeaker != null && !isMuted) {
+                    // Last speaker fade animation (2-3 second fade) - not shown when muted
+                    Spacer(modifier = Modifier.padding(top = 4.dp))
+                    AnimatedVisibility(
+                        visible = lastSpeakerVisible,
+                        exit = fadeOut(animationSpec = tween(2500))
+                    ) {
+                        Text(
+                            text = lastSpeaker.name,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
-            } else if (lastSpeakerVisible && lastSpeaker != null) {
-                // Last speaker fade animation (2-3 second fade)
-                Spacer(modifier = Modifier.padding(top = 4.dp))
-                AnimatedVisibility(
-                    visible = lastSpeakerVisible,
-                    exit = fadeOut(animationSpec = tween(2500))
-                ) {
+
+                // User count (only show when no speaker indicator)
+                if (currentSpeaker == null && !(lastSpeakerVisible && lastSpeaker != null)) {
+                    Spacer(modifier = Modifier.padding(top = 2.dp))
                     Text(
-                        text = lastSpeaker.name,
+                        text = "${channel.userCount} users",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
 
-            // User count (only show when no speaker indicator)
-            if (channel.currentSpeaker == null && !(lastSpeakerVisible && lastSpeaker != null)) {
-                Spacer(modifier = Modifier.padding(top = 2.dp))
-                Text(
-                    text = "${channel.userCount} users",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            // Settings icon for joined channels
+            if (isJoined) {
+                IconButton(
+                    onClick = onSettingsClick,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        Icons.Default.MoreVert,
+                        contentDescription = "Channel settings",
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
 
-        // Toggle checkbox (single channel only in Phase 5)
-        Checkbox(
-            checked = isJoined,
-            onCheckedChange = { onToggle() }
-        )
+        // Star badge for primary channel (top-right corner)
+        if (isPrimary) {
+            Icon(
+                imageVector = Icons.Default.Star,
+                contentDescription = "Primary channel",
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp)
+                    .size(16.dp),
+                tint = MaterialTheme.colorScheme.primary  // Cyan
+            )
+        }
     }
 }

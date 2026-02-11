@@ -42,6 +42,7 @@ import com.voiceping.android.data.ptt.PttState
 import com.voiceping.android.domain.model.ConnectionState
 import com.voiceping.android.presentation.channels.components.BottomBar
 import com.voiceping.android.presentation.channels.components.ChannelRow
+import com.voiceping.android.presentation.channels.components.ChannelVolumeDialog
 import com.voiceping.android.presentation.channels.components.TeamHeader
 import com.voiceping.android.presentation.shell.ConnectionBanner
 import com.voiceping.android.presentation.shell.ProfileDrawer
@@ -70,9 +71,15 @@ fun ChannelListScreen(
     val needsMicPermission by viewModel.needsMicPermission.collectAsState()
     val showBatteryPrompt by viewModel.showBatteryOptimizationPrompt.collectAsState()
     val isMuted by viewModel.isMuted.collectAsState()
+    val monitoredChannels by viewModel.monitoredChannels.collectAsState()
+    val scanModeEnabled by viewModel.scanModeEnabled.collectAsState()
+    val pttTargetMode by viewModel.pttTargetMode.collectAsState()
+    val scanReturnDelay by viewModel.scanReturnDelay.collectAsState()
+    val audioMixMode by viewModel.audioMixMode.collectAsState()
 
     val context = LocalContext.current
     var drawerOpen by remember { mutableStateOf(false) }
+    var volumeDialogChannelId by remember { mutableStateOf<String?>(null) }
 
     // Transmission duration ticker (updates every second during transmission)
     var transmissionDuration by remember { mutableLongStateOf(0L) }
@@ -137,6 +144,14 @@ fun ChannelListScreen(
         onPttStartToneChanged = { viewModel.setPttStartToneEnabled(it) },
         onRogerBeepChanged = { viewModel.setRogerBeepEnabled(it) },
         onRxSquelchChanged = { viewModel.setRxSquelchEnabled(it) },
+        scanModeEnabled = scanModeEnabled,
+        pttTargetMode = pttTargetMode,
+        scanReturnDelay = scanReturnDelay,
+        audioMixMode = audioMixMode,
+        onScanModeEnabledChanged = { viewModel.setScanModeEnabled(it) },
+        onPttTargetModeChanged = { viewModel.setPttTargetMode(it) },
+        onScanReturnDelayChanged = { viewModel.setScanReturnDelay(it) },
+        onAudioMixModeChanged = { viewModel.setAudioMixMode(it) },
         onSwitchEvent = {
             drawerOpen = false
             onSwitchEvent()
@@ -214,16 +229,48 @@ fun ChannelListScreen(
 
                         // Channels in team
                         items(teamChannels) { channel ->
+                            val channelState = monitoredChannels[channel.id]
                             ChannelRow(
                                 channel = channel,
-                                isJoined = channel.id == joinedChannel?.id,
-                                lastSpeaker = if (channel.id == joinedChannel?.id) lastSpeaker else null,
-                                lastSpeakerVisible = channel.id == joinedChannel?.id && lastSpeaker != null,
-                                onToggle = { viewModel.toggleChannel(channel) }
+                                isJoined = channelState != null,
+                                isPrimary = channelState?.isPrimary ?: false,
+                                isMuted = channelState?.isMuted ?: false,
+                                currentSpeaker = channelState?.currentSpeaker,
+                                lastSpeaker = channelState?.lastSpeaker,
+                                lastSpeakerVisible = channelState?.lastSpeaker != null,
+                                onToggle = { viewModel.toggleChannel(channel) },
+                                onLongPress = {
+                                    if (channelState != null) {
+                                        viewModel.setPrimaryChannel(channel.id)
+                                    }
+                                },
+                                onSettingsClick = {
+                                    if (channelState != null) {
+                                        volumeDialogChannelId = channel.id
+                                    }
+                                }
                             )
                         }
                     }
                 }
+            }
+        }
+
+        // Volume dialog
+        volumeDialogChannelId?.let { channelId ->
+            val channelState = monitoredChannels[channelId]
+            if (channelState != null) {
+                ChannelVolumeDialog(
+                    channelName = channelState.channelName,
+                    volume = channelState.volume,
+                    isMuted = channelState.isMuted,
+                    onVolumeChanged = { viewModel.setChannelVolume(channelId, it) },
+                    onMuteToggled = {
+                        if (channelState.isMuted) viewModel.unmuteChannel(channelId)
+                        else viewModel.muteChannel(channelId)
+                    },
+                    onDismiss = { volumeDialogChannelId = null }
+                )
             }
         }
     }
