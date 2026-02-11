@@ -13,19 +13,20 @@ import com.voiceping.android.data.repository.ChannelRepository
 import com.voiceping.android.data.repository.EventRepository
 import com.voiceping.android.data.storage.PreferencesManager
 import com.voiceping.android.data.storage.SettingsRepository
+import com.voiceping.android.domain.model.AudioMixMode
 import com.voiceping.android.domain.model.AudioRoute
 import com.voiceping.android.domain.model.Channel
+import com.voiceping.android.domain.model.ChannelMonitoringState
 import com.voiceping.android.domain.model.ConnectionState
 import com.voiceping.android.domain.model.PttMode
-import com.voiceping.android.domain.model.User
-import com.voiceping.android.domain.usecase.JoinChannelUseCase
-import com.voiceping.android.domain.usecase.LeaveChannelUseCase
+import com.voiceping.android.domain.model.PttTargetMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -35,8 +36,6 @@ class ChannelListViewModel @Inject constructor(
     private val eventRepository: EventRepository,
     private val signalingClient: SignalingClient,
     private val channelRepository: ChannelRepository,
-    private val joinChannelUseCase: JoinChannelUseCase,
-    private val leaveChannelUseCase: LeaveChannelUseCase,
     private val preferencesManager: PreferencesManager,
     private val pttManager: PttManager,
     private val settingsRepository: SettingsRepository,
@@ -45,14 +44,17 @@ class ChannelListViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
+    companion object {
+        private const val TAG = "ChannelListViewModel"
+    }
+
     private val _channels = MutableStateFlow<List<Channel>>(emptyList())
     val channels: StateFlow<List<Channel>> = _channels.asStateFlow()
 
-    private val _joinedChannel = MutableStateFlow<Channel?>(null)
-    val joinedChannel: StateFlow<Channel?> = _joinedChannel.asStateFlow()
+    // Multi-channel monitoring state
+    val monitoredChannels: StateFlow<Map<String, ChannelMonitoringState>> = channelRepository.monitoredChannels
+    val primaryChannelId: StateFlow<String?> = channelRepository.primaryChannelId
 
-    val currentSpeaker: StateFlow<User?> = channelRepository.currentSpeaker
-    val lastSpeaker: StateFlow<User?> = channelRepository.lastSpeaker
     val connectionState: StateFlow<ConnectionState> = signalingClient.connectionState
 
     // PTT state and settings
@@ -70,6 +72,49 @@ class ChannelListViewModel @Inject constructor(
     val rxSquelchEnabled: StateFlow<Boolean> = settingsRepository.getRxSquelchEnabled()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
+    // Scan mode settings
+    val scanModeEnabled: StateFlow<Boolean> = settingsRepository.getScanModeEnabled()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+    val scanReturnDelay: StateFlow<Int> = settingsRepository.getScanReturnDelay()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 2)
+    val pttTargetMode: StateFlow<PttTargetMode> = settingsRepository.getPttTargetMode()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), PttTargetMode.ALWAYS_PRIMARY)
+    val audioMixMode: StateFlow<AudioMixMode> = settingsRepository.getAudioMixMode()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AudioMixMode.EQUAL_VOLUME)
+
+    // Scan mode lock state
+    private val _scanModeLocked = MutableStateFlow(false)
+    val scanModeLocked: StateFlow<Boolean> = _scanModeLocked.asStateFlow()
+
+    private val _manuallySelectedChannelId = MutableStateFlow<String?>(null)
+
+    // Derive displayed channel ID (core scan logic)
+    val displayedChannelId: StateFlow<String?> = combine(
+        monitoredChannels,
+        primaryChannelId,
+        _scanModeLocked,
+        _manuallySelectedChannelId,
+        scanModeEnabled
+    ) { channels, primary, locked, manual, scanEnabled ->
+        when {
+            channels.isEmpty() -> null
+            locked && manual != null -> manual  // Manual lock takes priority
+            !scanEnabled -> primary  // Scan disabled, show primary
+            else -> {
+                // Scan mode: find most recent active non-primary speaker
+                val activeNonPrimary = channels.values
+                    .filter { it.currentSpeaker != null && !it.isPrimary && !it.isMuted }
+                    .sortedByDescending { it.speakerStartTime }
+
+                activeNonPrimary.firstOrNull()?.channelId ?: primary
+            }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    // Toast message for user feedback
+    private val _toastMessage = MutableStateFlow<String?>(null)
+    val toastMessage: StateFlow<String?> = _toastMessage.asStateFlow()
+
     // Mic permission tracking
     private val _needsMicPermission = MutableStateFlow(false)
     val needsMicPermission: StateFlow<Boolean> = _needsMicPermission.asStateFlow()
@@ -79,26 +124,11 @@ class ChannelListViewModel @Inject constructor(
     val showBatteryOptimizationPrompt: StateFlow<Boolean> = _showBatteryOptimizationPrompt.asStateFlow()
     private var hasCheckedBatteryOptimization = false
 
-    // Expose muted state from ChannelRepository
-    val isMuted: StateFlow<Boolean> = channelRepository.isMuted
-
     private val eventId: String? = savedStateHandle.get<String>("eventId")
         ?: preferencesManager.getLastEventId()
 
     init {
         eventId?.let { loadChannels(it) }
-
-        // Observe ChannelRepository.joinedChannelId to sync with _joinedChannel
-        viewModelScope.launch {
-            channelRepository.joinedChannelId.collect { joinedId ->
-                if (joinedId == null) {
-                    _joinedChannel.value = null
-                } else {
-                    // Find the channel with this ID in our channels list
-                    _joinedChannel.value = _channels.value.find { it.id == joinedId }
-                }
-            }
-        }
 
         // Observe settings and update PttManager and AudioRouter
         viewModelScope.launch {
@@ -124,59 +154,79 @@ class ChannelListViewModel @Inject constructor(
 
     fun toggleChannel(channel: Channel) {
         viewModelScope.launch {
-            val current = _joinedChannel.value
+            val isCurrentlyJoined = monitoredChannels.value.containsKey(channel.id)
 
-            if (current?.id == channel.id) {
-                // Leave current channel
-                Log.d("ChannelListViewModel", "Leaving channel: ${channel.name}")
-                val result = leaveChannelUseCase(channel.id)
+            if (isCurrentlyJoined) {
+                // Leave this channel
+                val result = channelRepository.leaveChannel(channel.id)
                 if (result.isFailure) {
-                    Log.e("ChannelListViewModel", "Failed to leave channel", result.exceptionOrNull())
+                    Log.e(TAG, "Failed to leave channel", result.exceptionOrNull())
                 }
-                _joinedChannel.value = null
             } else {
-                // Phase 5: single channel only - leave previous, join new
-                if (current != null) {
-                    Log.d("ChannelListViewModel", "Leaving previous channel: ${current.name}")
-                    leaveChannelUseCase(current.id)
-                }
-
-                // Join new channel
-                Log.d("ChannelListViewModel", "Joining channel: ${channel.name}")
-                val result = joinChannelUseCase(channel.id)
+                // Join this channel (may fail if at 5-channel limit)
+                val result = channelRepository.joinChannel(channel.id, channel.name, channel.teamName)
                 if (result.isSuccess) {
-                    _joinedChannel.value = channel
-
                     // Check battery optimization on first channel join
-                    // User decision: prompt when user first joins a channel (when service starts)
                     if (!hasCheckedBatteryOptimization) {
                         checkBatteryOptimization()
                         hasCheckedBatteryOptimization = true
                     }
                 } else {
-                    Log.e("ChannelListViewModel", "Failed to join channel", result.exceptionOrNull())
-                    // TODO: Show error to user (Plan 06 or later)
+                    val error = result.exceptionOrNull()?.message ?: "Failed to join channel"
+                    _toastMessage.value = error  // Show toast for max 5 limit
+                    Log.e(TAG, "Failed to join channel: $error")
                 }
             }
         }
     }
 
+    fun toggleBottomBarLock() {
+        val current = displayedChannelId.value
+        if (_scanModeLocked.value) {
+            // Unlock: return to scan mode
+            _scanModeLocked.value = false
+            _manuallySelectedChannelId.value = null
+        } else {
+            // Lock: freeze on current channel
+            _scanModeLocked.value = true
+            _manuallySelectedChannelId.value = current
+        }
+    }
+
+    fun returnToPrimaryChannel() {
+        if (!_scanModeLocked.value) {
+            // displayedChannelId will naturally resolve to primary when no active speakers
+            // This is a no-op signal - the combine flow handles it
+        }
+    }
+
+    fun setPrimaryChannel(channelId: String) {
+        channelRepository.setPrimaryChannel(channelId)
+    }
+
+    fun clearToastMessage() {
+        _toastMessage.value = null
+    }
+
     // PTT actions
     fun onPttPressed() {
-        // Check mic permission first
         if (!channelRepository.hasMicPermission()) {
-            Log.d("ChannelListViewModel", "Mic permission not granted, requesting")
             _needsMicPermission.value = true
             return
         }
 
-        val channelId = _joinedChannel.value?.id
-        if (channelId == null) {
-            Log.w("ChannelListViewModel", "No channel joined, cannot request PTT")
+        // Determine PTT target based on setting
+        val targetChannelId = when (pttTargetMode.value) {
+            PttTargetMode.ALWAYS_PRIMARY -> primaryChannelId.value
+            PttTargetMode.DISPLAYED_CHANNEL -> displayedChannelId.value
+        }
+
+        if (targetChannelId == null) {
+            Log.w(TAG, "No channel to target for PTT")
             return
         }
 
-        pttManager.requestPtt(channelId)
+        pttManager.requestPtt(targetChannelId)
     }
 
     fun onPttReleased() {
@@ -187,10 +237,10 @@ class ChannelListViewModel @Inject constructor(
         _needsMicPermission.value = false
         if (granted) {
             // Retry PTT press after permission granted
-            Log.d("ChannelListViewModel", "Mic permission granted, retrying PTT")
+            Log.d(TAG, "Mic permission granted, retrying PTT")
             onPttPressed()
         } else {
-            Log.w("ChannelListViewModel", "Mic permission denied by user")
+            Log.w(TAG, "Mic permission denied by user")
         }
     }
 
@@ -210,8 +260,7 @@ class ChannelListViewModel @Inject constructor(
                 AudioRoute.EARPIECE -> audioRouter.setEarpieceMode()
                 AudioRoute.BLUETOOTH -> {
                     // Bluetooth routing handled by AudioRouter based on device state
-                    // Note: Plan doesn't specify setBluetoothMode() call here
-                    Log.d("ChannelListViewModel", "Bluetooth route selected, will auto-route when BT connects")
+                    Log.d(TAG, "Bluetooth route selected, will auto-route when BT connects")
                 }
             }
         }
@@ -239,6 +288,32 @@ class ChannelListViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepository.setToggleMaxDuration(seconds)
         }
+    }
+
+    // Scan mode settings setters
+    fun setScanModeEnabled(enabled: Boolean) = viewModelScope.launch {
+        settingsRepository.setScanModeEnabled(enabled)
+    }
+
+    fun setScanReturnDelay(seconds: Int) = viewModelScope.launch {
+        settingsRepository.setScanReturnDelay(seconds)
+    }
+
+    fun setPttTargetMode(mode: PttTargetMode) = viewModelScope.launch {
+        settingsRepository.setPttTargetMode(mode)
+    }
+
+    fun setAudioMixMode(mode: AudioMixMode) = viewModelScope.launch {
+        settingsRepository.setAudioMixMode(mode)
+    }
+
+    // Multi-channel mute actions
+    fun muteAllExceptPrimary() {
+        channelRepository.muteAllExceptPrimary()
+    }
+
+    fun unmuteAllChannels() {
+        channelRepository.unmuteAllChannels()
     }
 
     // Get transmission duration for UI display
