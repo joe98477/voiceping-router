@@ -170,11 +170,13 @@ Plans:
   6. User can manually tap bottom bar to switch between monitored channels
   7. Unmonitored/muted channels unsubscribe from audio to save bandwidth
   8. User can configure scan mode behavior in settings (auto-switch delay, enable/disable)
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 08-01: TBD
-- [ ] 08-02: TBD
+- [ ] 08-01-PLAN.md -- Domain models (ChannelMonitoringState, ScanModeState, PttTargetMode, AudioMixMode) + SettingsRepository scan mode persistence
+- [ ] 08-02-PLAN.md -- ChannelRepository multi-channel conversion (Map<String, ChannelMonitoringState>, per-channel consumers, mute/unmute) + notification update
+- [ ] 08-03-PLAN.md -- ChannelListViewModel scan mode logic + BottomBar/ChannelRow/ChannelListScreen UI updates
+- [ ] 08-04-PLAN.md -- ProfileDrawer scan mode settings + per-channel volume dialog
 
 #### Phase 9: Hardware PTT & Bluetooth Integration
 **Goal**: User can operate PTT via hardware buttons and Bluetooth headset for hands-free operation
