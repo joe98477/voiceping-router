@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-08)
 ## Current Position
 
 Phase: 8 of 10 (Multi-Channel Monitoring & Scan Mode)
-Plan: 2 of 4 complete
-Status: In Progress
-Last activity: 2026-02-11 — Completed 08-02: Multi-Channel Monitoring Engine
+Plan: 4 of 4 complete
+Status: Complete
+Last activity: 2026-02-11 — Completed 08-04: Scan Mode Settings UI & Per-Channel Volume Control
 
-Progress: [█████████████] 71% (Milestone 1 complete: 4/10 phases shipped, Milestone 2: Phase 5-6-7 complete, Phase 8 in progress)
+Progress: [██████████████] 80% (Milestone 1 complete: 4/10 phases shipped, Milestone 2: Phase 5-6-7-8 complete)
 
 ## Performance Metrics
 
@@ -59,6 +59,8 @@ Progress: [█████████████] 71% (Milestone 1 complete: 4
 |------|--------------|-------|-------|
 | 08-01 | 127 | 2 | 5 |
 | 08-02 | 181 | 2 | 3 |
+| 08-03 | TBD | 2 | TBD |
+| 08-04 | 257 | 2 | 5 |
 
 ## Accumulated Context
 
@@ -137,7 +139,7 @@ Deferred to future milestones:
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Completed 08-01: Domain Models & Settings Foundation
+Stopped at: Completed 08-04: Scan Mode Settings UI & Per-Channel Volume Control (Phase 8 complete)
 Resume file: None
 
 **Milestone 1 (WebRTC Audio Rebuild + Web UI) COMPLETE:**
@@ -165,10 +167,10 @@ Resume file: None
   - 07-01: Foreground service & notification controls ✓
   - 07-02: Phone call detection & PTT interruption ✓
   - 07-03: Service lifecycle & phone call integration ✓
-- Phase 8: Multi-Channel Monitoring & Scan Mode (1/4 plans complete)
+- Phase 8: Multi-Channel Monitoring & Scan Mode (4/4 plans complete) ✓
   - 08-01: Domain Models & Settings Foundation ✓
-  - 08-02: ChannelRepository multi-channel refactor (pending)
-  - 08-03: Scan mode logic & ViewModel integration (pending)
-  - 08-04: Bottom bar UI & scan mode controls (pending)
+  - 08-02: Multi-Channel Monitoring Engine ✓
+  - 08-03: Scan Mode Logic & ViewModel Integration ✓
+  - 08-04: Scan Mode Settings UI & Per-Channel Volume Control ✓
 - Phase 9: Hardware PTT & Bluetooth Integration (pending)
 - Phase 10: Network Resilience & UX Polish (pending)
