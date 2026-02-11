@@ -38,8 +38,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.voiceping.android.domain.model.AudioMixMode
 import com.voiceping.android.domain.model.AudioRoute
 import com.voiceping.android.domain.model.PttMode
+import com.voiceping.android.domain.model.PttTargetMode
 import kotlin.math.roundToInt
 
 @Composable
@@ -61,6 +63,15 @@ fun ProfileDrawer(
     onPttStartToneChanged: (Boolean) -> Unit = {},
     onRogerBeepChanged: (Boolean) -> Unit = {},
     onRxSquelchChanged: (Boolean) -> Unit = {},
+    // Scan mode settings
+    scanModeEnabled: Boolean = true,
+    pttTargetMode: PttTargetMode = PttTargetMode.ALWAYS_PRIMARY,
+    scanReturnDelay: Int = 2,
+    audioMixMode: AudioMixMode = AudioMixMode.EQUAL_VOLUME,
+    onScanModeEnabledChanged: (Boolean) -> Unit = {},
+    onPttTargetModeChanged: (PttTargetMode) -> Unit = {},
+    onScanReturnDelayChanged: (Int) -> Unit = {},
+    onAudioMixModeChanged: (AudioMixMode) -> Unit = {},
     onSwitchEvent: () -> Unit = {},
     onSettings: () -> Unit = {},
     onLogout: () -> Unit = {},
@@ -295,6 +306,156 @@ fun ProfileDrawer(
                                 checked = rxSquelchEnabled,
                                 onCheckedChange = onRxSquelchChanged
                             )
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                        HorizontalDivider()
+
+                        // Scan Mode Section
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Scan Mode",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Scan Mode Toggle
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text("Auto-switch channels")
+                                Text(
+                                    text = "Bottom bar follows active speaker",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = scanModeEnabled,
+                                onCheckedChange = onScanModeEnabledChanged
+                            )
+                        }
+
+                        // PTT Target Mode (only visible when scan mode enabled)
+                        if (scanModeEnabled) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "PTT Target",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(horizontal = 8.dp)
+                            )
+                            Column(modifier = Modifier.padding(horizontal = 8.dp)) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .selectable(
+                                            selected = pttTargetMode == PttTargetMode.ALWAYS_PRIMARY,
+                                            onClick = { onPttTargetModeChanged(PttTargetMode.ALWAYS_PRIMARY) }
+                                        )
+                                        .padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    RadioButton(
+                                        selected = pttTargetMode == PttTargetMode.ALWAYS_PRIMARY,
+                                        onClick = { onPttTargetModeChanged(PttTargetMode.ALWAYS_PRIMARY) }
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Always primary")
+                                }
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .selectable(
+                                            selected = pttTargetMode == PttTargetMode.DISPLAYED_CHANNEL,
+                                            onClick = { onPttTargetModeChanged(PttTargetMode.DISPLAYED_CHANNEL) }
+                                        )
+                                        .padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    RadioButton(
+                                        selected = pttTargetMode == PttTargetMode.DISPLAYED_CHANNEL,
+                                        onClick = { onPttTargetModeChanged(PttTargetMode.DISPLAYED_CHANNEL) }
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Displayed channel")
+                                }
+                            }
+
+                            // Return Delay Slider (only visible when scan mode enabled)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Column(modifier = Modifier.padding(horizontal = 8.dp)) {
+                                Text(
+                                    text = "Return delay: ${scanReturnDelay}s",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Slider(
+                                    value = scanReturnDelay.toFloat(),
+                                    onValueChange = { onScanReturnDelayChanged(it.roundToInt()) },
+                                    valueRange = 2f..5f,
+                                    steps = 2, // For 2, 3, 4, 5 (3 steps between)
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+
+                        // Audio Mix Mode
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Audio Mix",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(horizontal = 8.dp)
+                        )
+                        Column(modifier = Modifier.padding(horizontal = 8.dp)) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .selectable(
+                                        selected = audioMixMode == AudioMixMode.EQUAL_VOLUME,
+                                        onClick = { onAudioMixModeChanged(AudioMixMode.EQUAL_VOLUME) }
+                                    )
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = audioMixMode == AudioMixMode.EQUAL_VOLUME,
+                                    onClick = { onAudioMixModeChanged(AudioMixMode.EQUAL_VOLUME) }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Equal volume")
+                            }
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .selectable(
+                                        selected = audioMixMode == AudioMixMode.PRIMARY_PRIORITY,
+                                        onClick = { onAudioMixModeChanged(AudioMixMode.PRIMARY_PRIORITY) }
+                                    )
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = audioMixMode == AudioMixMode.PRIMARY_PRIORITY,
+                                    onClick = { onAudioMixModeChanged(AudioMixMode.PRIMARY_PRIORITY) }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text("Primary priority")
+                                    Text(
+                                        text = "Non-primary channels play quieter",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(16.dp))
