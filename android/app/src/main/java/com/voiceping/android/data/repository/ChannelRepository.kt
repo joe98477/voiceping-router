@@ -14,6 +14,9 @@ import com.voiceping.android.data.network.SignalingClient
 import com.voiceping.android.data.network.dto.SignalingType
 import com.voiceping.android.data.ptt.PttManager
 import com.voiceping.android.data.ptt.PttState
+import com.voiceping.android.data.storage.SettingsRepository
+import com.voiceping.android.domain.model.AudioMixMode
+import com.voiceping.android.domain.model.ChannelMonitoringState
 import com.voiceping.android.domain.model.User
 import com.voiceping.android.service.ChannelMonitoringService
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -37,24 +40,26 @@ class ChannelRepository @Inject constructor(
     private val pttManager: PttManager,
     private val tonePlayer: TonePlayer,
     private val hapticFeedback: HapticFeedback,
+    private val settingsRepository: SettingsRepository,
     @ApplicationContext private val context: Context
 ) {
-    private val _currentSpeaker = MutableStateFlow<User?>(null)
-    val currentSpeaker: StateFlow<User?> = _currentSpeaker.asStateFlow()
+    private val _monitoredChannels = MutableStateFlow<Map<String, ChannelMonitoringState>>(emptyMap())
+    val monitoredChannels: StateFlow<Map<String, ChannelMonitoringState>> = _monitoredChannels.asStateFlow()
 
-    private val _joinedChannelId = MutableStateFlow<String?>(null)
-    val joinedChannelId: StateFlow<String?> = _joinedChannelId.asStateFlow()
+    private val _primaryChannelId = MutableStateFlow<String?>(null)
+    val primaryChannelId: StateFlow<String?> = _primaryChannelId.asStateFlow()
 
-    private val _lastSpeaker = MutableStateFlow<User?>(null)
-    val lastSpeaker: StateFlow<User?> = _lastSpeaker.asStateFlow()
+    // Per-channel consumer tracking: channelId -> (producerId -> consumerId)
+    private val channelConsumers = mutableMapOf<String, MutableMap<String, String>>()
 
-    private val _isMuted = MutableStateFlow(false)
-    val isMuted: StateFlow<Boolean> = _isMuted.asStateFlow()
+    // Per-channel speaker observer jobs
+    private val speakerObserverJobs = mutableMapOf<String, Job>()
 
-    private var speakerObserverJob: Job? = null
-    private var currentConsumerId: String? = null
-    private var lastSpeakerFadeJob: Job? = null
+    // Per-channel last speaker fade jobs
+    private val lastSpeakerFadeJobs = mutableMapOf<String, Job>()
+
     private var isServiceRunning = false
+    private var currentAudioMixMode = AudioMixMode.EQUAL_VOLUME
 
     // Expose PTT state via delegation to PttManager
     val pttState: StateFlow<PttState> = pttManager.pttState
@@ -82,17 +87,20 @@ class ChannelRepository @Inject constructor(
         // Wire phone call handling via AudioRouter (audio focus listener)
         // User decision: immediate pause, force-release PTT, auto-resume after call ends
         audioRouter.onPhoneCallStarted = {
-            Log.d(TAG, "Phone call started: pausing audio, force-releasing PTT")
+            Log.d(TAG, "Phone call started: pausing all channels, force-releasing PTT")
 
             // Force-release PTT if transmitting (plays call interruption double beep)
-            // User decision: "force-release PTT with a distinct double beep"
             if (pttManager.pttState.value is PttState.Transmitting) {
                 pttManager.forceReleasePtt()
             }
 
-            // Close consumer to pause audio (user decision: immediate, no fade)
-            currentConsumerId?.let { mediasoupClient.closeConsumer(it) }
-            Log.d(TAG, "Phone call: closed consumer")
+            // Close consumers for ALL monitored channels (pause everything)
+            channelConsumers.values.forEach { consumers ->
+                consumers.values.forEach { consumerId ->
+                    mediasoupClient.closeConsumer(consumerId)
+                }
+            }
+            Log.d(TAG, "Phone call: closed all consumers")
         }
 
         audioRouter.onPhoneCallEnded = {
@@ -102,27 +110,48 @@ class ChannelRepository @Inject constructor(
             Log.d(TAG, "Phone call ended: ready to receive audio")
         }
 
+        // Observe audio mix mode changes
+        CoroutineScope(Dispatchers.IO).launch {
+            settingsRepository.getAudioMixMode().collect { mode ->
+                currentAudioMixMode = mode
+                applyAudioMixMode(mode)
+            }
+        }
+
         // Observe mute state from monitoring service notification
+        // Note: This applies to primary channel only
         CoroutineScope(Dispatchers.IO).launch {
             ChannelMonitoringService.isMutedFlow.collect { muted ->
-                _isMuted.value = muted
-                if (muted) {
-                    // Close current consumer to silence audio
-                    currentConsumerId?.let { mediasoupClient.closeConsumer(it) }
-                    Log.d(TAG, "Muted: closed consumer")
+                _primaryChannelId.value?.let { primaryId ->
+                    if (muted) {
+                        muteChannel(primaryId)
+                    } else {
+                        unmuteChannel(primaryId)
+                    }
                 }
-                // Unmute is handled automatically by next speaker change creating new consumer
             }
         }
     }
 
     companion object {
         private const val TAG = "ChannelRepository"
+        private const val MAX_CHANNELS = 5
     }
 
-    suspend fun joinChannel(channelId: String): Result<Unit> {
+    suspend fun joinChannel(channelId: String, channelName: String, teamName: String): Result<Unit> {
         return try {
-            // 1. Request JOIN_CHANNEL from server
+            // Guard: max 5 channels
+            if (_monitoredChannels.value.size >= MAX_CHANNELS && channelId !in _monitoredChannels.value) {
+                return Result.failure(Exception("Maximum $MAX_CHANNELS channels. Leave a channel to join another."))
+            }
+
+            // If channel already joined, return success (no-op)
+            if (channelId in _monitoredChannels.value) {
+                Log.d(TAG, "Channel $channelId already joined")
+                return Result.success(Unit)
+            }
+
+            // Request JOIN_CHANNEL from server
             val joinResponse = signalingClient.request(
                 SignalingType.JOIN_CHANNEL,
                 mapOf("channelId" to channelId)
@@ -132,29 +161,53 @@ class ChannelRepository @Inject constructor(
                 return Result.failure(Exception(joinResponse.error))
             }
 
-            // 2. Set up audio routing (earpiece mode, request audio focus)
-            audioRouter.requestAudioFocus()
-            audioRouter.setEarpieceMode()
+            // If first channel: set up audio routing and create recv transport
+            val isFirstChannel = _monitoredChannels.value.isEmpty()
+            if (isFirstChannel) {
+                audioRouter.requestAudioFocus()
+                audioRouter.setEarpieceMode()
+                mediasoupClient.createRecvTransport(channelId)
 
-            // 3. Create receive transport
-            mediasoupClient.createRecvTransport(channelId)
+                // Set as primary
+                _primaryChannelId.value = channelId
+            }
 
-            // 4. Start observing speaker changes for this channel
-            observeSpeakerChanges(channelId)
+            // Create ChannelMonitoringState
+            val channelState = ChannelMonitoringState(
+                channelId = channelId,
+                channelName = channelName,
+                teamName = teamName,
+                isPrimary = isFirstChannel
+            )
 
-            // 5. Update joined channel ID
-            _joinedChannelId.value = channelId
+            // Add to monitored channels map
+            _monitoredChannels.value = _monitoredChannels.value + (channelId to channelState)
 
-            // 6. Start monitoring service (user decision: service starts on first channel join)
-            if (!isServiceRunning) {
+            // Start observing speaker changes for this channel
+            observeSpeakerChangesForChannel(channelId)
+
+            // Persist monitored channels
+            settingsRepository.setMonitoredChannels(_monitoredChannels.value.keys)
+
+            // If primary, persist
+            if (isFirstChannel) {
+                settingsRepository.setPrimaryChannel(channelId)
+            }
+
+            // Start foreground service if first channel
+            if (isFirstChannel && !isServiceRunning) {
                 val serviceIntent = Intent(context, ChannelMonitoringService::class.java).apply {
                     action = ChannelMonitoringService.ACTION_START
-                    putExtra(ChannelMonitoringService.EXTRA_CHANNEL_NAME, channelId) // Will be replaced with channel name in future
+                    putExtra(ChannelMonitoringService.EXTRA_CHANNEL_NAME, channelName)
+                    putExtra(ChannelMonitoringService.EXTRA_MONITORING_COUNT, 0)
                 }
                 context.startForegroundService(serviceIntent)
                 isServiceRunning = true
                 Log.d(TAG, "Started ChannelMonitoringService")
             }
+
+            // Update notification
+            updateServiceNotification()
 
             Result.success(Unit)
         } catch (e: Exception) {
@@ -164,38 +217,65 @@ class ChannelRepository @Inject constructor(
 
     suspend fun leaveChannel(channelId: String): Result<Unit> {
         return try {
-            // 1. Cancel speaker observer
-            speakerObserverJob?.cancel()
-            speakerObserverJob = null
+            // Cancel speaker observer for this channel
+            speakerObserverJobs[channelId]?.cancel()
+            speakerObserverJobs.remove(channelId)
 
-            // 2. Clean up mediasoup (closes consumers and transport)
-            mediasoupClient.cleanup()
-            currentConsumerId = null
+            // Cancel fade job for this channel
+            lastSpeakerFadeJobs[channelId]?.cancel()
+            lastSpeakerFadeJobs.remove(channelId)
 
-            // 3. Release audio focus and reset audio mode
-            audioRouter.releaseAudioFocus()
-            audioRouter.resetAudioMode()
+            // Close all consumers for this channel
+            channelConsumers[channelId]?.values?.forEach { consumerId ->
+                mediasoupClient.closeConsumer(consumerId)
+            }
+            channelConsumers.remove(channelId)
 
-            // 4. Request LEAVE_CHANNEL from server
+            // Remove from monitored channels map
+            _monitoredChannels.value = _monitoredChannels.value - channelId
+
+            // If was primary and other channels remain, reassign primary to first remaining channel
+            val wasPrimary = _primaryChannelId.value == channelId
+            if (wasPrimary && _monitoredChannels.value.isNotEmpty()) {
+                val newPrimary = _monitoredChannels.value.keys.first()
+                setPrimaryChannel(newPrimary)
+            } else if (_monitoredChannels.value.isEmpty()) {
+                _primaryChannelId.value = null
+            }
+
+            // If last channel, clean up everything
+            val isLastChannel = _monitoredChannels.value.isEmpty()
+            if (isLastChannel) {
+                audioRouter.releaseAudioFocus()
+                audioRouter.resetAudioMode()
+                mediasoupClient.cleanup()
+
+                // Stop monitoring service
+                if (isServiceRunning) {
+                    val serviceIntent = Intent(context, ChannelMonitoringService::class.java).apply {
+                        action = ChannelMonitoringService.ACTION_STOP
+                    }
+                    context.startService(serviceIntent)
+                    isServiceRunning = false
+                    Log.d(TAG, "Stopped ChannelMonitoringService")
+                }
+            }
+
+            // Send LEAVE_CHANNEL to server
             signalingClient.request(
                 SignalingType.LEAVE_CHANNEL,
                 mapOf("channelId" to channelId)
             )
 
-            // 5. Clear current speaker
-            _currentSpeaker.value = null
+            // Persist updated monitored channels
+            settingsRepository.setMonitoredChannels(_monitoredChannels.value.keys)
+            if (_primaryChannelId.value != null) {
+                settingsRepository.setPrimaryChannel(_primaryChannelId.value!!)
+            }
 
-            // 6. Clear joined channel ID
-            _joinedChannelId.value = null
-
-            // 7. Stop monitoring service (user decision: service stops when user leaves all channels)
-            if (isServiceRunning) {
-                val serviceIntent = Intent(context, ChannelMonitoringService::class.java).apply {
-                    action = ChannelMonitoringService.ACTION_STOP
-                }
-                context.startService(serviceIntent)
-                isServiceRunning = false
-                Log.d(TAG, "Stopped ChannelMonitoringService")
+            // Update notification (or stop service if last channel)
+            if (!isLastChannel) {
+                updateServiceNotification()
             }
 
             Result.success(Unit)
@@ -204,12 +284,12 @@ class ChannelRepository @Inject constructor(
         }
     }
 
-    private fun observeSpeakerChanges(channelId: String) {
-        // Cancel any existing observer
-        speakerObserverJob?.cancel()
+    private fun observeSpeakerChangesForChannel(channelId: String) {
+        // Cancel any existing observer for this channel
+        speakerObserverJobs[channelId]?.cancel()
 
         // Launch new coroutine to collect speaker changed broadcasts
-        speakerObserverJob = CoroutineScope(Dispatchers.IO).launch {
+        val job = CoroutineScope(Dispatchers.IO).launch {
             signalingClient.messages
                 .filter { it.type == SignalingType.SPEAKER_CHANGED }
                 .collect { message ->
@@ -221,34 +301,61 @@ class ChannelRepository @Inject constructor(
                     val speakerName = data["speakerName"] as? String
                     val producerId = data["producerId"] as? String
 
-                    // Only process messages for our joined channel
+                    // Only process messages for this channel
                     if (messageChannelId == channelId) {
                         if (speakerUserId != null && speakerName != null && producerId != null) {
                             // Speaker started transmitting
                             val newSpeaker = User(speakerUserId, speakerName)
-                            _currentSpeaker.value = newSpeaker
+
+                            // Update channel state
+                            updateChannelState(channelId) { state ->
+                                state.copy(
+                                    currentSpeaker = newSpeaker,
+                                    speakerStartTime = System.currentTimeMillis(),
+                                    consumerId = producerId
+                                )
+                            }
 
                             // Cancel fade job when new speaker starts
-                            lastSpeakerFadeJob?.cancel()
-                            _lastSpeaker.value = null
+                            lastSpeakerFadeJobs[channelId]?.cancel()
+                            lastSpeakerFadeJobs.remove(channelId)
 
                             // Play RX squelch open (only for incoming speakers, not own transmission)
                             if (pttManager.pttState.value !is PttState.Transmitting) {
                                 tonePlayer.playRxSquelchOpen()
                             }
 
-                            // Close previous consumer if exists
-                            currentConsumerId?.let { mediasoupClient.closeConsumer(it) }
+                            // Close previous consumer if exists for this channel
+                            channelConsumers[channelId]?.get(producerId)?.let { oldConsumerId ->
+                                mediasoupClient.closeConsumer(oldConsumerId)
+                            }
 
                             // Consume audio from this producer (guard: only if not muted)
-                            if (!_isMuted.value) {
+                            val channelState = _monitoredChannels.value[channelId]
+                            if (channelState?.isMuted == false) {
                                 mediasoupClient.consumeAudio(producerId, speakerUserId)
-                                currentConsumerId = producerId
+
+                                // Track consumer
+                                if (channelConsumers[channelId] == null) {
+                                    channelConsumers[channelId] = mutableMapOf()
+                                }
+                                channelConsumers[channelId]!![producerId] = producerId
+
+                                // Apply audio mix mode to new consumer
+                                applyAudioMixMode(currentAudioMixMode)
                             }
                         } else {
                             // Speaker stopped transmitting
-                            val previousSpeaker = _currentSpeaker.value
-                            _currentSpeaker.value = null
+                            val channelState = _monitoredChannels.value[channelId]
+                            val previousSpeaker = channelState?.currentSpeaker
+
+                            // Update channel state
+                            updateChannelState(channelId) { state ->
+                                state.copy(
+                                    currentSpeaker = null,
+                                    lastSpeaker = previousSpeaker
+                                )
+                            }
 
                             // Play RX squelch close (only for incoming speakers, not own transmission)
                             if (pttManager.pttState.value !is PttState.Transmitting) {
@@ -256,22 +363,152 @@ class ChannelRepository @Inject constructor(
                             }
 
                             // Start last speaker fade timer
-                            previousSpeaker?.let { speaker ->
-                                _lastSpeaker.value = speaker
-                                lastSpeakerFadeJob?.cancel()
-                                lastSpeakerFadeJob = CoroutineScope(Dispatchers.IO).launch {
+                            previousSpeaker?.let {
+                                lastSpeakerFadeJobs[channelId]?.cancel()
+                                lastSpeakerFadeJobs[channelId] = CoroutineScope(Dispatchers.IO).launch {
                                     delay(2500)
-                                    _lastSpeaker.value = null
+                                    updateChannelState(channelId) { state ->
+                                        state.copy(lastSpeaker = null)
+                                    }
+                                    lastSpeakerFadeJobs.remove(channelId)
                                 }
                             }
 
                             // Close the consumer
-                            currentConsumerId?.let { mediasoupClient.closeConsumer(it) }
-                            currentConsumerId = null
+                            channelState?.consumerId?.let { consumerId ->
+                                mediasoupClient.closeConsumer(consumerId)
+                                channelConsumers[channelId]?.remove(consumerId)
+                            }
                         }
                     }
                 }
         }
+
+        speakerObserverJobs[channelId] = job
+    }
+
+    suspend fun setPrimaryChannel(channelId: String) {
+        // Guard: channel must be in monitored map
+        if (channelId !in _monitoredChannels.value) {
+            Log.w(TAG, "Cannot set primary: channel $channelId not monitored")
+            return
+        }
+
+        // Update primary channel ID
+        _primaryChannelId.value = channelId
+
+        // Update all ChannelMonitoringState entries: set isPrimary true for target, false for others
+        _monitoredChannels.value = _monitoredChannels.value.mapValues { (id, state) ->
+            state.copy(isPrimary = id == channelId)
+        }
+
+        // Persist
+        settingsRepository.setPrimaryChannel(channelId)
+
+        // Apply audio mix mode (primary changed, volumes may need adjustment)
+        applyAudioMixMode(currentAudioMixMode)
+
+        // Update notification
+        updateServiceNotification()
+    }
+
+    suspend fun muteChannel(channelId: String) {
+        // Close ALL consumers for this channel (bandwidth savings)
+        channelConsumers[channelId]?.values?.forEach { consumerId ->
+            mediasoupClient.closeConsumer(consumerId)
+        }
+        channelConsumers[channelId]?.clear()
+
+        // Update channel state
+        updateChannelState(channelId) { state ->
+            state.copy(
+                isMuted = true,
+                currentSpeaker = null
+            )
+        }
+
+        Log.d(TAG, "Channel $channelId muted")
+    }
+
+    suspend fun unmuteChannel(channelId: String) {
+        // Update channel state
+        updateChannelState(channelId) { state ->
+            state.copy(isMuted = false)
+        }
+
+        // Explicit active speaker check: if someone is currently speaking, immediately create consumer
+        val channelState = _monitoredChannels.value[channelId]
+        if (channelState?.currentSpeaker != null && channelState.consumerId != null) {
+            val producerId = channelState.consumerId
+            val speakerId = channelState.currentSpeaker.id
+
+            mediasoupClient.consumeAudio(producerId, speakerId)
+
+            // Track consumer
+            if (channelConsumers[channelId] == null) {
+                channelConsumers[channelId] = mutableMapOf()
+            }
+            channelConsumers[channelId]!![producerId] = producerId
+
+            // Apply audio mix mode
+            applyAudioMixMode(currentAudioMixMode)
+        }
+
+        Log.d(TAG, "Channel $channelId unmuted")
+    }
+
+    suspend fun setChannelVolume(channelId: String, volume: Float) {
+        // Clamp volume to valid range
+        val clampedVolume = volume.coerceIn(0.0f, 1.0f)
+
+        // Update channel state
+        updateChannelState(channelId) { state ->
+            state.copy(volume = clampedVolume)
+        }
+
+        // Apply volume to active consumers for this channel
+        channelConsumers[channelId]?.values?.forEach { consumerId ->
+            mediasoupClient.setConsumerVolume(consumerId, clampedVolume)
+        }
+
+        Log.d(TAG, "Channel $channelId volume set to $clampedVolume")
+    }
+
+    private fun applyAudioMixMode(audioMixMode: AudioMixMode) {
+        _monitoredChannels.value.forEach { (channelId, state) ->
+            // Calculate target volume based on mode
+            val targetVolume = when (audioMixMode) {
+                AudioMixMode.EQUAL_VOLUME -> state.volume
+                AudioMixMode.PRIMARY_PRIORITY -> {
+                    if (state.isPrimary) state.volume else state.volume * 0.5f
+                }
+            }
+
+            // Apply to all active consumers for this channel
+            channelConsumers[channelId]?.values?.forEach { consumerId ->
+                mediasoupClient.setConsumerVolume(consumerId, targetVolume)
+            }
+        }
+
+        Log.d(TAG, "Applied audio mix mode: $audioMixMode")
+    }
+
+    suspend fun muteAllExceptPrimary() {
+        _monitoredChannels.value.forEach { (channelId, state) ->
+            if (!state.isPrimary && !state.isMuted) {
+                muteChannel(channelId)
+            }
+        }
+        Log.d(TAG, "Muted all channels except primary")
+    }
+
+    suspend fun unmuteAllChannels() {
+        _monitoredChannels.value.forEach { (channelId, state) ->
+            if (state.isMuted) {
+                unmuteChannel(channelId)
+            }
+        }
+        Log.d(TAG, "Unmuted all channels")
     }
 
     /**
@@ -296,19 +533,45 @@ class ChannelRepository @Inject constructor(
             Log.d(TAG, "Stopped ChannelMonitoringService (disconnectAll)")
         }
 
-        // Cancel speaker observer
-        speakerObserverJob?.cancel()
-        speakerObserverJob = null
+        // Cancel all speaker observer jobs
+        speakerObserverJobs.values.forEach { it.cancel() }
+        speakerObserverJobs.clear()
 
-        // Cancel last speaker fade timer
-        lastSpeakerFadeJob?.cancel()
-        lastSpeakerFadeJob = null
+        // Cancel all fade jobs
+        lastSpeakerFadeJobs.values.forEach { it.cancel() }
+        lastSpeakerFadeJobs.clear()
 
-        // If joined to a channel, clean up
-        _joinedChannelId.value?.let { channelId ->
-            CoroutineScope(Dispatchers.IO).launch {
+        // Leave all channels
+        val channelIds = _monitoredChannels.value.keys.toList()
+        CoroutineScope(Dispatchers.IO).launch {
+            channelIds.forEach { channelId ->
                 leaveChannel(channelId)
             }
+
+            // Clear all maps
+            channelConsumers.clear()
+            _monitoredChannels.value = emptyMap()
+            _primaryChannelId.value = null
+
+            // Clear persisted state
+            settingsRepository.clearMonitoredChannels()
         }
+    }
+
+    private fun updateChannelState(channelId: String, transform: (ChannelMonitoringState) -> ChannelMonitoringState) {
+        _monitoredChannels.value[channelId]?.let { state ->
+            _monitoredChannels.value = _monitoredChannels.value + (channelId to transform(state))
+        }
+    }
+
+    private fun updateServiceNotification() {
+        val primaryName = _monitoredChannels.value[_primaryChannelId.value]?.channelName ?: return
+        val otherCount = _monitoredChannels.value.size - 1
+        val serviceIntent = Intent(context, ChannelMonitoringService::class.java).apply {
+            action = ChannelMonitoringService.ACTION_UPDATE_CHANNEL
+            putExtra(ChannelMonitoringService.EXTRA_CHANNEL_NAME, primaryName)
+            putExtra(ChannelMonitoringService.EXTRA_MONITORING_COUNT, otherCount)
+        }
+        context.startService(serviceIntent)
     }
 }

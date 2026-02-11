@@ -236,6 +236,18 @@ class MediasoupClient @Inject constructor(
     }
 
     /**
+     * Set volume for a specific consumer (0.0 to 1.0).
+     * Used for per-channel volume control and audio mix mode.
+     */
+    fun setConsumerVolume(consumerId: String, volume: Float) {
+        consumers[consumerId]?.let {
+            // TODO: Integrate actual libmediasoup-android library
+            // (it as Consumer).volume = volume.coerceIn(0f, 1f)
+            Log.d(TAG, "Consumer volume set: $consumerId -> $volume")
+        }
+    }
+
+    /**
      * Create send transport for PTT audio transmission.
      *
      * Steps:
