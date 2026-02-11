@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -33,6 +34,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -58,9 +60,15 @@ fun ChannelListScreen(
 ) {
     val channels by viewModel.channels.collectAsState()
     val connectionState by viewModel.connectionState.collectAsState()
-    val joinedChannel by viewModel.joinedChannel.collectAsState()
-    val currentSpeaker by viewModel.currentSpeaker.collectAsState()
-    val lastSpeaker by viewModel.lastSpeaker.collectAsState()
+    val monitoredChannels by viewModel.monitoredChannels.collectAsState()
+    val primaryChannelId by viewModel.primaryChannelId.collectAsState()
+    val displayedChannelId by viewModel.displayedChannelId.collectAsState()
+    val scanModeEnabled by viewModel.scanModeEnabled.collectAsState()
+    val scanModeLocked by viewModel.scanModeLocked.collectAsState()
+    val scanReturnDelay by viewModel.scanReturnDelay.collectAsState()
+    val pttTargetMode by viewModel.pttTargetMode.collectAsState()
+    val audioMixMode by viewModel.audioMixMode.collectAsState()
+    val toastMessage by viewModel.toastMessage.collectAsState()
     val pttState by viewModel.pttState.collectAsState()
     val pttMode by viewModel.pttMode.collectAsState()
     val audioRoute by viewModel.audioRoute.collectAsState()
@@ -70,16 +78,16 @@ fun ChannelListScreen(
     val rxSquelchEnabled by viewModel.rxSquelchEnabled.collectAsState()
     val needsMicPermission by viewModel.needsMicPermission.collectAsState()
     val showBatteryPrompt by viewModel.showBatteryOptimizationPrompt.collectAsState()
-    val isMuted by viewModel.isMuted.collectAsState()
-    val monitoredChannels by viewModel.monitoredChannels.collectAsState()
-    val scanModeEnabled by viewModel.scanModeEnabled.collectAsState()
-    val pttTargetMode by viewModel.pttTargetMode.collectAsState()
-    val scanReturnDelay by viewModel.scanReturnDelay.collectAsState()
-    val audioMixMode by viewModel.audioMixMode.collectAsState()
 
     val context = LocalContext.current
     var drawerOpen by remember { mutableStateOf(false) }
     var volumeDialogChannelId by remember { mutableStateOf<String?>(null) }
+
+    // Derive displayed channel state for BottomBar
+    val displayedChannel = monitoredChannels[displayedChannelId]
+    val displayedChannelName = displayedChannel?.channelName
+    val isPrimaryDisplayed = displayedChannel?.isPrimary ?: true
+    val displayedSpeaker = displayedChannel?.currentSpeaker
 
     // Transmission duration ticker (updates every second during transmission)
     var transmissionDuration by remember { mutableLongStateOf(0L) }
@@ -123,6 +131,32 @@ fun ChannelListScreen(
     LaunchedEffect(needsMicPermission) {
         if (needsMicPermission) {
             micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    // Scan mode return effect
+    if (scanModeEnabled && !scanModeLocked) {
+        val currentPrimary by rememberUpdatedState(primaryChannelId)
+        val currentDisplayed by rememberUpdatedState(displayedChannelId)
+
+        // Find if any non-primary channel has active speaker
+        val anyNonPrimaryActive = monitoredChannels.values.any {
+            it.currentSpeaker != null && !it.isPrimary && !it.isMuted
+        }
+
+        LaunchedEffect(anyNonPrimaryActive) {
+            if (!anyNonPrimaryActive && currentDisplayed != null && currentDisplayed != currentPrimary) {
+                delay(scanReturnDelay * 1000L)
+                viewModel.returnToPrimaryChannel()
+            }
+        }
+    }
+
+    // Toast message handling
+    LaunchedEffect(toastMessage) {
+        toastMessage?.let {
+            android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show()
+            viewModel.clearToastMessage()
         }
     }
 
@@ -170,6 +204,13 @@ fun ChannelListScreen(
                 TopAppBar(
                     title = { Text("Channels") },
                     actions = {
+                        // Mute-all button (only when 2+ channels joined)
+                        if (monitoredChannels.size > 1) {
+                            IconButton(onClick = { viewModel.muteAllExceptPrimary() }) {
+                                Icon(Icons.Default.VolumeOff, contentDescription = "Mute all except primary")
+                            }
+                        }
+
                         // Connection status dot
                         Box(
                             modifier = Modifier
@@ -196,11 +237,14 @@ fun ChannelListScreen(
             },
             bottomBar = {
                 BottomBar(
-                    joinedChannel = joinedChannel,
-                    currentSpeaker = currentSpeaker,
+                    displayedChannelName = displayedChannelName,
+                    isPrimaryChannel = isPrimaryDisplayed,
+                    isLocked = scanModeLocked,
+                    currentSpeaker = displayedSpeaker,
                     pttState = pttState,
                     pttMode = pttMode,
                     transmissionDuration = transmissionDuration,
+                    onToggleLock = { viewModel.toggleBottomBarLock() },
                     onPttPressed = { viewModel.onPttPressed() },
                     onPttReleased = { viewModel.onPttReleased() }
                 )

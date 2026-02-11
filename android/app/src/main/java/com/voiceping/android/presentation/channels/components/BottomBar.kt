@@ -1,5 +1,6 @@
 package com.voiceping.android.presentation.channels.components
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,17 +17,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.voiceping.android.data.ptt.PttState
-import com.voiceping.android.domain.model.Channel
 import com.voiceping.android.domain.model.PttMode
 import com.voiceping.android.domain.model.User
 
 @Composable
 fun BottomBar(
-    joinedChannel: Channel?,
+    displayedChannelName: String?,
+    isPrimaryChannel: Boolean,
+    isLocked: Boolean,
     currentSpeaker: User?,
     pttState: PttState,
     pttMode: PttMode,
     transmissionDuration: Long,
+    onToggleLock: () -> Unit,
     onPttPressed: () -> Unit,
     onPttReleased: () -> Unit
 ) {
@@ -44,32 +47,43 @@ fun BottomBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            if (joinedChannel != null) {
-                // Left side: channel info and status
-                Column {
+            if (displayedChannelName != null) {
+                // Left side: channel info and status (clickable for lock toggle)
+                Column(
+                    modifier = Modifier.clickable { onToggleLock() }
+                ) {
+                    // Channel name color: cyan when showing scanned non-primary, normal when primary
                     Text(
-                        text = joinedChannel.name,
+                        text = displayedChannelName,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = if (isPrimaryChannel) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            MaterialTheme.colorScheme.primary  // Cyan for scanned channel
+                        }
                     )
 
                     // Status text based on state
-                    val isUserTransmitting = pttState is PttState.Transmitting
-                    val isChannelBusy = currentSpeaker != null && !isUserTransmitting
-
                     when {
-                        isUserTransmitting -> {
+                        pttState is PttState.Transmitting -> {
                             Text(
                                 text = "Transmitting...",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color(0xFFD32F2F) // Red
                             )
                         }
-                        isChannelBusy -> {
+                        currentSpeaker != null -> {
                             Text(
-                                text = currentSpeaker!!.name,
+                                text = currentSpeaker.name,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.primary // Cyan
+                            )
+                        }
+                        isLocked -> {
+                            Text(
+                                text = "Locked",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                         else -> {
