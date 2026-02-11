@@ -6,7 +6,7 @@ import javax.inject.Inject
 class JoinChannelUseCase @Inject constructor(
     private val channelRepository: ChannelRepository
 ) {
-    suspend operator fun invoke(channelId: String): Result<Unit> {
-        return channelRepository.joinChannel(channelId)
+    suspend operator fun invoke(channelId: String, channelName: String = "", teamName: String = ""): Result<Unit> {
+        return channelRepository.joinChannel(channelId, channelName, teamName)
     }
 }

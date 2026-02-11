@@ -200,7 +200,7 @@ class ChannelListViewModel @Inject constructor(
         }
     }
 
-    fun setPrimaryChannel(channelId: String) {
+    fun setPrimaryChannel(channelId: String) = viewModelScope.launch {
         channelRepository.setPrimaryChannel(channelId)
     }
 
@@ -308,11 +308,11 @@ class ChannelListViewModel @Inject constructor(
     }
 
     // Multi-channel mute actions
-    fun muteAllExceptPrimary() {
+    fun muteAllExceptPrimary() = viewModelScope.launch {
         channelRepository.muteAllExceptPrimary()
     }
 
-    fun unmuteAllChannels() {
+    fun unmuteAllChannels() = viewModelScope.launch {
         channelRepository.unmuteAllChannels()
     }
 
