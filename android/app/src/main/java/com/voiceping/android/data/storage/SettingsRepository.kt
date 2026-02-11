@@ -7,9 +7,12 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.voiceping.android.domain.model.AudioMixMode
 import com.voiceping.android.domain.model.AudioRoute
 import com.voiceping.android.domain.model.PttMode
+import com.voiceping.android.domain.model.PttTargetMode
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -26,6 +29,8 @@ import javax.inject.Singleton
  * - Audio output route (SPEAKER, EARPIECE, BLUETOOTH)
  * - Audio tone toggles (PTT start, roger beep, RX squelch)
  * - Toggle mode max transmission duration
+ * - Multi-channel monitoring: monitored channels, primary channel
+ * - Scan mode: enabled, return delay, PTT target mode, audio mix mode
  *
  * Defaults:
  * - PTT mode: PRESS_AND_HOLD
@@ -34,6 +39,10 @@ import javax.inject.Singleton
  * - Roger beep: ON
  * - RX squelch: OFF
  * - Toggle max duration: 60 seconds
+ * - Scan mode enabled: ON
+ * - Scan return delay: 2 seconds
+ * - PTT target mode: ALWAYS_PRIMARY
+ * - Audio mix mode: EQUAL_VOLUME
  */
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "ptt_settings")
 
@@ -48,6 +57,14 @@ class SettingsRepository @Inject constructor(
         val ROGER_BEEP_ENABLED = booleanPreferencesKey("roger_beep_enabled")
         val RX_SQUELCH_ENABLED = booleanPreferencesKey("rx_squelch_enabled")
         val TOGGLE_MAX_DURATION = intPreferencesKey("toggle_max_duration")
+
+        // Multi-channel monitoring and scan mode
+        val MONITORED_CHANNEL_IDS = stringSetPreferencesKey("monitored_channel_ids")
+        val PRIMARY_CHANNEL_ID = stringPreferencesKey("primary_channel_id")
+        val SCAN_MODE_ENABLED = booleanPreferencesKey("scan_mode_enabled")
+        val SCAN_RETURN_DELAY = intPreferencesKey("scan_return_delay")
+        val PTT_TARGET_MODE = stringPreferencesKey("ptt_target_mode")
+        val AUDIO_MIX_MODE = stringPreferencesKey("audio_mix_mode")
     }
 
     // PTT Mode
@@ -148,5 +165,92 @@ class SettingsRepository @Inject constructor(
 
     fun getToggleMaxDuration(): Flow<Int> = context.dataStore.data.map { preferences ->
         preferences[Keys.TOGGLE_MAX_DURATION] ?: 60
+    }
+
+    // Monitored Channels
+    suspend fun setMonitoredChannels(channelIds: Set<String>) {
+        context.dataStore.edit { preferences ->
+            preferences[Keys.MONITORED_CHANNEL_IDS] = channelIds
+        }
+    }
+
+    fun getMonitoredChannels(): Flow<Set<String>> = context.dataStore.data.map { preferences ->
+        preferences[Keys.MONITORED_CHANNEL_IDS] ?: emptySet()
+    }
+
+    // Primary Channel
+    suspend fun setPrimaryChannel(channelId: String) {
+        context.dataStore.edit { preferences ->
+            preferences[Keys.PRIMARY_CHANNEL_ID] = channelId
+        }
+    }
+
+    fun getPrimaryChannel(): Flow<String?> = context.dataStore.data.map { preferences ->
+        preferences[Keys.PRIMARY_CHANNEL_ID]
+    }
+
+    // Scan Mode Enabled
+    suspend fun setScanModeEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[Keys.SCAN_MODE_ENABLED] = enabled
+        }
+    }
+
+    fun getScanModeEnabled(): Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[Keys.SCAN_MODE_ENABLED] ?: true
+    }
+
+    // Scan Return Delay
+    suspend fun setScanReturnDelay(seconds: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[Keys.SCAN_RETURN_DELAY] = seconds
+        }
+    }
+
+    fun getScanReturnDelay(): Flow<Int> = context.dataStore.data.map { preferences ->
+        preferences[Keys.SCAN_RETURN_DELAY] ?: 2
+    }
+
+    // PTT Target Mode
+    suspend fun setPttTargetMode(mode: PttTargetMode) {
+        context.dataStore.edit { preferences ->
+            preferences[Keys.PTT_TARGET_MODE] = mode.name
+        }
+    }
+
+    fun getPttTargetMode(): Flow<PttTargetMode> = context.dataStore.data.map { preferences ->
+        val modeName = preferences[Keys.PTT_TARGET_MODE] ?: PttTargetMode.ALWAYS_PRIMARY.name
+        try {
+            PttTargetMode.valueOf(modeName)
+        } catch (e: IllegalArgumentException) {
+            PttTargetMode.ALWAYS_PRIMARY
+        }
+    }
+
+    // Audio Mix Mode
+    suspend fun setAudioMixMode(mode: AudioMixMode) {
+        context.dataStore.edit { preferences ->
+            preferences[Keys.AUDIO_MIX_MODE] = mode.name
+        }
+    }
+
+    fun getAudioMixMode(): Flow<AudioMixMode> = context.dataStore.data.map { preferences ->
+        val modeName = preferences[Keys.AUDIO_MIX_MODE] ?: AudioMixMode.EQUAL_VOLUME.name
+        try {
+            AudioMixMode.valueOf(modeName)
+        } catch (e: IllegalArgumentException) {
+            AudioMixMode.EQUAL_VOLUME
+        }
+    }
+
+    /**
+     * Clear all monitored channels and primary channel setting.
+     * Used on logout or disconnect.
+     */
+    suspend fun clearMonitoredChannels() {
+        context.dataStore.edit { preferences ->
+            preferences.remove(Keys.MONITORED_CHANNEL_IDS)
+            preferences.remove(Keys.PRIMARY_CHANNEL_ID)
+        }
     }
 }
