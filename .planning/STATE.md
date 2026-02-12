@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 Phase: 10 of 10 (all complete)
 Plan: N/A
 Status: Between milestones
-Last activity: 2026-02-13 — Completed v2.0 milestone archival
+Last activity: 2026-02-13 - Completed quick task 1: Build debug APK for testing
 
 Progress: [████████████████████] 100% (v1.0: 4/4 phases, v2.0: 6/6 phases)
 
@@ -33,6 +33,12 @@ Deferred to future milestones:
 - Replace self-signed certificates with real TLS certificates for production deployment
 - On-device Android testing needed (no physical device during v2.0 development)
 - MediasoupClient library integration (TODO stubs in place)
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 1 | Build debug APK for testing | 2026-02-12 | 1855ebc | [1-build-debug-apk-for-testing](./quick/1-build-debug-apk-for-testing/) |
 
 ## Session Continuity
 
