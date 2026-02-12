@@ -217,6 +217,7 @@ class ChannelMonitoringService : Service() {
         const val ACTION_UPDATE_CHANNEL = "com.voiceping.UPDATE_CHANNEL"
         const val ACTION_TOGGLE_MUTE = "com.voiceping.TOGGLE_MUTE_SERVICE"
         const val ACTION_STOP = "com.voiceping.STOP_MONITORING"
+        const val ACTION_BOOT_START = "com.voiceping.BOOT_START" // For future use if Android 15 restriction lifted
 
         // Intent extras
         const val EXTRA_CHANNEL_NAME = "channel_name"

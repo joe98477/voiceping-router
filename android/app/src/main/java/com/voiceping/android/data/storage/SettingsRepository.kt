@@ -1,14 +1,11 @@
 package com.voiceping.android.data.storage
 
 import android.content.Context
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import android.view.KeyEvent
 import com.voiceping.android.domain.model.AudioMixMode
 import com.voiceping.android.domain.model.AudioRoute
@@ -52,7 +49,6 @@ import javax.inject.Singleton
  * - Boot auto-start enabled: OFF
  * - Long press threshold: 300ms
  */
-private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "ptt_settings")
 
 @Singleton
 class SettingsRepository @Inject constructor(
