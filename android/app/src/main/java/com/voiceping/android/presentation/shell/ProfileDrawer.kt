@@ -38,10 +38,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.TextButton
 import com.voiceping.android.domain.model.AudioMixMode
 import com.voiceping.android.domain.model.AudioRoute
 import com.voiceping.android.domain.model.PttMode
 import com.voiceping.android.domain.model.PttTargetMode
+import com.voiceping.android.domain.model.VolumeKeyPttConfig
+import com.voiceping.android.presentation.settings.keyCodeToName
 import kotlin.math.roundToInt
 
 @Composable
@@ -72,6 +75,15 @@ fun ProfileDrawer(
     onPttTargetModeChanged: (PttTargetMode) -> Unit = {},
     onScanReturnDelayChanged: (Int) -> Unit = {},
     onAudioMixModeChanged: (AudioMixMode) -> Unit = {},
+    // Hardware button settings
+    volumeKeyPttConfig: VolumeKeyPttConfig = VolumeKeyPttConfig.DISABLED,
+    bluetoothPttEnabled: Boolean = false,
+    bluetoothPttButtonKeycode: Int = 85, // KEYCODE_MEDIA_PLAY_PAUSE
+    bootAutoStartEnabled: Boolean = false,
+    onVolumeKeyPttConfigChanged: (VolumeKeyPttConfig) -> Unit = {},
+    onBluetoothPttEnabledChanged: (Boolean) -> Unit = {},
+    onDetectBluetoothButton: () -> Unit = {},
+    onBootAutoStartChanged: (Boolean) -> Unit = {},
     onSwitchEvent: () -> Unit = {},
     onSettings: () -> Unit = {},
     onLogout: () -> Unit = {},
@@ -305,6 +317,188 @@ fun ProfileDrawer(
                             Switch(
                                 checked = rxSquelchEnabled,
                                 onCheckedChange = onRxSquelchChanged
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                        HorizontalDivider()
+
+                        // Hardware Buttons Section
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Hardware Buttons",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Volume Key PTT subsection
+                        Text(
+                            text = "Volume Key PTT",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(horizontal = 8.dp)
+                        )
+                        Column(modifier = Modifier.padding(horizontal = 8.dp)) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .selectable(
+                                        selected = volumeKeyPttConfig == VolumeKeyPttConfig.DISABLED,
+                                        onClick = { onVolumeKeyPttConfigChanged(VolumeKeyPttConfig.DISABLED) }
+                                    )
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = volumeKeyPttConfig == VolumeKeyPttConfig.DISABLED,
+                                    onClick = { onVolumeKeyPttConfigChanged(VolumeKeyPttConfig.DISABLED) }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Disabled")
+                            }
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .selectable(
+                                        selected = volumeKeyPttConfig == VolumeKeyPttConfig.VOLUME_UP,
+                                        onClick = { onVolumeKeyPttConfigChanged(VolumeKeyPttConfig.VOLUME_UP) }
+                                    )
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = volumeKeyPttConfig == VolumeKeyPttConfig.VOLUME_UP,
+                                    onClick = { onVolumeKeyPttConfigChanged(VolumeKeyPttConfig.VOLUME_UP) }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Volume Up")
+                            }
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .selectable(
+                                        selected = volumeKeyPttConfig == VolumeKeyPttConfig.VOLUME_DOWN,
+                                        onClick = { onVolumeKeyPttConfigChanged(VolumeKeyPttConfig.VOLUME_DOWN) }
+                                    )
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = volumeKeyPttConfig == VolumeKeyPttConfig.VOLUME_DOWN,
+                                    onClick = { onVolumeKeyPttConfigChanged(VolumeKeyPttConfig.VOLUME_DOWN) }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Volume Down")
+                            }
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .selectable(
+                                        selected = volumeKeyPttConfig == VolumeKeyPttConfig.BOTH,
+                                        onClick = { onVolumeKeyPttConfigChanged(VolumeKeyPttConfig.BOTH) }
+                                    )
+                                    .padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = volumeKeyPttConfig == VolumeKeyPttConfig.BOTH,
+                                    onClick = { onVolumeKeyPttConfigChanged(VolumeKeyPttConfig.BOTH) }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Both Keys")
+                            }
+
+                            // Helper text
+                            Text(
+                                text = "Long-press activates PTT, short tap adjusts volume",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 48.dp, top = 4.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Bluetooth PTT subsection
+                        Text(
+                            text = "Bluetooth PTT Button",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(horizontal = 8.dp)
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Enable Bluetooth PTT")
+                            Switch(
+                                checked = bluetoothPttEnabled,
+                                onCheckedChange = onBluetoothPttEnabledChanged
+                            )
+                        }
+
+                        // Show configured button and detect button when BT PTT enabled
+                        if (bluetoothPttEnabled) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Button: ${keyCodeToName(bluetoothPttButtonKeycode)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                TextButton(onClick = onDetectBluetoothButton) {
+                                    Text("Detect Button")
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        HorizontalDivider()
+
+                        // Boot Auto-Start subsection
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Startup",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(horizontal = 8.dp)
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text("Start on boot")
+                                Text(
+                                    text = "Auto-start when device powers on",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = bootAutoStartEnabled,
+                                onCheckedChange = onBootAutoStartChanged
+                            )
+                        }
+
+                        if (bootAutoStartEnabled) {
+                            Text(
+                                text = "Android 15+ shows notification instead of auto-starting",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             )
                         }
 
