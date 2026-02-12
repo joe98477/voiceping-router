@@ -13,6 +13,7 @@ import com.voiceping.android.presentation.events.EventPickerScreen
 import com.voiceping.android.presentation.loading.LoadingScreen
 import com.voiceping.android.presentation.login.LoginScreen
 import com.voiceping.android.presentation.login.LoginViewModel
+import com.voiceping.android.presentation.settings.SettingsScreen
 
 // Route constants
 object Routes {
@@ -20,6 +21,7 @@ object Routes {
     const val LOADING = "loading"
     const val EVENTS = "events"
     const val CHANNELS = "channels/{eventId}"
+    const val SETTINGS = "settings"
 
     fun channelsRoute(eventId: String) = "channels/$eventId"
 }
@@ -102,12 +104,20 @@ fun NavGraph(
                     }
                 },
                 onSettings = {
-                    // TODO: Navigate to settings screen in future phase
+                    navController.navigate(Routes.SETTINGS)
                 },
                 onLogout = {
                     navController.navigate(Routes.LOGIN) {
                         popUpTo(0) { inclusive = true }
                     }
+                }
+            )
+        }
+
+        composable(Routes.SETTINGS) {
+            SettingsScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
                 }
             )
         }
