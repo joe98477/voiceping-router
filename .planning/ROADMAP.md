@@ -191,11 +191,13 @@ Plans:
   6. Audio auto-routes to Bluetooth headset when Bluetooth device is connected
   7. User can adjust volume per channel independently
   8. App can auto-start as foreground service on device boot (optional setting, off by default)
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 09-01: TBD
-- [ ] 09-02: TBD
+- [ ] 09-01-PLAN.md -- Hardware button settings foundation & volume key PTT handler
+- [ ] 09-02-PLAN.md -- Audio device manager & Bluetooth button handler (MediaSession)
+- [ ] 09-03-PLAN.md -- Boot auto-start & integration wiring (MainActivity, ChannelRepository)
+- [ ] 09-04-PLAN.md -- Hardware settings UI, button detection screen, audio device icon
 
 #### Phase 10: Network Resilience & UX Polish
 **Goal**: Production-ready app with cellular network resilience and polished user experience
