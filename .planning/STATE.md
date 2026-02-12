@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-02-08)
 
 ## Current Position
 
-Phase: 8 of 10 (Multi-Channel Monitoring & Scan Mode)
-Plan: 4 of 4 complete
-Status: Complete
-Last activity: 2026-02-11 — Completed 08-04: Scan Mode Settings UI & Per-Channel Volume Control
+Phase: 9 of 10 (Hardware PTT & Bluetooth Integration)
+Plan: 1 of 4 complete
+Status: In Progress
+Last activity: 2026-02-12 — Completed 09-01: Hardware Button Settings Foundation & Volume Key PTT Handler
 
-Progress: [██████████████] 80% (Milestone 1 complete: 4/10 phases shipped, Milestone 2: Phase 5-6-7-8 complete)
+Progress: [███████████████] 82% (Milestone 1 complete: 4/10 phases shipped, Milestone 2: Phase 5-6-7-8 complete, Phase 9: 1/4 plans)
 
 ## Performance Metrics
 
@@ -61,6 +61,13 @@ Progress: [██████████████] 80% (Milestone 1 complete
 | 08-02 | 181 | 2 | 3 |
 | 08-03 | 329 | 2 | 4 |
 | 08-04 | 257 | 2 | 5 |
+
+**Milestone 2 Phase 9:**
+
+| Plan | Duration (s) | Tasks | Files |
+|------|--------------|-------|-------|
+| 09-01 | 391 | 2 | 4 |
+| Phase 09 P01 | 391 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -138,8 +145,8 @@ Deferred to future milestones:
 
 ## Session Continuity
 
-Last session: 2026-02-11
-Stopped at: Phase 8 execution complete, verification passed (8/8 must-haves)
+Last session: 2026-02-12
+Stopped at: Completed 09-01-PLAN.md (Hardware Button Settings Foundation & Volume Key PTT Handler)
 Resume file: None
 
 **Milestone 1 (WebRTC Audio Rebuild + Web UI) COMPLETE:**
@@ -172,5 +179,9 @@ Resume file: None
   - 08-02: Multi-Channel Monitoring Engine ✓
   - 08-03: Scan Mode Logic & ViewModel Integration ✓
   - 08-04: Scan Mode Settings UI & Per-Channel Volume Control ✓
-- Phase 9: Hardware PTT & Bluetooth Integration (pending)
+- Phase 9: Hardware PTT & Bluetooth Integration (1/4 plans complete, in progress)
+  - 09-01: Hardware Button Settings Foundation & Volume Key PTT Handler ✓
+  - 09-02: Volume Key & Bluetooth Button Integration (pending)
+  - 09-03: Boot Auto-Start & PTT Auto-Release (pending)
+  - 09-04: Settings UI for Hardware Buttons (pending)
 - Phase 10: Network Resilience & UX Polish (pending)
