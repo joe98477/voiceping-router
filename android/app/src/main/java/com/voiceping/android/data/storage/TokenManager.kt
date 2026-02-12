@@ -65,11 +65,24 @@ class TokenManager @Inject constructor(
         encryptedPrefs.edit().clear().apply()
     }
 
+    fun saveUserInfo(name: String, email: String) {
+        encryptedPrefs.edit()
+            .putString(KEY_USER_NAME, name)
+            .putString(KEY_USER_EMAIL, email)
+            .apply()
+    }
+
+    fun getUserName(): String? = encryptedPrefs.getString(KEY_USER_NAME, null)
+
+    fun getUserEmail(): String? = encryptedPrefs.getString(KEY_USER_EMAIL, null)
+
     companion object {
         private const val KEY_JWT_TOKEN = "jwt_token"
         private const val KEY_TOKEN_TIMESTAMP = "token_timestamp"
         private const val KEY_EMAIL = "email"
         private const val KEY_PASSWORD = "password"
+        private const val KEY_USER_NAME = "user_name"
+        private const val KEY_USER_EMAIL = "user_email"
         private const val TOKEN_TTL_MS = 3600000L // 1 hour
         private const val REFRESH_THRESHOLD_MS = 3300000L // 55 minutes
     }

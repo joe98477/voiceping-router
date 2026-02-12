@@ -185,8 +185,8 @@ fun ChannelListScreen(
     ProfileDrawer(
         isOpen = drawerOpen,
         onDismiss = { drawerOpen = false },
-        userName = "User Name",
-        userEmail = "user@example.com",
+        userName = viewModel.userName,
+        userEmail = viewModel.userEmail,
         appVersion = "1.0.0",
         onSwitchEvent = {
             drawerOpen = false

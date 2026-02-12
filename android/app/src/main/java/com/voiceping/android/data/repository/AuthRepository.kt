@@ -26,6 +26,7 @@ class AuthRepository @Inject constructor(
         return withContext(Dispatchers.IO) {
             try {
                 val response = authApi.login(LoginRequest(email, password))
+                tokenManager.saveUserInfo(response.displayName ?: email, email)
                 tokenManager.saveCredentials(email, password)
                 Result.success(response.toUser())
             } catch (e: Exception) {

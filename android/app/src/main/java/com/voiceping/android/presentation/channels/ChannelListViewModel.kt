@@ -52,6 +52,7 @@ class ChannelListViewModel @Inject constructor(
     private val audioRouter: AudioRouter,
     private val networkMonitor: NetworkMonitor,
     private val transmissionHistoryRepository: TransmissionHistoryRepository,
+    private val tokenManager: com.voiceping.android.data.storage.TokenManager,
     @ApplicationContext private val context: Context,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -59,6 +60,9 @@ class ChannelListViewModel @Inject constructor(
     companion object {
         private const val TAG = "ChannelListViewModel"
     }
+
+    val userName: String = tokenManager.getUserName() ?: "User"
+    val userEmail: String = tokenManager.getUserEmail() ?: ""
 
     private val _channels = MutableStateFlow<List<Channel>>(emptyList())
     val channels: StateFlow<List<Channel>> = _channels.asStateFlow()
