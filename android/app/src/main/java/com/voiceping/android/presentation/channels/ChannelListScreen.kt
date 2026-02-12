@@ -52,7 +52,9 @@ import com.voiceping.android.domain.model.ConnectionState
 import com.voiceping.android.presentation.channels.components.BottomBar
 import com.voiceping.android.presentation.channels.components.ChannelRow
 import com.voiceping.android.presentation.channels.components.ChannelVolumeDialog
+import com.voiceping.android.presentation.channels.components.NetworkQualityIndicator
 import com.voiceping.android.presentation.channels.components.TeamHeader
+import com.voiceping.android.presentation.channels.components.TransmissionHistorySheet
 import com.voiceping.android.presentation.shell.ConnectionBanner
 import com.voiceping.android.presentation.shell.ProfileDrawer
 import kotlinx.coroutines.delay
@@ -94,6 +96,10 @@ fun ChannelListScreen(
     val currentOutputDevice by viewModel.currentOutputDevice.collectAsState()
     val showButtonDetection by viewModel.showButtonDetection.collectAsState()
     val detectedKeyCode by viewModel.detectedKeyCode.collectAsState()
+    val latency by viewModel.latency.collectAsState()
+    val networkType by viewModel.networkType.collectAsState()
+    val selectedHistoryChannelId by viewModel.selectedHistoryChannelId.collectAsState()
+    val transmissionHistory by viewModel.transmissionHistory.collectAsState()
 
     val context = LocalContext.current
     var drawerOpen by remember { mutableStateOf(false) }
@@ -182,34 +188,6 @@ fun ChannelListScreen(
         userName = "User Name",
         userEmail = "user@example.com",
         appVersion = "1.0.0",
-        pttMode = pttMode,
-        audioRoute = audioRoute,
-        toggleMaxDuration = toggleMaxDuration,
-        pttStartToneEnabled = pttStartToneEnabled,
-        rogerBeepEnabled = rogerBeepEnabled,
-        rxSquelchEnabled = rxSquelchEnabled,
-        onPttModeChanged = { viewModel.setPttMode(it) },
-        onAudioRouteChanged = { viewModel.setAudioRoute(it) },
-        onToggleMaxDurationChanged = { viewModel.setToggleMaxDuration(it) },
-        onPttStartToneChanged = { viewModel.setPttStartToneEnabled(it) },
-        onRogerBeepChanged = { viewModel.setRogerBeepEnabled(it) },
-        onRxSquelchChanged = { viewModel.setRxSquelchEnabled(it) },
-        scanModeEnabled = scanModeEnabled,
-        pttTargetMode = pttTargetMode,
-        scanReturnDelay = scanReturnDelay,
-        audioMixMode = audioMixMode,
-        onScanModeEnabledChanged = { viewModel.setScanModeEnabled(it) },
-        onPttTargetModeChanged = { viewModel.setPttTargetMode(it) },
-        onScanReturnDelayChanged = { viewModel.setScanReturnDelay(it) },
-        onAudioMixModeChanged = { viewModel.setAudioMixMode(it) },
-        volumeKeyPttConfig = volumeKeyPttConfig,
-        bluetoothPttEnabled = bluetoothPttEnabled,
-        bluetoothPttButtonKeycode = bluetoothPttButtonKeycode,
-        bootAutoStartEnabled = bootAutoStartEnabled,
-        onVolumeKeyPttConfigChanged = { viewModel.setVolumeKeyPttConfig(it) },
-        onBluetoothPttEnabledChanged = { viewModel.setBluetoothPttEnabled(it) },
-        onDetectBluetoothButton = { viewModel.startButtonDetection() },
-        onBootAutoStartChanged = { viewModel.setBootAutoStartEnabled(it) },
         onSwitchEvent = {
             drawerOpen = false
             onSwitchEvent()
@@ -247,6 +225,15 @@ fun ChannelListScreen(
                             modifier = Modifier.size(18.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        // Network quality indicator
+                        NetworkQualityIndicator(
+                            latency = latency,
+                            networkType = networkType,
+                            serverUrl = viewModel.serverUrl
+                        )
+
                         Spacer(modifier = Modifier.width(8.dp))
 
                         // Connection status dot
@@ -327,7 +314,7 @@ fun ChannelListScreen(
                                 onToggle = { viewModel.toggleChannel(channel) },
                                 onLongPress = {
                                     if (channelState != null) {
-                                        viewModel.setPrimaryChannel(channel.id)
+                                        viewModel.showTransmissionHistory(channel.id)
                                     }
                                 },
                                 onSettingsClick = {
@@ -358,6 +345,18 @@ fun ChannelListScreen(
                     onDismiss = { volumeDialogChannelId = null }
                 )
             }
+        }
+
+        // Transmission history sheet
+        selectedHistoryChannelId?.let { channelId ->
+            val channelName = remember(channelId) {
+                channels.find { it.id == channelId }?.name ?: "Channel"
+            }
+            TransmissionHistorySheet(
+                channelName = channelName,
+                history = transmissionHistory,
+                onDismiss = { viewModel.hideTransmissionHistory() }
+            )
         }
 
         // Button detection dialog

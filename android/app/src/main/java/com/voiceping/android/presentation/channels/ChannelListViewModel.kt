@@ -5,12 +5,15 @@ import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.voiceping.android.BuildConfig
 import com.voiceping.android.data.audio.AudioRouter
+import com.voiceping.android.data.network.NetworkMonitor
 import com.voiceping.android.data.network.SignalingClient
 import com.voiceping.android.data.ptt.PttManager
 import com.voiceping.android.data.ptt.PttState
 import com.voiceping.android.data.repository.ChannelRepository
 import com.voiceping.android.data.repository.EventRepository
+import com.voiceping.android.data.repository.TransmissionHistoryRepository
 import com.voiceping.android.data.storage.PreferencesManager
 import com.voiceping.android.data.storage.SettingsRepository
 import com.voiceping.android.domain.model.AudioMixMode
@@ -19,8 +22,10 @@ import com.voiceping.android.domain.model.AudioRoute
 import com.voiceping.android.domain.model.Channel
 import com.voiceping.android.domain.model.ChannelMonitoringState
 import com.voiceping.android.domain.model.ConnectionState
+import com.voiceping.android.domain.model.NetworkType
 import com.voiceping.android.domain.model.PttMode
 import com.voiceping.android.domain.model.PttTargetMode
+import com.voiceping.android.domain.model.TransmissionHistoryEntry
 import com.voiceping.android.domain.model.VolumeKeyPttConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -29,6 +34,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -42,6 +50,8 @@ class ChannelListViewModel @Inject constructor(
     private val pttManager: PttManager,
     private val settingsRepository: SettingsRepository,
     private val audioRouter: AudioRouter,
+    private val networkMonitor: NetworkMonitor,
+    private val transmissionHistoryRepository: TransmissionHistoryRepository,
     @ApplicationContext private val context: Context,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -145,11 +155,34 @@ class ChannelListViewModel @Inject constructor(
     val showBatteryOptimizationPrompt: StateFlow<Boolean> = _showBatteryOptimizationPrompt.asStateFlow()
     private var hasCheckedBatteryOptimization = false
 
+    // Network quality indicator
+    val latency: StateFlow<Long?> = signalingClient.latency
+    val networkType: StateFlow<NetworkType> = networkMonitor.networkType
+    val serverUrl: String = BuildConfig.SERVER_URL
+
+    // Transmission history
+    private val _selectedHistoryChannelId = MutableStateFlow<String?>(null)
+    val selectedHistoryChannelId: StateFlow<String?> = _selectedHistoryChannelId.asStateFlow()
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val transmissionHistory: StateFlow<List<TransmissionHistoryEntry>> = _selectedHistoryChannelId
+        .flatMapLatest { channelId ->
+            if (channelId != null) {
+                transmissionHistoryRepository.observeHistory(channelId)
+            } else {
+                flowOf(emptyList())
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     private val eventId: String? = savedStateHandle.get<String>("eventId")
         ?: preferencesManager.getLastEventId()
 
     init {
         eventId?.let { loadChannels(it) }
+
+        // Start NetworkMonitor
+        networkMonitor.start()
 
         // Observe settings and update PttManager and AudioRouter
         viewModelScope.launch {
@@ -173,7 +206,7 @@ class ChannelListViewModel @Inject constructor(
 
     fun loadChannels(eventId: String) {
         viewModelScope.launch {
-            val result = eventRepository.getChannelsForEvent(eventId)
+            val result = eventRepository.getChannelsWithCache(eventId)
             if (result.isSuccess) {
                 _channels.value = result.getOrNull() ?: emptyList()
             }
@@ -417,9 +450,20 @@ class ChannelListViewModel @Inject constructor(
         signalingClient.manualRetry()
     }
 
+    // Transmission history methods
+    fun showTransmissionHistory(channelId: String) {
+        _selectedHistoryChannelId.value = channelId
+    }
+
+    fun hideTransmissionHistory() {
+        _selectedHistoryChannelId.value = null
+    }
+
     override fun onCleared() {
         super.onCleared()
         // Disconnect from all channels on ViewModel cleanup
         channelRepository.disconnectAll()
+        // Stop NetworkMonitor
+        networkMonitor.stop()
     }
 }
