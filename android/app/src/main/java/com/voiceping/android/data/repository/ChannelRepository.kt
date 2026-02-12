@@ -12,6 +12,7 @@ import com.voiceping.android.data.audio.HapticFeedback
 import com.voiceping.android.data.audio.TonePlayer
 import com.voiceping.android.data.hardware.MediaButtonHandler
 import com.voiceping.android.data.network.MediasoupClient
+import com.voiceping.android.data.network.NetworkMonitor
 import com.voiceping.android.data.network.SignalingClient
 import com.voiceping.android.data.network.dto.SignalingType
 import com.voiceping.android.data.ptt.PttManager
@@ -49,6 +50,7 @@ class ChannelRepository @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val audioDeviceManager: AudioDeviceManager,
     private val mediaButtonHandler: MediaButtonHandler,
+    private val networkMonitor: NetworkMonitor,
     @ApplicationContext private val context: Context
 ) {
     private val _monitoredChannels = MutableStateFlow<Map<String, ChannelMonitoringState>>(emptyMap())
@@ -79,9 +81,10 @@ class ChannelRepository @Inject constructor(
     // Updated by ChannelListViewModel whenever displayedChannelId changes
     var currentDisplayedChannelId: String? = null
 
-    // Track disconnection timing for connection tone decisions
+    // Track disconnection timing for connection tone decisions and channel rejoin
     private var disconnectedSinceMs: Long? = null
     private var previousConnectionState: com.voiceping.android.domain.model.ConnectionState? = null
+    private val scope = CoroutineScope(Dispatchers.IO)
 
     init {
         // Wire PttManager callbacks for tone/haptic feedback
@@ -171,8 +174,11 @@ class ChannelRepository @Inject constructor(
             pttManager.releasePtt()
         }
 
-        // Observe connection state transitions for tones and notification updates
-        CoroutineScope(Dispatchers.IO).launch {
+        // Start NetworkMonitor for connectivity detection
+        networkMonitor.start()
+
+        // Observe connection state transitions for tones, notification updates, and channel rejoin
+        scope.launch {
             signalingClient.connectionState.collect { currentState ->
                 val prevState = previousConnectionState
 
@@ -194,6 +200,12 @@ class ChannelRepository @Inject constructor(
                     // Play connection tone only for long disconnections (5+ seconds)
                     if (duration != null && duration >= 5000) {
                         tonePlayer.playConnectionTone()
+                    }
+
+                    // Auto-rejoin channels after extended disconnection (30+s)
+                    if (duration != null && duration > 30_000) {
+                        Log.d(TAG, "Extended disconnect (${duration}ms), rejoining all channels")
+                        rejoinAllMonitoredChannels()
                     }
 
                     // Reset disconnect tracking
@@ -653,7 +665,31 @@ class ChannelRepository @Inject constructor(
         }
     }
 
+    private suspend fun rejoinAllMonitoredChannels() {
+        val currentChannels = _monitoredChannels.value
+        if (currentChannels.isEmpty()) {
+            Log.d(TAG, "No channels to rejoin")
+            return
+        }
+
+        Log.d(TAG, "Rejoining ${currentChannels.size} channels after reconnection")
+        for ((channelId, state) in currentChannels) {
+            try {
+                signalingClient.request(
+                    SignalingType.JOIN_CHANNEL,
+                    mapOf("channelId" to channelId)
+                )
+                Log.d(TAG, "Rejoined channel: ${state.channelName}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to rejoin channel ${state.channelName}", e)
+            }
+        }
+    }
+
     fun disconnectAll() {
+        // Stop NetworkMonitor
+        networkMonitor.stop()
+
         // Stop AudioDeviceManager and MediaButtonHandler
         audioDeviceManager.stop()
         mediaButtonHandler.setActive(false)
