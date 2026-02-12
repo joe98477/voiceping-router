@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.voiceping.android.data.ptt.PttState
+import com.voiceping.android.domain.model.ConnectionState
 import com.voiceping.android.domain.model.PttMode
 import com.voiceping.android.domain.model.User
 
@@ -29,6 +30,7 @@ fun BottomBar(
     pttState: PttState,
     pttMode: PttMode,
     transmissionDuration: Long,
+    connectionState: ConnectionState,
     onToggleLock: () -> Unit,
     onPttPressed: () -> Unit,
     onPttReleased: () -> Unit
@@ -52,16 +54,32 @@ fun BottomBar(
                 Column(
                     modifier = Modifier.clickable { onToggleLock() }
                 ) {
-                    // Channel name color: cyan when showing scanned non-primary, normal when primary
-                    Text(
-                        text = displayedChannelName,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (isPrimaryChannel) {
-                            MaterialTheme.colorScheme.onSurface
-                        } else {
-                            MaterialTheme.colorScheme.primary  // Cyan for scanned channel
+                    // Channel name with offline badge if disconnected
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = displayedChannelName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (isPrimaryChannel) {
+                                MaterialTheme.colorScheme.onSurface
+                            } else {
+                                MaterialTheme.colorScheme.primary  // Cyan for scanned channel
+                            }
+                        )
+
+                        // Offline badge when disconnected
+                        if (connectionState == ConnectionState.RECONNECTING ||
+                            connectionState == ConnectionState.FAILED ||
+                            connectionState == ConnectionState.DISCONNECTED) {
+                            Text(
+                                text = "(Offline)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
                         }
-                    )
+                    }
 
                     // Status text based on state
                     when {

@@ -105,6 +105,15 @@ class PttManager @Inject constructor(
             return
         }
 
+        // Guard: check connection state (PTT stays interactive, error on press while disconnected)
+        val currentState = signalingClient.connectionState.value
+        if (currentState != com.voiceping.android.domain.model.ConnectionState.CONNECTED) {
+            Log.w(TAG, "PTT press ignored: not connected (state=$currentState)")
+            // Trigger error feedback without changing PTT state
+            onPttDenied?.invoke()
+            return
+        }
+
         _pttState.value = PttState.Requesting
         Log.d(TAG, "PTT requested for channel: $channelId")
 

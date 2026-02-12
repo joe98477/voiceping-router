@@ -43,6 +43,7 @@ class ChannelMonitoringService : Service() {
     private var isMuted = false
     private var monitoringCount: Int = 0
     private var pttTargetChannelId: String? = null
+    private var isReconnecting = false
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
@@ -61,14 +62,17 @@ class ChannelMonitoringService : Service() {
                 val newChannelName = intent?.getStringExtra(EXTRA_CHANNEL_NAME)
                 val newMonitoringCount = intent?.getIntExtra(EXTRA_MONITORING_COUNT, 0) ?: 0
                 val newPttTargetChannelId = intent?.getStringExtra(EXTRA_PTT_TARGET_CHANNEL_ID)
+                val newIsReconnecting = intent?.getBooleanExtra(EXTRA_IS_RECONNECTING, false) ?: false
 
                 // Update if any value changed
                 if (newChannelName != null &&
-                    (newChannelName != currentChannelName || newMonitoringCount != monitoringCount || newPttTargetChannelId != pttTargetChannelId)) {
-                    Log.d(TAG, "Updating channel notification: $currentChannelName -> $newChannelName (monitoring: $newMonitoringCount)")
+                    (newChannelName != currentChannelName || newMonitoringCount != monitoringCount ||
+                     newPttTargetChannelId != pttTargetChannelId || newIsReconnecting != isReconnecting)) {
+                    Log.d(TAG, "Updating channel notification: $currentChannelName -> $newChannelName (monitoring: $newMonitoringCount, reconnecting: $newIsReconnecting)")
                     currentChannelName = newChannelName
                     monitoringCount = newMonitoringCount
                     pttTargetChannelId = newPttTargetChannelId
+                    isReconnecting = newIsReconnecting
                     updateNotification(newChannelName)
                 }
             }
@@ -181,7 +185,7 @@ class ChannelMonitoringService : Service() {
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
-            .setContentText("Monitoring")
+            .setContentText(if (isReconnecting) "Reconnecting..." else "Monitoring")
             .setSmallIcon(R.drawable.ic_logo)
             .setOngoing(true) // Persistent, cannot swipe away
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
@@ -223,6 +227,7 @@ class ChannelMonitoringService : Service() {
         const val EXTRA_CHANNEL_NAME = "channel_name"
         const val EXTRA_MONITORING_COUNT = "monitoring_count"
         const val EXTRA_PTT_TARGET_CHANNEL_ID = "ptt_target_channel_id"
+        const val EXTRA_IS_RECONNECTING = "extra_is_reconnecting"
 
         // Notification
         private const val CHANNEL_ID = "channel_monitoring"
