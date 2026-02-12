@@ -8,6 +8,6 @@ class GetEventsUseCase @Inject constructor(
     private val eventRepository: EventRepository
 ) {
     suspend operator fun invoke(): Result<List<Event>> {
-        return eventRepository.getEvents()
+        return eventRepository.getEventsWithCache()
     }
 }
