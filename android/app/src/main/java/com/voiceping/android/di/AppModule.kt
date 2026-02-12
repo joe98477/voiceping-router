@@ -1,10 +1,16 @@
 package com.voiceping.android.di
 
+import android.content.Context
+import androidx.room.Room
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import com.voiceping.android.data.database.VoicePingDatabase
+import com.voiceping.android.data.database.dao.ChannelDao
+import com.voiceping.android.data.database.dao.EventDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import okhttp3.Cookie
 import okhttp3.CookieJar
@@ -67,5 +73,26 @@ object AppModule {
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideDatabase(@ApplicationContext context: Context): VoicePingDatabase {
+        return Room.databaseBuilder(
+            context,
+            VoicePingDatabase::class.java,
+            "voiceping_db"
+        ).fallbackToDestructiveMigration(false)
+            .build()
+    }
+
+    @Provides
+    fun provideEventDao(database: VoicePingDatabase): EventDao {
+        return database.eventDao()
+    }
+
+    @Provides
+    fun provideChannelDao(database: VoicePingDatabase): ChannelDao {
+        return database.channelDao()
     }
 }
