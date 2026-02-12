@@ -282,6 +282,7 @@ fun ChannelListScreen(
                     pttState = pttState,
                     pttMode = pttMode,
                     transmissionDuration = transmissionDuration,
+                    connectionState = connectionState,
                     onToggleLock = { viewModel.toggleBottomBarLock() },
                     onPttPressed = { viewModel.onPttPressed() },
                     onPttReleased = { viewModel.onPttReleased() }
@@ -295,7 +296,10 @@ fun ChannelListScreen(
                     .background(MaterialTheme.colorScheme.background)
             ) {
                 // Connection banner at top
-                ConnectionBanner(connectionState = connectionState)
+                ConnectionBanner(
+                    connectionState = connectionState,
+                    onRetry = { viewModel.manualRetry() }
+                )
 
                 // Channel list grouped by team
                 val channelsByTeam = channels.groupBy { it.teamName }

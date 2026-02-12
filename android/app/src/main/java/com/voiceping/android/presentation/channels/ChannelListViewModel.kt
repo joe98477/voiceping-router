@@ -413,6 +413,10 @@ class ChannelListViewModel @Inject constructor(
         _showBatteryOptimizationPrompt.value = false
     }
 
+    fun manualRetry() {
+        signalingClient.manualRetry()
+    }
+
     override fun onCleared() {
         super.onCleared()
         // Disconnect from all channels on ViewModel cleanup
