@@ -215,11 +215,11 @@ Plans:
 **Plans**: 5 plans
 
 Plans:
-- [ ] 10-01-PLAN.md -- NetworkMonitor + SignalingClient reconnection with exponential backoff & latency measurement
-- [ ] 10-02-PLAN.md -- Room database for offline caching + EventRepository cache-first loading
-- [ ] 10-03-PLAN.md -- Reconnection UI (banner, notification), connection tones, haptic feedback completion
-- [ ] 10-04-PLAN.md -- Network quality indicator (signal bars) + transmission history (bottom sheet)
-- [ ] 10-05-PLAN.md -- Consolidated Settings screen, ProfileDrawer simplification, cache-first ViewModel loading, channel rejoin wiring
+- [x] 10-01-PLAN.md -- NetworkMonitor + SignalingClient reconnection with exponential backoff & latency measurement
+- [x] 10-02-PLAN.md -- Room database for offline caching + EventRepository cache-first loading
+- [x] 10-03-PLAN.md -- Reconnection UI (banner, notification), connection tones, haptic feedback completion
+- [x] 10-04-PLAN.md -- Network quality indicator (signal bars) + transmission history (bottom sheet)
+- [x] 10-05-PLAN.md -- Consolidated Settings screen, ProfileDrawer simplification, cache-first ViewModel loading, channel rejoin wiring
 
 ## Progress
 
@@ -237,8 +237,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 7. Foreground Service & Background Audio | v2.0 | 3/3 | Complete | 2026-02-11 |
 | 8. Multi-Channel Monitoring & Scan Mode | v2.0 | 4/4 | Complete | 2026-02-11 |
 | 9. Hardware PTT & Bluetooth Integration | v2.0 | 4/4 | Complete | 2026-02-12 |
-| 10. Network Resilience & UX Polish | v2.0 | 0/5 | Not started | - |
+| 10. Network Resilience & UX Polish | v2.0 | 5/5 | Complete | 2026-02-13 |
 
 ---
 *Roadmap created: 2026-02-06*
-*Last updated: 2026-02-12 after Phase 9 execution*
+*Last updated: 2026-02-13 after Phase 10 execution — Milestone v2.0 complete*
