@@ -90,6 +90,42 @@ class HapticFeedback @Inject constructor(
         }
     }
 
+    /**
+     * Vibrate when incoming transmission starts - light pulse.
+     * Pattern: Single pulse, 40ms duration, half amplitude
+     * Purpose: Subtle tactile feedback someone started speaking
+     */
+    fun vibrateTransmissionStart() {
+        try {
+            if (vibrator?.hasVibrator() == true) {
+                val effect = VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE / 2)
+                vibrator.vibrate(effect)
+                Log.d(TAG, "Transmission start vibration triggered")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error vibrating on transmission start", e)
+        }
+    }
+
+    /**
+     * Vibrate when channel becomes busy - double tap pattern.
+     * Pattern: Tap (30ms), pause (40ms), tap (30ms)
+     * Purpose: Distinct "channel busy" feedback when user tries to PTT on occupied channel
+     */
+    fun vibrateBusy() {
+        try {
+            if (vibrator?.hasVibrator() == true) {
+                val timings = longArrayOf(0, 30, 40, 30)
+                val amplitudes = intArrayOf(0, 128, 0, 128)
+                val effect = VibrationEffect.createWaveform(timings, amplitudes, -1)
+                vibrator.vibrate(effect)
+                Log.d(TAG, "Channel busy vibration triggered")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error vibrating on busy channel", e)
+        }
+    }
+
     companion object {
         private const val TAG = "HapticFeedback"
     }

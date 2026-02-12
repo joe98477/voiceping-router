@@ -79,6 +79,10 @@ class ChannelRepository @Inject constructor(
     // Updated by ChannelListViewModel whenever displayedChannelId changes
     var currentDisplayedChannelId: String? = null
 
+    // Track disconnection timing for connection tone decisions
+    private var disconnectedSinceMs: Long? = null
+    private var previousConnectionState: com.voiceping.android.domain.model.ConnectionState? = null
+
     init {
         // Wire PttManager callbacks for tone/haptic feedback
         pttManager.onPttGranted = {
@@ -87,7 +91,9 @@ class ChannelRepository @Inject constructor(
         }
         pttManager.onPttDenied = {
             tonePlayer.playErrorTone()
-            hapticFeedback.vibrateError()
+            // Use busy vibration for channel busy (double-tap pattern)
+            // This covers the most common PTT denial case (channel occupied by another speaker)
+            hapticFeedback.vibrateBusy()
         }
         pttManager.onPttReleased = {
             tonePlayer.playRogerBeep()
@@ -163,6 +169,62 @@ class ChannelRepository @Inject constructor(
         }
         mediaButtonHandler.onPttRelease = {
             pttManager.releasePtt()
+        }
+
+        // Observe connection state transitions for tones and notification updates
+        CoroutineScope(Dispatchers.IO).launch {
+            signalingClient.connectionState.collect { currentState ->
+                val prevState = previousConnectionState
+
+                // Track disconnection start time
+                if (prevState == com.voiceping.android.domain.model.ConnectionState.CONNECTED &&
+                    (currentState == com.voiceping.android.domain.model.ConnectionState.RECONNECTING ||
+                     currentState == com.voiceping.android.domain.model.ConnectionState.DISCONNECTED)) {
+                    disconnectedSinceMs = System.currentTimeMillis()
+                }
+
+                // Handle transition to CONNECTED (reconnection succeeded)
+                if (currentState == com.voiceping.android.domain.model.ConnectionState.CONNECTED &&
+                    (prevState == com.voiceping.android.domain.model.ConnectionState.RECONNECTING ||
+                     prevState == com.voiceping.android.domain.model.ConnectionState.CONNECTING)) {
+
+                    // Calculate disconnect duration
+                    val duration = disconnectedSinceMs?.let { System.currentTimeMillis() - it }
+
+                    // Play connection tone only for long disconnections (5+ seconds)
+                    if (duration != null && duration >= 5000) {
+                        tonePlayer.playConnectionTone()
+                    }
+
+                    // Reset disconnect tracking
+                    disconnectedSinceMs = null
+
+                    // Update notification: no longer reconnecting
+                    if (isServiceRunning) {
+                        updateServiceNotificationReconnectingState(false)
+                    }
+                }
+
+                // Handle transition to RECONNECTING
+                if (currentState == com.voiceping.android.domain.model.ConnectionState.RECONNECTING) {
+                    // Update notification: reconnecting
+                    if (isServiceRunning) {
+                        updateServiceNotificationReconnectingState(true)
+                    }
+
+                    // Schedule disconnection tone after 5 seconds (aligned with banner delay)
+                    launch {
+                        delay(5000L)
+                        // Still not connected after 5s? Play disconnection tone
+                        if (signalingClient.connectionState.value != com.voiceping.android.domain.model.ConnectionState.CONNECTED) {
+                            tonePlayer.playDisconnectionTone()
+                        }
+                    }
+                }
+
+                // Track previous state for next transition
+                previousConnectionState = currentState
+            }
         }
     }
 
@@ -368,9 +430,10 @@ class ChannelRepository @Inject constructor(
                             lastSpeakerFadeJobs[channelId]?.cancel()
                             lastSpeakerFadeJobs.remove(channelId)
 
-                            // Play RX squelch open (only for incoming speakers, not own transmission)
+                            // Play RX squelch open and transmission start haptic (only for incoming speakers, not own transmission)
                             if (pttManager.pttState.value !is PttState.Transmitting) {
                                 tonePlayer.playRxSquelchOpen()
+                                hapticFeedback.vibrateTransmissionStart()
                             }
 
                             // Close previous consumer if exists for this channel
@@ -643,6 +706,18 @@ class ChannelRepository @Inject constructor(
             action = ChannelMonitoringService.ACTION_UPDATE_CHANNEL
             putExtra(ChannelMonitoringService.EXTRA_CHANNEL_NAME, primaryName)
             putExtra(ChannelMonitoringService.EXTRA_MONITORING_COUNT, otherCount)
+        }
+        context.startService(serviceIntent)
+    }
+
+    private fun updateServiceNotificationReconnectingState(isReconnecting: Boolean) {
+        val primaryName = _monitoredChannels.value[_primaryChannelId.value]?.channelName ?: return
+        val otherCount = _monitoredChannels.value.size - 1
+        val serviceIntent = Intent(context, ChannelMonitoringService::class.java).apply {
+            action = ChannelMonitoringService.ACTION_UPDATE_CHANNEL
+            putExtra(ChannelMonitoringService.EXTRA_CHANNEL_NAME, primaryName)
+            putExtra(ChannelMonitoringService.EXTRA_MONITORING_COUNT, otherCount)
+            putExtra(ChannelMonitoringService.EXTRA_IS_RECONNECTING, isReconnecting)
         }
         context.startService(serviceIntent)
     }

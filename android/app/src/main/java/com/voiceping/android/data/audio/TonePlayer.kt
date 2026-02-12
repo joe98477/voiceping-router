@@ -153,6 +153,38 @@ class TonePlayer @Inject constructor(
     }
 
     /**
+     * Play connection established tone - subtle up chirp.
+     * Tone: DTMF 9 (1477 Hz + 852 Hz) for 120ms
+     * Configurable: Yes (respects PTT start tone toggle setting)
+     */
+    fun playConnectionTone() {
+        try {
+            if (settingsRepository.getCachedPttStartToneEnabled()) {
+                toneGenerator?.startTone(ToneGenerator.TONE_DTMF_9, 120)
+                Log.d(TAG, "Playing connection tone")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error playing connection tone", e)
+        }
+    }
+
+    /**
+     * Play disconnection tone - subtle down chirp.
+     * Tone: DTMF 7 (1209 Hz + 852 Hz) for 150ms
+     * Configurable: Yes (respects PTT start tone toggle setting)
+     */
+    fun playDisconnectionTone() {
+        try {
+            if (settingsRepository.getCachedPttStartToneEnabled()) {
+                toneGenerator?.startTone(ToneGenerator.TONE_DTMF_7, 150)
+                Log.d(TAG, "Playing disconnection tone")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error playing disconnection tone", e)
+        }
+    }
+
+    /**
      * Cleanup ToneGenerator resources.
      * Call when TonePlayer is no longer needed.
      */
