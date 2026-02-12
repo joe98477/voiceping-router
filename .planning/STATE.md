@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-08)
 ## Current Position
 
 Phase: 9 of 10 (Hardware PTT & Bluetooth Integration)
-Plan: 1 of 4 complete
+Plan: 2 of 4 complete
 Status: In Progress
-Last activity: 2026-02-12 — Completed 09-01: Hardware Button Settings Foundation & Volume Key PTT Handler
+Last activity: 2026-02-12 — Completed 09-02: Bluetooth & Wired Audio Device Auto-Routing with Button Interception
 
-Progress: [███████████████] 82% (Milestone 1 complete: 4/10 phases shipped, Milestone 2: Phase 5-6-7-8 complete, Phase 9: 1/4 plans)
+Progress: [███████████████] 85% (Milestone 1 complete: 4/10 phases shipped, Milestone 2: Phase 5-6-7-8 complete, Phase 9: 2/4 plans)
 
 ## Performance Metrics
 
@@ -67,7 +67,7 @@ Progress: [███████████████] 82% (Milestone 1 compl
 | Plan | Duration (s) | Tasks | Files |
 |------|--------------|-------|-------|
 | 09-01 | 391 | 2 | 4 |
-| Phase 09 P01 | 391 | 2 tasks | 4 files |
+| 09-02 | 420 | 2 | 4 |
 
 ## Accumulated Context
 
@@ -133,6 +133,16 @@ Key decisions carrying forward to Milestone 2:
 - [Phase 07]: Phone call pause uses consumer close pattern (immediate, no fade)
 - [Phase 07]: Battery optimization prompt triggered after first successful join (when service starts)
 
+**Phase 9 Decisions:**
+
+| Decision | Rationale | Phase | Plan |
+|----------|-----------|-------|------|
+| Use Media3 MediaSession (not legacy MediaSessionCompat) | Modern API, better Android 12+ support, actively maintained | 09 | 02 |
+| Only activate MediaSession when service running | Avoids stealing media buttons from music apps (research pitfall #5) | 09 | 02 |
+| Last connected device wins priority | User expectation: plugging wired headset after BT should switch to wired | 09 | 02 |
+| Minimal ExoPlayer stub for MediaSession | Media3 MediaSession requires Player instance, but we don't need playback | 09 | 02 |
+| API 31+ uses setCommunicationDevice, legacy uses startBluetoothSco | Modern API is more reliable, but must support Android 8-11 (26-30) | 09 | 02 |
+
 ### Pending Todos
 
 None yet.
@@ -146,7 +156,7 @@ Deferred to future milestones:
 ## Session Continuity
 
 Last session: 2026-02-12
-Stopped at: Completed 09-01-PLAN.md (Hardware Button Settings Foundation & Volume Key PTT Handler)
+Stopped at: Completed 09-02-PLAN.md (Bluetooth & Wired Audio Device Auto-Routing with Button Interception)
 Resume file: None
 
 **Milestone 1 (WebRTC Audio Rebuild + Web UI) COMPLETE:**
@@ -179,9 +189,9 @@ Resume file: None
   - 08-02: Multi-Channel Monitoring Engine ✓
   - 08-03: Scan Mode Logic & ViewModel Integration ✓
   - 08-04: Scan Mode Settings UI & Per-Channel Volume Control ✓
-- Phase 9: Hardware PTT & Bluetooth Integration (1/4 plans complete, in progress)
+- Phase 9: Hardware PTT & Bluetooth Integration (2/4 plans complete, in progress)
   - 09-01: Hardware Button Settings Foundation & Volume Key PTT Handler ✓
-  - 09-02: Volume Key & Bluetooth Button Integration (pending)
-  - 09-03: Boot Auto-Start & PTT Auto-Release (pending)
+  - 09-02: Bluetooth & Wired Audio Device Auto-Routing with Button Interception ✓
+  - 09-03: Volume Key & Bluetooth Button Integration (pending)
   - 09-04: Settings UI for Hardware Buttons (pending)
 - Phase 10: Network Resilience & UX Polish (pending)
