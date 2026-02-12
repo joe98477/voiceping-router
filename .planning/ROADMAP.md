@@ -194,10 +194,10 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 09-01-PLAN.md -- Hardware button settings foundation & volume key PTT handler
-- [ ] 09-02-PLAN.md -- Audio device manager & Bluetooth button handler (MediaSession)
-- [ ] 09-03-PLAN.md -- Boot auto-start & integration wiring (MainActivity, ChannelRepository)
-- [ ] 09-04-PLAN.md -- Hardware settings UI, button detection screen, audio device icon
+- [x] 09-01-PLAN.md -- Hardware button settings foundation & volume key PTT handler
+- [x] 09-02-PLAN.md -- Audio device manager & Bluetooth button handler (MediaSession)
+- [x] 09-03-PLAN.md -- Boot auto-start & integration wiring (MainActivity, ChannelRepository)
+- [x] 09-04-PLAN.md -- Hardware settings UI, button detection screen, audio device icon
 
 #### Phase 10: Network Resilience & UX Polish
 **Goal**: Production-ready app with cellular network resilience and polished user experience
@@ -233,9 +233,9 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 6. Single-Channel PTT & Audio Transmission | v2.0 | 5/5 | Complete | 2026-02-10 |
 | 7. Foreground Service & Background Audio | v2.0 | 3/3 | Complete | 2026-02-11 |
 | 8. Multi-Channel Monitoring & Scan Mode | v2.0 | 4/4 | Complete | 2026-02-11 |
-| 9. Hardware PTT & Bluetooth Integration | v2.0 | 0/TBD | Not started | - |
+| 9. Hardware PTT & Bluetooth Integration | v2.0 | 4/4 | Complete | 2026-02-12 |
 | 10. Network Resilience & UX Polish | v2.0 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-02-06*
-*Last updated: 2026-02-11 after Phase 8 execution*
+*Last updated: 2026-02-12 after Phase 9 execution*
