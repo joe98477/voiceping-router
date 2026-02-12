@@ -212,11 +212,14 @@ Plans:
   6. User sees network quality indicator (latency, connection status) in UI
   7. User can view transmission history (last 10-20 transmissions) when tapping into a channel
   8. Settings screen provides controls for scan mode, button mapping, audio output, and auto-start
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
-- [ ] 10-01: TBD
-- [ ] 10-02: TBD
+- [ ] 10-01-PLAN.md -- NetworkMonitor + SignalingClient reconnection with exponential backoff & latency measurement
+- [ ] 10-02-PLAN.md -- Room database for offline caching + EventRepository cache-first loading
+- [ ] 10-03-PLAN.md -- Reconnection UI (banner, notification), connection tones, haptic feedback completion
+- [ ] 10-04-PLAN.md -- Network quality indicator (signal bars) + transmission history (bottom sheet)
+- [ ] 10-05-PLAN.md -- Consolidated Settings screen, ProfileDrawer simplification, cache-first ViewModel loading, channel rejoin wiring
 
 ## Progress
 
@@ -234,7 +237,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 7. Foreground Service & Background Audio | v2.0 | 3/3 | Complete | 2026-02-11 |
 | 8. Multi-Channel Monitoring & Scan Mode | v2.0 | 4/4 | Complete | 2026-02-11 |
 | 9. Hardware PTT & Bluetooth Integration | v2.0 | 4/4 | Complete | 2026-02-12 |
-| 10. Network Resilience & UX Polish | v2.0 | 0/TBD | Not started | - |
+| 10. Network Resilience & UX Polish | v2.0 | 0/5 | Not started | - |
 
 ---
 *Roadmap created: 2026-02-06*
