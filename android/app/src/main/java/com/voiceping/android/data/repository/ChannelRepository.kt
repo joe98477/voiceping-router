@@ -6,9 +6,11 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.util.Log
 import androidx.core.content.ContextCompat
+import com.voiceping.android.data.audio.AudioDeviceManager
 import com.voiceping.android.data.audio.AudioRouter
 import com.voiceping.android.data.audio.HapticFeedback
 import com.voiceping.android.data.audio.TonePlayer
+import com.voiceping.android.data.hardware.MediaButtonHandler
 import com.voiceping.android.data.network.MediasoupClient
 import com.voiceping.android.data.network.SignalingClient
 import com.voiceping.android.data.network.dto.SignalingType
@@ -16,7 +18,9 @@ import com.voiceping.android.data.ptt.PttManager
 import com.voiceping.android.data.ptt.PttState
 import com.voiceping.android.data.storage.SettingsRepository
 import com.voiceping.android.domain.model.AudioMixMode
+import com.voiceping.android.domain.model.AudioOutputDevice
 import com.voiceping.android.domain.model.ChannelMonitoringState
+import com.voiceping.android.domain.model.PttTargetMode
 import com.voiceping.android.domain.model.User
 import com.voiceping.android.service.ChannelMonitoringService
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -28,7 +32,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -41,6 +47,8 @@ class ChannelRepository @Inject constructor(
     private val tonePlayer: TonePlayer,
     private val hapticFeedback: HapticFeedback,
     private val settingsRepository: SettingsRepository,
+    private val audioDeviceManager: AudioDeviceManager,
+    private val mediaButtonHandler: MediaButtonHandler,
     @ApplicationContext private val context: Context
 ) {
     private val _monitoredChannels = MutableStateFlow<Map<String, ChannelMonitoringState>>(emptyMap())
@@ -63,6 +71,13 @@ class ChannelRepository @Inject constructor(
 
     // Expose PTT state via delegation to PttManager
     val pttState: StateFlow<PttState> = pttManager.pttState
+
+    // Expose current audio output device via delegation to AudioDeviceManager
+    val currentOutputDevice: StateFlow<AudioOutputDevice> = audioDeviceManager.currentOutputDevice
+
+    // Track current displayed channel ID for hardware PTT targeting
+    // Updated by ChannelListViewModel whenever displayedChannelId changes
+    var currentDisplayedChannelId: String? = null
 
     init {
         // Wire PttManager callbacks for tone/haptic feedback
@@ -130,6 +145,24 @@ class ChannelRepository @Inject constructor(
                     }
                 }
             }
+        }
+
+        // Wire AudioDeviceManager Bluetooth disconnect callback
+        audioDeviceManager.onBluetoothDisconnected = {
+            // Per user decision: auto-release PTT on BT disconnect, play interrupted beep
+            Log.d(TAG, "Bluetooth disconnected, force-releasing PTT")
+            pttManager.forceReleasePtt()
+        }
+
+        // Wire MediaButtonHandler PTT callbacks
+        mediaButtonHandler.onPttPress = {
+            val targetChannelId = getHardwarePttTargetChannelId()
+            if (targetChannelId != null) {
+                pttManager.requestPtt(targetChannelId)
+            }
+        }
+        mediaButtonHandler.onPttRelease = {
+            pttManager.releasePtt()
         }
     }
 
@@ -204,6 +237,16 @@ class ChannelRepository @Inject constructor(
                 context.startForegroundService(serviceIntent)
                 isServiceRunning = true
                 Log.d(TAG, "Started ChannelMonitoringService")
+
+                // Start AudioDeviceManager and MediaButtonHandler
+                audioDeviceManager.start()
+                mediaButtonHandler.setActive(true)
+                // Load configured BT keycode from settings
+                val btKeycode = runBlocking {
+                    settingsRepository.getBluetoothPttButtonKeycode().first()
+                }
+                mediaButtonHandler.setConfiguredKeyCode(btKeycode)
+                Log.d(TAG, "Started AudioDeviceManager and MediaButtonHandler")
             }
 
             // Update notification
@@ -249,6 +292,11 @@ class ChannelRepository @Inject constructor(
                 audioRouter.releaseAudioFocus()
                 audioRouter.resetAudioMode()
                 mediasoupClient.cleanup()
+
+                // Stop AudioDeviceManager and MediaButtonHandler
+                audioDeviceManager.stop()
+                mediaButtonHandler.setActive(false)
+                Log.d(TAG, "Stopped AudioDeviceManager and MediaButtonHandler")
 
                 // Stop monitoring service
                 if (isServiceRunning) {
@@ -522,7 +570,31 @@ class ChannelRepository @Inject constructor(
         ) == PackageManager.PERMISSION_GRANTED
     }
 
+    /**
+     * Get hardware PTT target channel ID based on scan mode settings.
+     *
+     * Used by hardware PTT handlers (volume keys, Bluetooth buttons) to determine
+     * which channel to transmit on.
+     *
+     * @return Channel ID to transmit on, or null if no channel available
+     */
+    fun getHardwarePttTargetChannelId(): String? {
+        // Read PTT target mode from settings (cached, safe for main thread)
+        val pttTargetMode = runBlocking {
+            settingsRepository.getPttTargetMode().first()
+        }
+
+        return when (pttTargetMode) {
+            PttTargetMode.ALWAYS_PRIMARY -> _primaryChannelId.value
+            PttTargetMode.DISPLAYED_CHANNEL -> currentDisplayedChannelId ?: _primaryChannelId.value
+        }
+    }
+
     fun disconnectAll() {
+        // Stop AudioDeviceManager and MediaButtonHandler
+        audioDeviceManager.stop()
+        mediaButtonHandler.setActive(false)
+
         // Stop monitoring service
         if (isServiceRunning) {
             val serviceIntent = Intent(context, ChannelMonitoringService::class.java).apply {
@@ -573,5 +645,23 @@ class ChannelRepository @Inject constructor(
             putExtra(ChannelMonitoringService.EXTRA_MONITORING_COUNT, otherCount)
         }
         context.startService(serviceIntent)
+    }
+
+    /**
+     * Start Bluetooth button detection mode.
+     * Waits for user to press any button on their Bluetooth headset.
+     * Calls onButtonDetected callback with the detected keycode.
+     */
+    fun startButtonDetection(onButtonDetected: (Int) -> Unit) {
+        mediaButtonHandler.onButtonDetected = onButtonDetected
+        mediaButtonHandler.startDetectionMode()
+    }
+
+    /**
+     * Stop Bluetooth button detection mode.
+     */
+    fun stopButtonDetection() {
+        mediaButtonHandler.stopDetectionMode()
+        mediaButtonHandler.onButtonDetected = null
     }
 }

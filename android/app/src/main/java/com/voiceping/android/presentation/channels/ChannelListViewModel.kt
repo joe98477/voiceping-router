@@ -14,12 +14,14 @@ import com.voiceping.android.data.repository.EventRepository
 import com.voiceping.android.data.storage.PreferencesManager
 import com.voiceping.android.data.storage.SettingsRepository
 import com.voiceping.android.domain.model.AudioMixMode
+import com.voiceping.android.domain.model.AudioOutputDevice
 import com.voiceping.android.domain.model.AudioRoute
 import com.voiceping.android.domain.model.Channel
 import com.voiceping.android.domain.model.ChannelMonitoringState
 import com.voiceping.android.domain.model.ConnectionState
 import com.voiceping.android.domain.model.PttMode
 import com.voiceping.android.domain.model.PttTargetMode
+import com.voiceping.android.domain.model.VolumeKeyPttConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -82,6 +84,25 @@ class ChannelListViewModel @Inject constructor(
     val audioMixMode: StateFlow<AudioMixMode> = settingsRepository.getAudioMixMode()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AudioMixMode.EQUAL_VOLUME)
 
+    // Hardware button settings
+    val volumeKeyPttConfig: StateFlow<VolumeKeyPttConfig> = settingsRepository.getVolumeKeyPttConfig()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), VolumeKeyPttConfig.DISABLED)
+    val bluetoothPttEnabled: StateFlow<Boolean> = settingsRepository.getBluetoothPttEnabled()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val bluetoothPttButtonKeycode: StateFlow<Int> = settingsRepository.getBluetoothPttButtonKeycode()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 85)
+    val bootAutoStartEnabled: StateFlow<Boolean> = settingsRepository.getBootAutoStartEnabled()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    // Current audio output device
+    val currentOutputDevice: StateFlow<AudioOutputDevice> = channelRepository.currentOutputDevice
+
+    // Button detection state
+    private val _showButtonDetection = MutableStateFlow(false)
+    val showButtonDetection: StateFlow<Boolean> = _showButtonDetection.asStateFlow()
+    private val _detectedKeyCode = MutableStateFlow<Int?>(null)
+    val detectedKeyCode: StateFlow<Int?> = _detectedKeyCode.asStateFlow()
+
     // Scan mode lock state
     private val _scanModeLocked = MutableStateFlow(false)
     val scanModeLocked: StateFlow<Boolean> = _scanModeLocked.asStateFlow()
@@ -139,6 +160,13 @@ class ChannelListViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepository.getPttMode().collect { mode ->
                 pttManager.currentPttMode = mode
+            }
+        }
+
+        // Update ChannelRepository with displayed channel ID for hardware PTT targeting
+        viewModelScope.launch {
+            displayedChannelId.collect { channelId ->
+                channelRepository.currentDisplayedChannelId = channelId
             }
         }
     }
@@ -305,6 +333,45 @@ class ChannelListViewModel @Inject constructor(
 
     fun setAudioMixMode(mode: AudioMixMode) = viewModelScope.launch {
         settingsRepository.setAudioMixMode(mode)
+    }
+
+    // Hardware button settings setters
+    fun setVolumeKeyPttConfig(config: VolumeKeyPttConfig) = viewModelScope.launch {
+        settingsRepository.setVolumeKeyPttConfig(config)
+    }
+
+    fun setBluetoothPttEnabled(enabled: Boolean) = viewModelScope.launch {
+        settingsRepository.setBluetoothPttEnabled(enabled)
+    }
+
+    fun setBluetoothPttButtonKeycode(keyCode: Int) = viewModelScope.launch {
+        settingsRepository.setBluetoothPttButtonKeycode(keyCode)
+    }
+
+    fun setBootAutoStartEnabled(enabled: Boolean) = viewModelScope.launch {
+        settingsRepository.setBootAutoStartEnabled(enabled)
+    }
+
+    // Button detection methods
+    fun startButtonDetection() {
+        _showButtonDetection.value = true
+        _detectedKeyCode.value = null
+        channelRepository.startButtonDetection { keyCode ->
+            _detectedKeyCode.value = keyCode
+        }
+    }
+
+    fun confirmDetectedButton() {
+        _detectedKeyCode.value?.let { keyCode ->
+            setBluetoothPttButtonKeycode(keyCode)
+        }
+        stopButtonDetection()
+    }
+
+    fun stopButtonDetection() {
+        _showButtonDetection.value = false
+        _detectedKeyCode.value = null
+        channelRepository.stopButtonDetection()
     }
 
     // Multi-channel mute actions
