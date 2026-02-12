@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-08)
 ## Current Position
 
 Phase: 9 of 10 (Hardware PTT & Bluetooth Integration)
-Plan: 2 of 4 complete
+Plan: 3 of 4 complete
 Status: In Progress
-Last activity: 2026-02-12 — Completed 09-02: Bluetooth & Wired Audio Device Auto-Routing with Button Interception
+Last activity: 2026-02-12 — Completed 09-03: Volume Key & Bluetooth Button Integration
 
-Progress: [███████████████] 85% (Milestone 1 complete: 4/10 phases shipped, Milestone 2: Phase 5-6-7-8 complete, Phase 9: 2/4 plans)
+Progress: [███████████████] 87% (Milestone 1 complete: 4/10 phases shipped, Milestone 2: Phase 5-6-7-8 complete, Phase 9: 3/4 plans)
 
 ## Performance Metrics
 
@@ -68,6 +68,8 @@ Progress: [███████████████] 85% (Milestone 1 compl
 |------|--------------|-------|-------|
 | 09-01 | 391 | 2 | 4 |
 | 09-02 | 420 | 2 | 4 |
+| 09-03 | 376 | 2 | 8 |
+| Phase 09 P04 | 380 | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -156,7 +158,7 @@ Deferred to future milestones:
 ## Session Continuity
 
 Last session: 2026-02-12
-Stopped at: Completed 09-02-PLAN.md (Bluetooth & Wired Audio Device Auto-Routing with Button Interception)
+Stopped at: Completed 09-03-PLAN.md (Volume Key & Bluetooth Button Integration)
 Resume file: None
 
 **Milestone 1 (WebRTC Audio Rebuild + Web UI) COMPLETE:**
@@ -189,9 +191,9 @@ Resume file: None
   - 08-02: Multi-Channel Monitoring Engine ✓
   - 08-03: Scan Mode Logic & ViewModel Integration ✓
   - 08-04: Scan Mode Settings UI & Per-Channel Volume Control ✓
-- Phase 9: Hardware PTT & Bluetooth Integration (2/4 plans complete, in progress)
+- Phase 9: Hardware PTT & Bluetooth Integration (3/4 plans complete, in progress)
   - 09-01: Hardware Button Settings Foundation & Volume Key PTT Handler ✓
   - 09-02: Bluetooth & Wired Audio Device Auto-Routing with Button Interception ✓
-  - 09-03: Volume Key & Bluetooth Button Integration (pending)
+  - 09-03: Volume Key & Bluetooth Button Integration ✓
   - 09-04: Settings UI for Hardware Buttons (pending)
 - Phase 10: Network Resilience & UX Polish (pending)
