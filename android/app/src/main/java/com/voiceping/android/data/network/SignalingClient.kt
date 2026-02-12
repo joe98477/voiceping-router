@@ -29,6 +29,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.pow
 
 /**
  * WebSocket signaling client for VoicePing server.
@@ -39,10 +40,14 @@ import javax.inject.Singleton
  * - Broadcast message handling via SharedFlow
  * - Connection state management via StateFlow
  * - Heartbeat (PING every 25 seconds)
+ * - Automatic reconnection with exponential backoff (1s-30s cap, 5-minute max)
+ * - Network-aware retry (resets backoff on network restore)
+ * - Latency measurement via heartbeat PING round-trip time
  */
 @Singleton
 class SignalingClient @Inject constructor(
-    private val gson: Gson
+    private val gson: Gson,
+    private val networkMonitor: NetworkMonitor
 ) {
     private val client = OkHttpClient.Builder()
         .readTimeout(0, TimeUnit.MILLISECONDS) // Infinite timeout for WebSocket
@@ -57,8 +62,35 @@ class SignalingClient @Inject constructor(
     private val _messages = MutableSharedFlow<SignalingMessage>()
     val messages: SharedFlow<SignalingMessage> = _messages.asSharedFlow()
 
+    private val _latency = MutableStateFlow<Long?>(null)
+    val latency: StateFlow<Long?> = _latency.asStateFlow()
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var heartbeatJob: Job? = null
+
+    // Reconnection state
+    private var reconnectAttempt = 0
+    private var reconnectJob: Job? = null
+    private var lastServerUrl: String? = null
+    private var lastToken: String? = null
+    private var disconnectedAt: Long? = null
+    private val maxReconnectDurationMs = 5 * 60 * 1000L // 5 minutes
+    private var reconnectStartTime: Long? = null
+    private var intentionalDisconnect = false
+
+    init {
+        // Observe network availability for intelligent reconnection
+        scope.launch {
+            networkMonitor.isNetworkAvailable.collect { available ->
+                if (available && _connectionState.value == ConnectionState.RECONNECTING) {
+                    Log.d(TAG, "Network available, resetting backoff and retrying immediately")
+                    reconnectAttempt = 0 // Reset backoff per user decision
+                    reconnectJob?.cancel()
+                    scheduleReconnect()
+                }
+            }
+        }
+    }
 
     /**
      * Connect to WebSocket server with JWT authentication.
@@ -70,6 +102,16 @@ class SignalingClient @Inject constructor(
      * Server's handleProtocols callback extracts the token.
      */
     suspend fun connect(serverUrl: String, token: String) {
+        // Store connection params for reconnection
+        lastServerUrl = serverUrl
+        lastToken = token
+        intentionalDisconnect = false
+
+        // Reset reconnection state on fresh connect
+        if (_connectionState.value != ConnectionState.RECONNECTING) {
+            reconnectAttempt = 0
+        }
+
         val wsUrl = serverUrl.trimEnd('/') + "/ws"
 
         val request = Request.Builder()
@@ -83,6 +125,7 @@ class SignalingClient @Inject constructor(
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 Log.d(TAG, "WebSocket connected: ${response.message}")
                 _connectionState.value = ConnectionState.CONNECTED
+                resetReconnectionState()
                 startHeartbeat()
             }
 
@@ -106,25 +149,64 @@ class SignalingClient @Inject constructor(
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 Log.e(TAG, "WebSocket failure: ${t.message}", t)
-                _connectionState.value = ConnectionState.FAILED
 
                 // Complete all pending requests exceptionally
                 pendingRequests.values.forEach { it.completeExceptionally(t) }
                 pendingRequests.clear()
 
                 heartbeatJob?.cancel()
+
+                // Start reconnection if not intentionally disconnected
+                if (!intentionalDisconnect) {
+                    if (disconnectedAt == null) {
+                        disconnectedAt = System.currentTimeMillis()
+                    }
+                    if (reconnectStartTime == null) {
+                        reconnectStartTime = System.currentTimeMillis()
+                    }
+                    _connectionState.value = ConnectionState.RECONNECTING
+                    scheduleReconnect()
+                } else {
+                    _connectionState.value = ConnectionState.FAILED
+                }
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
                 Log.d(TAG, "WebSocket closing: code=$code, reason=$reason")
-                _connectionState.value = ConnectionState.DISCONNECTED
                 heartbeatJob?.cancel()
+
+                // If close code is NOT 1000 (normal close), treat as unexpected disconnect
+                if (code != 1000 && !intentionalDisconnect) {
+                    if (disconnectedAt == null) {
+                        disconnectedAt = System.currentTimeMillis()
+                    }
+                    if (reconnectStartTime == null) {
+                        reconnectStartTime = System.currentTimeMillis()
+                    }
+                    _connectionState.value = ConnectionState.RECONNECTING
+                    scheduleReconnect()
+                } else {
+                    _connectionState.value = ConnectionState.DISCONNECTED
+                }
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 Log.d(TAG, "WebSocket closed: code=$code, reason=$reason")
-                _connectionState.value = ConnectionState.DISCONNECTED
                 heartbeatJob?.cancel()
+
+                // If close code is NOT 1000 (normal close), treat as unexpected disconnect
+                if (code != 1000 && !intentionalDisconnect) {
+                    if (disconnectedAt == null) {
+                        disconnectedAt = System.currentTimeMillis()
+                    }
+                    if (reconnectStartTime == null) {
+                        reconnectStartTime = System.currentTimeMillis()
+                    }
+                    _connectionState.value = ConnectionState.RECONNECTING
+                    scheduleReconnect()
+                } else {
+                    _connectionState.value = ConnectionState.DISCONNECTED
+                }
             }
         })
     }
@@ -182,6 +264,9 @@ class SignalingClient @Inject constructor(
      * Disconnect from WebSocket server.
      */
     fun disconnect() {
+        intentionalDisconnect = true
+        resetReconnectionState()
+
         heartbeatJob?.cancel()
         heartbeatJob = null
 
@@ -197,16 +282,94 @@ class SignalingClient @Inject constructor(
     }
 
     /**
-     * Start heartbeat coroutine that sends PING every 25 seconds.
+     * Start heartbeat coroutine that sends PING every 25 seconds and measures latency.
      */
     private fun startHeartbeat() {
         heartbeatJob?.cancel()
         heartbeatJob = scope.launch {
             while (_connectionState.value == ConnectionState.CONNECTED) {
                 delay(HEARTBEAT_INTERVAL_MS)
-                send(SignalingType.PING)
+
+                // Measure round-trip latency via PING request-response
+                try {
+                    val startTime = System.currentTimeMillis()
+                    request(SignalingType.PING)
+                    val rtt = System.currentTimeMillis() - startTime
+                    _latency.value = rtt
+                    Log.d(TAG, "PING latency: ${rtt}ms")
+                } catch (e: Exception) {
+                    Log.w(TAG, "PING failed: ${e.message}")
+                    _latency.value = null
+                }
             }
         }
+    }
+
+    /**
+     * Calculate exponential backoff delay for reconnection.
+     *
+     * Formula: 2^attempt * 1000ms, capped at 30 seconds.
+     */
+    private fun calculateBackoff(): Long {
+        val delay = (2.0.pow(reconnectAttempt.toDouble()) * 1000L).toLong()
+        return delay.coerceAtMost(30_000L) // Cap at 30 seconds per user decision
+    }
+
+    /**
+     * Schedule next reconnection attempt with exponential backoff.
+     *
+     * Gives up after 5 minutes total retry window.
+     */
+    private fun scheduleReconnect() {
+        reconnectJob?.cancel() // Cancel existing to prevent race conditions
+
+        if (_connectionState.value != ConnectionState.RECONNECTING) return
+
+        // Check 5-minute max retry window
+        val startTime = reconnectStartTime ?: return
+        if (System.currentTimeMillis() - startTime > maxReconnectDurationMs) {
+            Log.w(TAG, "Reconnection timeout after 5 minutes, giving up")
+            _connectionState.value = ConnectionState.FAILED
+            resetReconnectionState()
+            return
+        }
+
+        reconnectJob = scope.launch {
+            val delay = calculateBackoff()
+            Log.d(TAG, "Scheduling reconnect attempt ${reconnectAttempt + 1} in ${delay}ms")
+            delay(delay)
+            reconnectAttempt++
+            try {
+                val url = lastServerUrl ?: return@launch
+                val token = lastToken ?: return@launch
+                connect(url, token)
+            } catch (e: Exception) {
+                Log.e(TAG, "Reconnect attempt failed", e)
+                // onFailure will handle next retry
+            }
+        }
+    }
+
+    /**
+     * Reset reconnection state after successful connection or intentional disconnect.
+     */
+    private fun resetReconnectionState() {
+        reconnectAttempt = 0
+        reconnectStartTime = null
+        disconnectedAt = null
+        reconnectJob?.cancel()
+        reconnectJob = null
+    }
+
+    /**
+     * Manually retry connection after FAILED state (triggered by Retry button).
+     */
+    fun manualRetry() {
+        if (_connectionState.value != ConnectionState.FAILED) return
+        reconnectStartTime = System.currentTimeMillis() // Reset 5-minute window
+        reconnectAttempt = 0
+        _connectionState.value = ConnectionState.RECONNECTING
+        scheduleReconnect()
     }
 
     companion object {
