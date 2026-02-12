@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-02-08)
 
 ## Current Position
 
-Phase: 9 of 10 (Hardware PTT & Bluetooth Integration)
-Plan: 4 of 4 complete
-Status: Complete
-Last activity: 2026-02-12 — Completed 09-04: Settings UI for Hardware Buttons
+Phase: 10 of 10 (Network Resilience & UX Polish)
+Plan: 1 of 5 complete
+Status: In Progress
+Last activity: 2026-02-12 — Completed 10-01: Network Resilience Foundation
 
-Progress: [████████████████] 90% (Milestone 1 complete: 4/10 phases shipped, Milestone 2: Phase 5-6-7-8-9 complete, Phase 10 pending)
+Progress: [█████████████████] 91% (Milestone 1 complete: 4/10 phases shipped, Milestone 2: Phase 5-6-7-8-9 complete, Phase 10: 1/5 plans complete)
 
 ## Performance Metrics
 
@@ -70,6 +70,12 @@ Progress: [████████████████] 90% (Milestone 1 co
 | 09-02 | 420 | 2 | 4 |
 | 09-03 | 376 | 2 | 8 |
 | 09-04 | 380 | 2 | 5 |
+
+**Milestone 2 Phase 10:**
+
+| Plan | Duration (s) | Tasks | Files |
+|------|--------------|-------|-------|
+| 10-01 | 688 | 2 | 4 |
 
 ## Accumulated Context
 
@@ -145,6 +151,16 @@ Key decisions carrying forward to Milestone 2:
 | Minimal ExoPlayer stub for MediaSession | Media3 MediaSession requires Player instance, but we don't need playback | 09 | 02 |
 | API 31+ uses setCommunicationDevice, legacy uses startBluetoothSco | Modern API is more reliable, but must support Android 8-11 (26-30) | 09 | 02 |
 
+**Phase 10 Decisions:**
+
+| Decision | Rationale | Phase | Plan |
+|----------|-----------|-------|------|
+| Exponential backoff with 30-second cap | Prevents excessive delay while protecting server from reconnection storms | 10 | 01 |
+| 5-minute max retry window before FAILED | Balances persistence with UX - prevents indefinite spinning | 10 | 01 |
+| Network restore resets backoff to immediate retry | Responsive to WiFi-cellular handoff - user expectation | 10 | 01 |
+| RECONNECTING state distinct from FAILED | Enables UI to show "reconnecting..." vs "connection lost" with Retry button | 10 | 01 |
+| Latency measurement via heartbeat PING request-response | Provides real-time network quality metric without additional overhead | 10 | 01 |
+
 ### Pending Todos
 
 None yet.
@@ -158,7 +174,7 @@ Deferred to future milestones:
 ## Session Continuity
 
 Last session: 2026-02-12
-Stopped at: Completed 09-04-PLAN.md (Settings UI for Hardware Buttons)
+Stopped at: Completed 10-01-PLAN.md (Network Resilience Foundation)
 Resume file: None
 
 **Milestone 1 (WebRTC Audio Rebuild + Web UI) COMPLETE:**
@@ -196,4 +212,5 @@ Resume file: None
   - 09-02: Bluetooth & Wired Audio Device Auto-Routing with Button Interception ✓
   - 09-03: Volume Key & Bluetooth Button Integration ✓
   - 09-04: Settings UI for Hardware Buttons ✓
-- Phase 10: Network Resilience & UX Polish (pending)
+- Phase 10: Network Resilience & UX Polish (1/5 plans complete, in progress)
+  - 10-01: Network Resilience Foundation (NetworkMonitor, auto-reconnection, latency measurement) ✓
