@@ -2,8 +2,10 @@ package com.voiceping.android.data.audio
 
 import android.content.Context
 import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
 import android.media.AudioFocusRequest
 import android.media.AudioManager
+import android.os.Build
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -146,6 +148,69 @@ class AudioRouter @Inject constructor(
         Log.d(TAG, "Resetting audio mode to normal")
         audioManager.mode = AudioManager.MODE_NORMAL
     }
+
+    /**
+     * Set audio routing to Bluetooth device.
+     *
+     * On API 31+: Uses setCommunicationDevice (modern API).
+     * On API 26-30: Uses startBluetoothSco + isBluetoothScoOn flag (legacy).
+     *
+     * @param device The Bluetooth AudioDeviceInfo to route audio to
+     */
+    fun setBluetoothMode(device: AudioDeviceInfo) {
+        Log.d(TAG, "Setting audio mode: Bluetooth (${device.productName})")
+        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // API 31+: Modern API
+            val result = audioManager.setCommunicationDevice(device)
+            if (result) {
+                Log.d(TAG, "Bluetooth communication device set successfully")
+            } else {
+                Log.w(TAG, "Failed to set Bluetooth communication device")
+            }
+        } else {
+            // API 26-30: Legacy SCO API
+            audioManager.startBluetoothSco()
+            audioManager.isBluetoothScoOn = true
+            Log.d(TAG, "Bluetooth SCO started (legacy API)")
+        }
+    }
+
+    /**
+     * Set audio routing to wired headset (headphones or headset with mic).
+     *
+     * Wired headset is automatically selected by the system when connected,
+     * just need to disable speakerphone and set MODE_IN_COMMUNICATION.
+     */
+    fun setWiredHeadsetMode() {
+        Log.d(TAG, "Setting audio mode: Wired headset")
+        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+        audioManager.isSpeakerphoneOn = false
+    }
+
+    /**
+     * Clear communication device (used when Bluetooth/wired headset disconnects).
+     *
+     * On API 31+: Calls clearCommunicationDevice.
+     * On API 26-30: Stops Bluetooth SCO.
+     */
+    fun clearCommunicationDevice() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            audioManager.clearCommunicationDevice()
+            Log.d(TAG, "Communication device cleared")
+        } else {
+            audioManager.stopBluetoothSco()
+            audioManager.isBluetoothScoOn = false
+            Log.d(TAG, "Bluetooth SCO stopped (legacy API)")
+        }
+    }
+
+    /**
+     * Get the AudioManager instance.
+     * Allows AudioDeviceManager to register AudioDeviceCallback on the same instance.
+     */
+    fun getAudioManager(): AudioManager = audioManager
 
     companion object {
         private const val TAG = "AudioRouter"
