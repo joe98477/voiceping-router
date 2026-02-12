@@ -18,8 +18,15 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.Headset
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.VolumeUp
+import com.voiceping.android.domain.model.AudioOutputDevice
+import com.voiceping.android.presentation.settings.ButtonDetectionDialog
+import com.voiceping.android.presentation.settings.keyCodeToName
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -78,6 +85,15 @@ fun ChannelListScreen(
     val rxSquelchEnabled by viewModel.rxSquelchEnabled.collectAsState()
     val needsMicPermission by viewModel.needsMicPermission.collectAsState()
     val showBatteryPrompt by viewModel.showBatteryOptimizationPrompt.collectAsState()
+
+    // Hardware button settings
+    val volumeKeyPttConfig by viewModel.volumeKeyPttConfig.collectAsState()
+    val bluetoothPttEnabled by viewModel.bluetoothPttEnabled.collectAsState()
+    val bluetoothPttButtonKeycode by viewModel.bluetoothPttButtonKeycode.collectAsState()
+    val bootAutoStartEnabled by viewModel.bootAutoStartEnabled.collectAsState()
+    val currentOutputDevice by viewModel.currentOutputDevice.collectAsState()
+    val showButtonDetection by viewModel.showButtonDetection.collectAsState()
+    val detectedKeyCode by viewModel.detectedKeyCode.collectAsState()
 
     val context = LocalContext.current
     var drawerOpen by remember { mutableStateOf(false) }
@@ -186,6 +202,14 @@ fun ChannelListScreen(
         onPttTargetModeChanged = { viewModel.setPttTargetMode(it) },
         onScanReturnDelayChanged = { viewModel.setScanReturnDelay(it) },
         onAudioMixModeChanged = { viewModel.setAudioMixMode(it) },
+        volumeKeyPttConfig = volumeKeyPttConfig,
+        bluetoothPttEnabled = bluetoothPttEnabled,
+        bluetoothPttButtonKeycode = bluetoothPttButtonKeycode,
+        bootAutoStartEnabled = bootAutoStartEnabled,
+        onVolumeKeyPttConfigChanged = { viewModel.setVolumeKeyPttConfig(it) },
+        onBluetoothPttEnabledChanged = { viewModel.setBluetoothPttEnabled(it) },
+        onDetectBluetoothButton = { viewModel.startButtonDetection() },
+        onBootAutoStartChanged = { viewModel.setBootAutoStartEnabled(it) },
         onSwitchEvent = {
             drawerOpen = false
             onSwitchEvent()
@@ -210,6 +234,20 @@ fun ChannelListScreen(
                                 Icon(Icons.Default.VolumeOff, contentDescription = "Mute all except primary")
                             }
                         }
+
+                        // Audio output device icon
+                        Icon(
+                            imageVector = when (currentOutputDevice) {
+                                AudioOutputDevice.SPEAKER -> Icons.Default.VolumeUp
+                                AudioOutputDevice.EARPIECE -> Icons.Default.PhoneInTalk
+                                AudioOutputDevice.BLUETOOTH -> Icons.Default.Bluetooth
+                                AudioOutputDevice.WIRED_HEADSET -> Icons.Default.Headset
+                            },
+                            contentDescription = "Audio: ${currentOutputDevice.name}",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
 
                         // Connection status dot
                         Box(
@@ -316,6 +354,17 @@ fun ChannelListScreen(
                     onDismiss = { volumeDialogChannelId = null }
                 )
             }
+        }
+
+        // Button detection dialog
+        if (showButtonDetection) {
+            ButtonDetectionDialog(
+                isOpen = true,
+                detectedKeyCode = detectedKeyCode,
+                detectedKeyName = detectedKeyCode?.let { keyCodeToName(it) },
+                onDismiss = { viewModel.stopButtonDetection() },
+                onConfirm = { viewModel.confirmDetectedButton() }
+            )
         }
     }
 }
