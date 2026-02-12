@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-08)
 ## Current Position
 
 Phase: 10 of 10 (Network Resilience & UX Polish)
-Plan: 1 of 5 complete
+Plan: 3 of 5 complete
 Status: In Progress
-Last activity: 2026-02-12 — Completed 10-01: Network Resilience Foundation
+Last activity: 2026-02-12 — Completed 10-03: Reconnection UI Feedback & Connection Tones
 
-Progress: [█████████████████] 91% (Milestone 1 complete: 4/10 phases shipped, Milestone 2: Phase 5-6-7-8-9 complete, Phase 10: 1/5 plans complete)
+Progress: [██████████████████] 93% (Milestone 1 complete: 4/10 phases shipped, Milestone 2: Phase 5-6-7-8-9 complete, Phase 10: 3/5 plans complete)
 
 ## Performance Metrics
 
@@ -76,6 +76,7 @@ Progress: [█████████████████] 91% (Milestone 1
 | Plan | Duration (s) | Tasks | Files |
 |------|--------------|-------|-------|
 | 10-01 | 688 | 2 | 4 |
+| 10-03 | 337 | 2 | 7 |
 
 ## Accumulated Context
 
@@ -160,6 +161,9 @@ Key decisions carrying forward to Milestone 2:
 | Network restore resets backoff to immediate retry | Responsive to WiFi-cellular handoff - user expectation | 10 | 01 |
 | RECONNECTING state distinct from FAILED | Enables UI to show "reconnecting..." vs "connection lost" with Retry button | 10 | 01 |
 | Latency measurement via heartbeat PING request-response | Provides real-time network quality metric without additional overhead | 10 | 01 |
+| 5-second delay before RECONNECTING banner | Brief drops (1-3s) stay silent, long disconnections (5+s) show banner - reduces UI noise | 10 | 03 |
+| Connection tone only for long disconnections | Silent for brief drops (<5s), tone for 5+ second reconnections - aligns with banner behavior | 10 | 03 |
+| PTT stays interactive during reconnection | Error tone + haptic on press while disconnected, no visual graying out - clearer feedback | 10 | 03 |
 
 ### Pending Todos
 
@@ -174,7 +178,7 @@ Deferred to future milestones:
 ## Session Continuity
 
 Last session: 2026-02-12
-Stopped at: Completed 10-01-PLAN.md (Network Resilience Foundation)
+Stopped at: Completed 10-03-PLAN.md (Reconnection UI Feedback & Connection Tones)
 Resume file: None
 
 **Milestone 1 (WebRTC Audio Rebuild + Web UI) COMPLETE:**
@@ -212,5 +216,7 @@ Resume file: None
   - 09-02: Bluetooth & Wired Audio Device Auto-Routing with Button Interception ✓
   - 09-03: Volume Key & Bluetooth Button Integration ✓
   - 09-04: Settings UI for Hardware Buttons ✓
-- Phase 10: Network Resilience & UX Polish (1/5 plans complete, in progress)
+- Phase 10: Network Resilience & UX Polish (3/5 plans complete, in progress)
   - 10-01: Network Resilience Foundation (NetworkMonitor, auto-reconnection, latency measurement) ✓
+  - 10-02: Room Database Offline Caching (Event/Channel/Team entities, DAOs, cache-first loading) ✓
+  - 10-03: Reconnection UI Feedback & Connection Tones (ConnectionBanner, tones, haptics, offline badge) ✓
