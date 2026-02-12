@@ -1,0 +1,1 @@
+-keep,allowobfuscation,allowshrinking class com.voiceping.android.presentation.login.LoginViewModel

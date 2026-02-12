@@ -1,0 +1,16 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- Simple radio/walkie-talkie icon -->
+    <path
+        android:fillColor="#00BCD4"
+        android:pathData="M12,2C10.9,2 10,2.9 10,4L10,6L8,6C6.9,6 6,6.9 6,8L6,20C6,21.1 6.9,22 8,22L16,22C17.1,22 18,21.1 18,20L18,8C18,6.9 17.1,6 16,6L14,6L14,4C14,2.9 13.1,2 12,2ZM12,4L12,6L12,4ZM8,8L16,8L16,20L8,20L8,8ZM10,10L10,12L14,12L14,10L10,10ZM10,14L10,16L14,16L14,14L10,14ZM10,18L14,18L10,18Z"/>
+
+    <!-- Antenna -->
+    <path
+        android:fillColor="#00BCD4"
+        android:pathData="M11,0L13,0L13,2L11,2Z"/>
+</vector>

@@ -1,0 +1,244 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.voiceping.android"
+4    android:versionCode="1"
+5    android:versionName="1.0.0" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="26"
+9        android:targetSdkVersion="35" />
+10
+11    <uses-permission android:name="android.permission.INTERNET" />
+11-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:5:5-67
+11-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:5:22-64
+12    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+12-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:6:5-79
+12-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:6:22-76
+13    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+13-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:7:5-71
+13-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:7:22-68
+14    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+14-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:8:5-80
+14-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:8:22-77
+15    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+15-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:9:5-77
+15-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:9:22-74
+16    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+16-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:10:5-88
+16-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:10:22-85
+17    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+17-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:11:5-92
+17-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:11:22-89
+18    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+18-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:12:5-76
+18-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:12:22-73
+19    <uses-permission android:name="android.permission.VIBRATE" />
+19-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:13:5-66
+19-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:13:22-63
+20    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+20-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:14:5-95
+20-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:14:22-92
+21    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+21-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:15:5-81
+21-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:15:22-78
+22
+23    <permission
+23-->[androidx.core:core:1.16.0] /home/earthworm/.gradle/caches/9.3.1/transforms/0de7d0866a86c4ba6c7b9aad52d02770/transformed/core-1.16.0/AndroidManifest.xml:22:5-24:47
+24        android:name="com.voiceping.android.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+24-->[androidx.core:core:1.16.0] /home/earthworm/.gradle/caches/9.3.1/transforms/0de7d0866a86c4ba6c7b9aad52d02770/transformed/core-1.16.0/AndroidManifest.xml:23:9-81
+25        android:protectionLevel="signature" />
+25-->[androidx.core:core:1.16.0] /home/earthworm/.gradle/caches/9.3.1/transforms/0de7d0866a86c4ba6c7b9aad52d02770/transformed/core-1.16.0/AndroidManifest.xml:24:9-44
+26
+27    <uses-permission android:name="com.voiceping.android.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+27-->[androidx.core:core:1.16.0] /home/earthworm/.gradle/caches/9.3.1/transforms/0de7d0866a86c4ba6c7b9aad52d02770/transformed/core-1.16.0/AndroidManifest.xml:26:5-97
+27-->[androidx.core:core:1.16.0] /home/earthworm/.gradle/caches/9.3.1/transforms/0de7d0866a86c4ba6c7b9aad52d02770/transformed/core-1.16.0/AndroidManifest.xml:26:22-94
+28
+29    <application
+29-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:17:5-61:19
+30        android:name="com.voiceping.android.VoicePingApplication"
+30-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:18:9-45
+31        android:allowBackup="false"
+31-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:19:9-36
+32        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+32-->[androidx.core:core:1.16.0] /home/earthworm/.gradle/caches/9.3.1/transforms/0de7d0866a86c4ba6c7b9aad52d02770/transformed/core-1.16.0/AndroidManifest.xml:28:18-86
+33        android:debuggable="true"
+34        android:extractNativeLibs="false"
+35        android:icon="@drawable/ic_logo"
+35-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:20:9-41
+36        android:label="@string/app_name"
+36-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:21:9-41
+37        android:supportsRtl="true"
+37-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:22:9-35
+38        android:theme="@style/Theme.VoicePing" >
+38-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:23:9-47
+39        <activity
+39-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:26:9-36:20
+40            android:name="com.voiceping.android.presentation.MainActivity"
+40-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:27:13-54
+41            android:configChanges="orientation|screenSize|keyboardHidden"
+41-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:30:13-74
+42            android:exported="true"
+42-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:28:13-36
+43            android:theme="@style/Theme.VoicePing"
+43-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:29:13-51
+44            android:windowSoftInputMode="adjustResize" >
+44-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:31:13-55
+45            <intent-filter>
+45-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:32:13-35:29
+46                <action android:name="android.intent.action.MAIN" />
+46-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:33:17-69
+46-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:33:25-66
+47
+48                <category android:name="android.intent.category.LAUNCHER" />
+48-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:34:17-77
+48-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:34:27-74
+49            </intent-filter>
+50        </activity>
+51
+52        <service
+52-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:38:9-41:40
+53            android:name="com.voiceping.android.service.AudioCaptureService"
+53-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:39:13-56
+54            android:exported="false"
+54-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:41:13-37
+55            android:foregroundServiceType="microphone" />
+55-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:40:13-55
+56        <service
+56-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:43:9-46:40
+57            android:name="com.voiceping.android.service.ChannelMonitoringService"
+57-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:44:13-61
+58            android:exported="false"
+58-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:46:13-37
+59            android:foregroundServiceType="mediaPlayback" />
+59-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:45:13-58
+60
+61        <receiver
+61-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:48:9-50:40
+62            android:name="com.voiceping.android.service.NotificationActionReceiver"
+62-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:49:13-63
+63            android:exported="false" />
+63-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:50:13-37
+64        <receiver
+64-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:52:9-60:20
+65            android:name="com.voiceping.android.service.BootReceiver"
+65-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:53:13-49
+66            android:enabled="true"
+66-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:54:13-35
+67            android:exported="false" >
+67-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:55:13-37
+68            <intent-filter>
+68-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:56:13-59:29
+69                <action android:name="android.intent.action.BOOT_COMPLETED" />
+69-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:57:17-79
+69-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:57:25-76
+70                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+70-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:58:17-86
+70-->/home/earthworm/Github-repos/voiceping-router/android/app/src/main/AndroidManifest.xml:58:25-83
+71            </intent-filter>
+72        </receiver>
+73
+74        <activity
+74-->[androidx.compose.ui:ui-tooling-android:1.10.1] /home/earthworm/.gradle/caches/9.3.1/transforms/d7109c0d5bb48b951f490d5468e4727d/transformed/jetified-ui-tooling/AndroidManifest.xml:23:9-25:39
+75            android:name="androidx.compose.ui.tooling.PreviewActivity"
+75-->[androidx.compose.ui:ui-tooling-android:1.10.1] /home/earthworm/.gradle/caches/9.3.1/transforms/d7109c0d5bb48b951f490d5468e4727d/transformed/jetified-ui-tooling/AndroidManifest.xml:24:13-71
+76            android:exported="true" />
+76-->[androidx.compose.ui:ui-tooling-android:1.10.1] /home/earthworm/.gradle/caches/9.3.1/transforms/d7109c0d5bb48b951f490d5468e4727d/transformed/jetified-ui-tooling/AndroidManifest.xml:25:13-36
+77        <activity
+77-->[androidx.compose.ui:ui-test-manifest:1.10.1] /home/earthworm/.gradle/caches/9.3.1/transforms/a826ad2a18d6e2f450015feb24f18ef7/transformed/jetified-ui-test-manifest-1.10.1/AndroidManifest.xml:23:9-26:79
+78            android:name="androidx.activity.ComponentActivity"
+78-->[androidx.compose.ui:ui-test-manifest:1.10.1] /home/earthworm/.gradle/caches/9.3.1/transforms/a826ad2a18d6e2f450015feb24f18ef7/transformed/jetified-ui-test-manifest-1.10.1/AndroidManifest.xml:24:13-63
+79            android:exported="true"
+79-->[androidx.compose.ui:ui-test-manifest:1.10.1] /home/earthworm/.gradle/caches/9.3.1/transforms/a826ad2a18d6e2f450015feb24f18ef7/transformed/jetified-ui-test-manifest-1.10.1/AndroidManifest.xml:25:13-36
+80            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+80-->[androidx.compose.ui:ui-test-manifest:1.10.1] /home/earthworm/.gradle/caches/9.3.1/transforms/a826ad2a18d6e2f450015feb24f18ef7/transformed/jetified-ui-test-manifest-1.10.1/AndroidManifest.xml:26:13-76
+81
+82        <provider
+82-->[androidx.emoji2:emoji2:1.4.0] /home/earthworm/.gradle/caches/9.3.1/transforms/6a71cd1e6ee4d05bf3aef7e6b8500a1e/transformed/jetified-emoji2-1.4.0/AndroidManifest.xml:24:9-32:20
+83            android:name="androidx.startup.InitializationProvider"
+83-->[androidx.emoji2:emoji2:1.4.0] /home/earthworm/.gradle/caches/9.3.1/transforms/6a71cd1e6ee4d05bf3aef7e6b8500a1e/transformed/jetified-emoji2-1.4.0/AndroidManifest.xml:25:13-67
+84            android:authorities="com.voiceping.android.androidx-startup"
+84-->[androidx.emoji2:emoji2:1.4.0] /home/earthworm/.gradle/caches/9.3.1/transforms/6a71cd1e6ee4d05bf3aef7e6b8500a1e/transformed/jetified-emoji2-1.4.0/AndroidManifest.xml:26:13-68
+85            android:exported="false" >
+85-->[androidx.emoji2:emoji2:1.4.0] /home/earthworm/.gradle/caches/9.3.1/transforms/6a71cd1e6ee4d05bf3aef7e6b8500a1e/transformed/jetified-emoji2-1.4.0/AndroidManifest.xml:27:13-37
+86            <meta-data
+86-->[androidx.emoji2:emoji2:1.4.0] /home/earthworm/.gradle/caches/9.3.1/transforms/6a71cd1e6ee4d05bf3aef7e6b8500a1e/transformed/jetified-emoji2-1.4.0/AndroidManifest.xml:29:13-31:52
+87                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+87-->[androidx.emoji2:emoji2:1.4.0] /home/earthworm/.gradle/caches/9.3.1/transforms/6a71cd1e6ee4d05bf3aef7e6b8500a1e/transformed/jetified-emoji2-1.4.0/AndroidManifest.xml:30:17-75
+88                android:value="androidx.startup" />
+88-->[androidx.emoji2:emoji2:1.4.0] /home/earthworm/.gradle/caches/9.3.1/transforms/6a71cd1e6ee4d05bf3aef7e6b8500a1e/transformed/jetified-emoji2-1.4.0/AndroidManifest.xml:31:17-49
+89            <meta-data
+89-->[androidx.lifecycle:lifecycle-process:2.9.4] /home/earthworm/.gradle/caches/9.3.1/transforms/abbac2f46c4b0e61344ea9677d350531/transformed/jetified-lifecycle-process-2.9.4/AndroidManifest.xml:29:13-31:52
+90                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+90-->[androidx.lifecycle:lifecycle-process:2.9.4] /home/earthworm/.gradle/caches/9.3.1/transforms/abbac2f46c4b0e61344ea9677d350531/transformed/jetified-lifecycle-process-2.9.4/AndroidManifest.xml:30:17-78
+91                android:value="androidx.startup" />
+91-->[androidx.lifecycle:lifecycle-process:2.9.4] /home/earthworm/.gradle/caches/9.3.1/transforms/abbac2f46c4b0e61344ea9677d350531/transformed/jetified-lifecycle-process-2.9.4/AndroidManifest.xml:31:17-49
+92            <meta-data
+92-->[androidx.profileinstaller:profileinstaller:1.4.0] /home/earthworm/.gradle/caches/9.3.1/transforms/dd60727755df4ac80b4f406bb979ad57/transformed/jetified-profileinstaller-1.4.0/AndroidManifest.xml:29:13-31:52
+93                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+93-->[androidx.profileinstaller:profileinstaller:1.4.0] /home/earthworm/.gradle/caches/9.3.1/transforms/dd60727755df4ac80b4f406bb979ad57/transformed/jetified-profileinstaller-1.4.0/AndroidManifest.xml:30:17-85
+94                android:value="androidx.startup" />
+94-->[androidx.profileinstaller:profileinstaller:1.4.0] /home/earthworm/.gradle/caches/9.3.1/transforms/dd60727755df4ac80b4f406bb979ad57/transformed/jetified-profileinstaller-1.4.0/AndroidManifest.xml:31:17-49
+95        </provider>
+96
+97        <uses-library
+97-->[androidx.window:window:1.5.0] /home/earthworm/.gradle/caches/9.3.1/transforms/439bb5816249393d65f0d8c14af22923/transformed/jetified-window-1.5.0/AndroidManifest.xml:23:9-25:40
+98            android:name="androidx.window.extensions"
+98-->[androidx.window:window:1.5.0] /home/earthworm/.gradle/caches/9.3.1/transforms/439bb5816249393d65f0d8c14af22923/transformed/jetified-window-1.5.0/AndroidManifest.xml:24:13-54
+99            android:required="false" />
+99-->[androidx.window:window:1.5.0] /home/earthworm/.gradle/caches/9.3.1/transforms/439bb5816249393d65f0d8c14af22923/transformed/jetified-window-1.5.0/AndroidManifest.xml:25:13-37
+100        <uses-library
+100-->[androidx.window:window:1.5.0] /home/earthworm/.gradle/caches/9.3.1/transforms/439bb5816249393d65f0d8c14af22923/transformed/jetified-window-1.5.0/AndroidManifest.xml:26:9-28:40
+101            android:name="androidx.window.sidecar"
+101-->[androidx.window:window:1.5.0] /home/earthworm/.gradle/caches/9.3.1/transforms/439bb5816249393d65f0d8c14af22923/transformed/jetified-window-1.5.0/AndroidManifest.xml:27:13-51
+102            android:required="false" />
+102-->[androidx.window:window:1.5.0] /home/earthworm/.gradle/caches/9.3.1/transforms/439bb5816249393d65f0d8c14af22923/transformed/jetified-window-1.5.0/AndroidManifest.xml:28:13-37
+103
+104        <service
+104-->[androidx.room:room-runtime-android:2.8.4] /home/earthworm/.gradle/caches/9.3.1/transforms/2f30a21790efed97861660174798529a/transformed/jetified-room-runtime/AndroidManifest.xml:24:9-28:63
+105            android:name="androidx.room.MultiInstanceInvalidationService"
+105-->[androidx.room:room-runtime-android:2.8.4] /home/earthworm/.gradle/caches/9.3.1/transforms/2f30a21790efed97861660174798529a/transformed/jetified-room-runtime/AndroidManifest.xml:25:13-74
+106            android:directBootAware="true"
+106-->[androidx.room:room-runtime-android:2.8.4] /home/earthworm/.gradle/caches/9.3.1/transforms/2f30a21790efed97861660174798529a/transformed/jetified-room-runtime/AndroidManifest.xml:26:13-43
+107            android:exported="false" />
+107-->[androidx.room:room-runtime-android:2.8.4] /home/earthworm/.gradle/caches/9.3.1/transforms/2f30a21790efed97861660174798529a/transformed/jetified-room-runtime/AndroidManifest.xml:27:13-37
+108
+109        <receiver
+109-->[androidx.profileinstaller:profileinstaller:1.4.0] /home/earthworm/.gradle/caches/9.3.1/transforms/dd60727755df4ac80b4f406bb979ad57/transformed/jetified-profileinstaller-1.4.0/AndroidManifest.xml:34:9-52:20
+110            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+110-->[androidx.profileinstaller:profileinstaller:1.4.0] /home/earthworm/.gradle/caches/9.3.1/transforms/dd60727755df4ac80b4f406bb979ad57/transformed/jetified-profileinstaller-1.4.0/AndroidManifest.xml:35:13-76
+111            android:directBootAware="false"
+111-->[androidx.profileinstaller:profileinstaller:1.4.0] /home/earthworm/.gradle/caches/9.3.1/transforms/dd60727755df4ac80b4f406bb979ad57/transformed/jetified-profileinstaller-1.4.0/AndroidManifest.xml:36:13-44
+112            android:enabled="true"
+112-->[androidx.profileinstaller:profileinstaller:1.4.0] /home/earthworm/.gradle/caches/9.3.1/transforms/dd60727755df4ac80b4f406bb979ad57/transformed/jetified-profileinstaller-1.4.0/AndroidManifest.xml:37:13-35
+113            android:exported="true"
+113-->[androidx.profileinstaller:profileinstaller:1.4.0] /home/earthworm/.gradle/caches/9.3.1/transforms/dd60727755df4ac80b4f406bb979ad57/transformed/jetified-profileinstaller-1.4.0/AndroidManifest.xml:38:13-36
+114            android:permission="android.permission.DUMP" >
+114-->[androidx.profileinstaller:profileinstaller:1.4.0] /home/earthworm/.gradle/caches/9.3.1/transforms/dd60727755df4ac80b4f406bb979ad57/transformed/jetified-profileinstaller-1.4.0/AndroidManifest.xml:39:13-57
+115            <intent-filter>
+115-->[androidx.profileinstaller:profileinstaller:1.4.0] /home/earthworm/.gradle/caches/9.3.1/transforms/dd60727755df4ac80b4f406bb979ad57/transformed/jetified-profileinstaller-1.4.0/AndroidManifest.xml:40:13-42:29
+116                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+116-->[androidx.profileinstaller:profileinstaller:1.4.0] /home/earthworm/.gradle/caches/9.3.1/transforms/dd60727755df4ac80b4f406bb979ad57/transformed/jetified-profileinstaller-1.4.0/AndroidManifest.xml:41:17-91
+116-->[androidx.profileinstaller:profileinstaller:1.4.0] /home/earthworm/.gradle/caches/9.3.1/transforms/dd60727755df4ac80b4f406bb979ad57/transformed/jetified-profileinstaller-1.4.0/AndroidManifest.xml:41:25-88
+117            </intent-filter>
+118            <intent-filter>
+118-->[androidx.profileinstaller:profileinstaller:1.4.0] /home/earthworm/.gradle/caches/9.3.1/transforms/dd60727755df4ac80b4f406bb979ad57/transformed/jetified-profileinstaller-1.4.0/AndroidManifest.xml:43:13-45:29
+119                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+119-->[androidx.profileinstaller:profileinstaller:1.4.0] /home/earthworm/.gradle/caches/9.3.1/transforms/dd60727755df4ac80b4f406bb979ad57/transformed/jetified-profileinstaller-1.4.0/AndroidManifest.xml:44:17-85
+119-->[androidx.profileinstaller:profileinstaller:1.4.0] /home/earthworm/.gradle/caches/9.3.1/transforms/dd60727755df4ac80b4f406bb979ad57/transformed/jetified-profileinstaller-1.4.0/AndroidManifest.xml:44:25-82
+120            </intent-filter>
+121            <intent-filter>
+121-->[androidx.profileinstaller:profileinstaller:1.4.0] /home/earthworm/.gradle/caches/9.3.1/transforms/dd60727755df4ac80b4f406bb979ad57/transformed/jetified-profileinstaller-1.4.0/AndroidManifest.xml:46:13-48:29
+122                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+122-->[androidx.profileinstaller:profileinstaller:1.4.0] /home/earthworm/.gradle/caches/9.3.1/transforms/dd60727755df4ac80b4f406bb979ad57/transformed/jetified-profileinstaller-1.4.0/AndroidManifest.xml:47:17-88
+122-->[androidx.profileinstaller:profileinstaller:1.4.0] /home/earthworm/.gradle/caches/9.3.1/transforms/dd60727755df4ac80b4f406bb979ad57/transformed/jetified-profileinstaller-1.4.0/AndroidManifest.xml:47:25-85
+123            </intent-filter>
+124            <intent-filter>
+124-->[androidx.profileinstaller:profileinstaller:1.4.0] /home/earthworm/.gradle/caches/9.3.1/transforms/dd60727755df4ac80b4f406bb979ad57/transformed/jetified-profileinstaller-1.4.0/AndroidManifest.xml:49:13-51:29
+125                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+125-->[androidx.profileinstaller:profileinstaller:1.4.0] /home/earthworm/.gradle/caches/9.3.1/transforms/dd60727755df4ac80b4f406bb979ad57/transformed/jetified-profileinstaller-1.4.0/AndroidManifest.xml:50:17-95
+125-->[androidx.profileinstaller:profileinstaller:1.4.0] /home/earthworm/.gradle/caches/9.3.1/transforms/dd60727755df4ac80b4f406bb979ad57/transformed/jetified-profileinstaller-1.4.0/AndroidManifest.xml:50:25-92
+126            </intent-filter>
+127        </receiver>
+128    </application>
+129
+130</manifest>
