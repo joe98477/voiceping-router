@@ -3,8 +3,6 @@ package com.voiceping.android.data.ptt
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import com.voiceping.android.data.audio.AudioCaptureManager
-import com.voiceping.android.data.audio.AudioRouter
 import com.voiceping.android.data.network.MediasoupClient
 import com.voiceping.android.data.network.SignalingClient
 import com.voiceping.android.data.network.dto.SignalingType
@@ -46,9 +44,9 @@ sealed class PttState {
  *
  * Flow:
  * 1. requestPtt() -> send PTT_START to server -> wait for response
- * 2. If granted: start foreground service -> create send transport -> start producing
- * 3. Audio flows: WebRTC AudioSource captures mic -> Producer encodes Opus -> SendTransport -> server
- * 4. releasePtt() -> stop producing -> stop service -> send PTT_STOP
+ * 2. If granted: start foreground service -> create SendTransport (idempotent) -> start producing
+ * 3. Audio flows: WebRTC AudioSource (internal capture) -> Producer (Opus encoding) -> SendTransport -> RTP
+ * 4. releasePtt() -> stop producing (closes Producer, disposes resources) -> stop service -> send PTT_STOP
  *
  * Callbacks: onPttGranted, onPttDenied, onPttReleased allow Plan 04 to wire in
  * TonePlayer/HapticFeedback without circular dependencies.
@@ -57,8 +55,6 @@ sealed class PttState {
 class PttManager @Inject constructor(
     private val signalingClient: SignalingClient,
     private val mediasoupClient: MediasoupClient,
-    private val audioCaptureManager: AudioCaptureManager,
-    private val audioRouter: AudioRouter,
     @ApplicationContext private val context: Context
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -95,6 +91,13 @@ class PttManager @Inject constructor(
      *
      * CRITICAL: NOT optimistic. State goes Idle -> Requesting -> (Transmitting | Denied).
      * User sees Requesting state (loading pulse) until server responds.
+     *
+     * Steps when granted:
+     * 1. Server grants PTT
+     * 2. Start foreground service
+     * 3. Create SendTransport (idempotent singleton)
+     * 4. Start producing (creates AudioSource + AudioTrack + Producer with Opus config)
+     * 5. Notify callback (tone/haptic feedback)
      *
      * @param channelId Channel to request PTT for
      */
@@ -183,7 +186,11 @@ class PttManager @Inject constructor(
     /**
      * Release PTT (stop transmission).
      *
-     * Cleanup order: callback -> stop producing -> stop service -> send PTT_STOP
+     * Steps:
+     * 1. Cancel timer
+     * 2. Notify callback (tone/haptic feedback)
+     * 3. Reset state
+     * 4. Stop producing (closes Producer, disposes AudioSource + AudioTrack) -> stop service -> notify server
      */
     fun releasePtt() {
         if (_pttState.value !is PttState.Transmitting) {
