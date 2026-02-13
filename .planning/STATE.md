@@ -9,19 +9,19 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 
 ## Current Position
 
-Phase: 11 complete, 12 next (Device and RecvTransport Integration)
-Plan: 0 of TBD in phase 12
-Status: Phase 11 verified, ready to plan phase 12
-Last activity: 2026-02-13 — Phase 11 complete (2 plans, verified)
+Phase: 12-recv-transport-integration (in progress)
+Plan: 1 of 2 in phase 12
+Status: Plan 12-01 complete, ready for 12-02
+Last activity: 2026-02-13 — Plan 12-01 complete (RecvTransport and Consumer integration)
 
-Progress: [████████░░░░░░░░░░░░] 34/TBD plans complete (v1.0: 24, v2.0: 26, v3.0: 2)
+Progress: [████████░░░░░░░░░░░░] 35/TBD plans complete (v1.0: 24, v2.0: 26, v3.0: 3)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 34 (v1.0: 24, v2.0: 26, v3.0: 2)
-- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~4.5 min (2 plans)
-- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.15 hours
+- Total plans completed: 35 (v1.0: 24, v2.0: 26, v3.0: 3)
+- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~3.8 min (3 plans)
+- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.19 hours
 
 **By Milestone:**
 
@@ -32,7 +32,7 @@ Progress: [████████░░░░░░░░░░░░] 34/TBD 
 | v3.0 mediasoup Integration | 5 | TBD | In progress |
 
 **Recent Trend:**
-- v3.0 in progress: 2 plans complete, 4 commits, WebRTC factory initialized with Device RTP capabilities
+- v3.0 in progress: 3 plans complete, 6 commits, RecvTransport and Consumer integrated with real libmediasoup-android
 - v2.0 shipped 6 phases, 26 plans, 70 commits, 9,233 LOC Kotlin
 
 *Updated after each plan completion*
@@ -41,6 +41,7 @@ Progress: [████████░░░░░░░░░░░░] 34/TBD 
 |------|--------------|-------|-------|
 | Phase 11 P01 | 313 | 2 tasks | 3 files |
 | Phase 11 P02 | 234 | 2 tasks | 1 files |
+| Phase 12 P01 | 218 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -57,6 +58,9 @@ Recent decisions affecting current work:
 - [11-01]: Default modeControlEnabled=true in AudioRouter — Backward compatible until WebRTC takes over in Plan 02
 - [11-02]: Device(peerConnectionFactory) constructor pattern — crow-misia 0.21.0 requires factory parameter
 - [11-02]: String-based Opus validation — Device.rtpCapabilities returns JSON string, not object
+- [12-01]: runBlocking bridge for Transport callbacks — Native JNI threads need blocking bridge to suspend functions
+- [12-01]: Per-channel RecvTransport map — Multi-channel monitoring requires independent transport lifecycle
+- [12-01]: AudioTrack volume 0-10 range — WebRTC uses 0-10 not 0-1, convert via multiplication
 
 ### Pending Todos
 
@@ -66,11 +70,12 @@ None yet.
 
 **From v2.0 Tech Debt:**
 - On-device testing not yet performed (no physical Android device during development) — Phase 15 will address
-- MediasoupClient contains TODO placeholders for libmediasoup-android library integration — Phases 11-14 will implement
+- MediasoupClient SendTransport and Producer still TODO — Phase 12 Plan 02 will implement
 
-**Phase 11 Focus:**
-- AudioManager ownership conflict RESOLVED — WebRTC AudioDeviceModule now owns MODE_IN_COMMUNICATION, AudioRouter mode control disabled
-- JNI threading pattern — Transport callbacks run on native threads, need runBlocking bridges
+**Phase 12 Focus:**
+- RecvTransport per-channel pattern — Map-based storage for multi-channel monitoring
+- Consumer.resume() critical — Consumers start paused, must resume for audio playback
+- runBlocking bridge validated — Native JNI thread → runBlocking → suspend signaling works for one-time DTLS handshake
 
 **Carried forward:**
 - Multi-server state consistency strategy needs research for distributed Redis pub/sub pattern
@@ -86,10 +91,10 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-13 (plan execution)
-Stopped at: Completed 11-02-PLAN.md — PeerConnectionFactory with AEC/NS, Device with RTP capabilities, AudioRouter coordination active
+Stopped at: Completed 12-01-PLAN.md — RecvTransport per-channel, Consumer with resume, AudioTrack volume control
 Resume file: None
 
-Next step: Run `/gsd:plan-phase 12` to plan RecvTransport integration
+Next step: Execute 12-02-PLAN.md for SendTransport and Producer integration
 
 **Milestone 1 (WebRTC Audio Rebuild + Web UI) SHIPPED 2026-02-07:**
 - 4 phases, 24 plans
@@ -100,4 +105,4 @@ Next step: Run `/gsd:plan-phase 12` to plan RecvTransport integration
 - See: .planning/milestones/v2.0-ROADMAP.md
 
 ---
-*Last updated: 2026-02-13 after completing 11-02-PLAN.md (Device initialization with RTP capabilities)*
+*Last updated: 2026-02-13 after completing 12-01-PLAN.md (RecvTransport and Consumer integration)*
