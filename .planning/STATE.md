@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 ## Current Position
 
 Phase: 14-cleanup-lifecycle-reconnection-resilience
-Plan: 1 of TBD in phase 14
-Status: Phase 14 in progress
-Last activity: 2026-02-13 — Plan 14-01 complete (Mutex-protected transport lifecycle)
+Plan: 2 of 2 in phase 14
+Status: Phase 14 complete
+Last activity: 2026-02-13 — Plan 14-02 complete (Transport error recovery and reconnection resilience)
 
-Progress: [████████░░░░░░░░░░░░] 41/TBD plans complete (v1.0: 24, v2.0: 26, v3.0: 9)
+Progress: [████████░░░░░░░░░░░░] 42/TBD plans complete (v1.0: 24, v2.0: 26, v3.0: 10)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 41 (v1.0: 24, v2.0: 26, v3.0: 9)
-- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~3.5 min (9 plans)
-- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.54 hours
+- Total plans completed: 42 (v1.0: 24, v2.0: 26, v3.0: 10)
+- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~3.2 min (10 plans)
+- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.56 hours
 
 **By Milestone:**
 
@@ -32,7 +32,7 @@ Progress: [████████░░░░░░░░░░░░] 41/TBD 
 | v3.0 mediasoup Integration | 5 | TBD | In progress |
 
 **Recent Trend:**
-- v3.0 in progress: 9 plans complete, 14 commits, Phase 14 started (transport lifecycle hardening)
+- v3.0 in progress: 10 plans complete, 16 commits, Phase 14 complete (transport lifecycle hardening and error recovery)
 - v2.0 shipped 6 phases, 26 plans, 70 commits, 9,233 LOC Kotlin
 
 *Updated after each plan completion*
@@ -46,6 +46,7 @@ Progress: [████████░░░░░░░░░░░░] 41/TBD 
 | Phase 13 P01 | 362 | 2 tasks | 2 files |
 | Phase 13 P02 | 117 | 2 tasks | 2 files |
 | Phase 14 P01 | 149 | 2 tasks | 1 files |
+| Phase 14 P02 | 141 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -72,6 +73,8 @@ Recent decisions affecting current work:
 - [13-02]: Delete AudioCaptureManager entirely — WebRTC AudioSource handles all microphone capture, no manual buffer forwarding needed
 - [Phase 14-01]: Use Kotlin Mutex instead of synchronized for suspend functions in transport lifecycle
 - [Phase 14-01]: Guard checks inside Mutex for idempotent transport/producer creation during network flapping
+- [Phase 14-02]: Differentiate "disconnected" from "failed" in Transport connection state handlers for auto-recovery window
+- [Phase 14-02]: Clean up mediasoup resources on signaling DISCONNECTED to prevent orphaned resources
 
 ### Pending Todos
 
@@ -82,11 +85,15 @@ None yet.
 **From v2.0 Tech Debt:**
 - On-device testing not yet performed (no physical Android device during development) — Phase 15 will address
 
-**Phase 14 Plan 01 Complete:**
+**Phase 14 Complete:**
 - Mutex-protected transport lifecycle (createSendTransport, createRecvTransport, cleanupChannel)
 - Guard checks prevent duplicate transport/producer creation during network flapping
 - cleanupChannel() now suspend with Mutex protection for safe concurrent cleanup
 - Idempotent transport operations enable resilient reconnection logic
+- Transport error recovery with auto-recovery window (disconnected vs failed state differentiation)
+- SendTransport failure cleanup: close producer, clean audio resources, null transport
+- RecvTransport failure cleanup: remove transport from map (consumers cleaned via onTransportClose)
+- Signaling DISCONNECTED cleanup: prevent orphaned resources before channel rejoin
 
 **Phase 13 Complete:**
 - SendTransport singleton with onConnect/onProduce callbacks ✓
@@ -117,10 +124,10 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-13 (plan execution)
-Stopped at: Completed 14-01-PLAN.md — Phase 14 Plan 01 complete (Mutex-protected transport lifecycle)
+Stopped at: Completed 14-02-PLAN.md — Phase 14 complete (Transport lifecycle hardening and error recovery)
 Resume file: None
 
-Next step: Continue Phase 14 (error recovery and reconnection logic)
+Next step: Continue Phase 15 or next milestone phase
 
 **Milestone 1 (WebRTC Audio Rebuild + Web UI) SHIPPED 2026-02-07:**
 - 4 phases, 24 plans
@@ -131,4 +138,4 @@ Next step: Continue Phase 14 (error recovery and reconnection logic)
 - See: .planning/milestones/v2.0-ROADMAP.md
 
 ---
-*Last updated: 2026-02-13 after completing 14-01-PLAN.md (Mutex-protected transport lifecycle)*
+*Last updated: 2026-02-13 after completing 14-02-PLAN.md (Transport error recovery and reconnection resilience)*
