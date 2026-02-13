@@ -99,10 +99,11 @@ Plans:
   3. Per-consumer volume control adjusts playback level (user can change channel volume, audio level changes)
   4. Consumer closes cleanly when user leaves channel (no orphaned resources)
   5. Consumer statistics available for network quality indicator (packet loss and jitter displayed)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 12-01: TBD (awaiting planning)
+- [ ] 12-01-PLAN.md -- RecvTransport creation, Consumer lifecycle, volume control, cleanup
+- [ ] 12-02-PLAN.md -- Consumer statistics for network quality indicator
 
 #### Phase 13: SendTransport and Producer Integration
 **Goal**: Wire SendTransport and Producer creation for transmitting local microphone audio via PTT
