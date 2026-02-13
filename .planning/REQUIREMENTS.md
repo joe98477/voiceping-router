@@ -67,33 +67,33 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| WEBRTC-01 | — | Pending |
-| WEBRTC-02 | — | Pending |
-| WEBRTC-03 | — | Pending |
-| WEBRTC-04 | — | Pending |
-| RECV-01 | — | Pending |
-| RECV-02 | — | Pending |
-| RECV-03 | — | Pending |
-| RECV-04 | — | Pending |
-| RECV-05 | — | Pending |
-| SEND-01 | — | Pending |
-| SEND-02 | — | Pending |
-| SEND-03 | — | Pending |
-| SEND-04 | — | Pending |
-| SEND-05 | — | Pending |
-| LIFE-01 | — | Pending |
-| LIFE-02 | — | Pending |
-| LIFE-03 | — | Pending |
-| LIFE-04 | — | Pending |
-| VALID-01 | — | Pending |
-| VALID-02 | — | Pending |
-| VALID-03 | — | Pending |
+| WEBRTC-01 | Phase 11 | Pending |
+| WEBRTC-02 | Phase 11 | Pending |
+| WEBRTC-03 | Phase 11 | Pending |
+| WEBRTC-04 | Phase 11 | Pending |
+| RECV-01 | Phase 12 | Pending |
+| RECV-02 | Phase 12 | Pending |
+| RECV-03 | Phase 12 | Pending |
+| RECV-04 | Phase 12 | Pending |
+| RECV-05 | Phase 12 | Pending |
+| SEND-01 | Phase 13 | Pending |
+| SEND-02 | Phase 13 | Pending |
+| SEND-03 | Phase 13 | Pending |
+| SEND-04 | Phase 13 | Pending |
+| SEND-05 | Phase 13 | Pending |
+| LIFE-01 | Phase 14 | Pending |
+| LIFE-02 | Phase 14 | Pending |
+| LIFE-03 | Phase 14 | Pending |
+| LIFE-04 | Phase 14 | Pending |
+| VALID-01 | Phase 15 | Pending |
+| VALID-02 | Phase 15 | Pending |
+| VALID-03 | Phase 15 | Pending |
 
 **Coverage:**
 - v3.0 requirements: 18 total
-- Mapped to phases: 0
-- Unmapped: 18 (pending roadmap creation)
+- Mapped to phases: 18 (100% coverage)
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-13*
-*Last updated: 2026-02-13 after initial definition*
+*Last updated: 2026-02-13 after v3.0 roadmap creation*
