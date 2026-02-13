@@ -9,19 +9,19 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 
 ## Current Position
 
-Phase: 14-cleanup-lifecycle-reconnection-resilience
-Plan: 2 of 2 in phase 14
-Status: Phase 14 complete
-Last activity: 2026-02-13 — Plan 14-02 complete (Transport error recovery and reconnection resilience)
+Phase: 15-release-build-validation-device-testing
+Plan: 1 of 2 in phase 15
+Status: Phase 15 in progress
+Last activity: 2026-02-13 — Plan 15-01 complete (ProGuard/R8 rules and release build validation)
 
-Progress: [████████░░░░░░░░░░░░] 42/TBD plans complete (v1.0: 24, v2.0: 26, v3.0: 10)
+Progress: [████████░░░░░░░░░░░░] 43/TBD plans complete (v1.0: 24, v2.0: 26, v3.0: 11)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 42 (v1.0: 24, v2.0: 26, v3.0: 10)
-- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~3.2 min (10 plans)
-- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.56 hours
+- Total plans completed: 43 (v1.0: 24, v2.0: 26, v3.0: 11)
+- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~3.3 min (11 plans)
+- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.61 hours
 
 **By Milestone:**
 
@@ -32,7 +32,7 @@ Progress: [████████░░░░░░░░░░░░] 42/TBD 
 | v3.0 mediasoup Integration | 5 | TBD | In progress |
 
 **Recent Trend:**
-- v3.0 in progress: 10 plans complete, 16 commits, Phase 14 complete (transport lifecycle hardening and error recovery)
+- v3.0 in progress: 11 plans complete, 17 commits, Phase 15 in progress (release build validation)
 - v2.0 shipped 6 phases, 26 plans, 70 commits, 9,233 LOC Kotlin
 
 *Updated after each plan completion*
@@ -47,6 +47,7 @@ Progress: [████████░░░░░░░░░░░░] 42/TBD 
 | Phase 13 P02 | 117 | 2 tasks | 2 files |
 | Phase 14 P01 | 149 | 2 tasks | 1 files |
 | Phase 14 P02 | 141 | 2 tasks | 2 files |
+| Phase 15 P01 | 353 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -75,6 +76,8 @@ Recent decisions affecting current work:
 - [Phase 14-01]: Guard checks inside Mutex for idempotent transport/producer creation during network flapping
 - [Phase 14-02]: Differentiate "disconnected" from "failed" in Transport connection state handlers for auto-recovery window
 - [Phase 14-02]: Clean up mediasoup resources on signaling DISCONNECTED to prevent orphaned resources
+- [Phase 15-01]: Preserve both io.github.crow_misia.mediasoup and org.mediasoup packages — Library may use either internally
+- [Phase 15-01]: Enable full R8 optimization (no -dontobfuscate) — Production builds need code shrinking and obfuscation
 
 ### Pending Todos
 
@@ -82,8 +85,14 @@ None yet.
 
 ### Blockers/Concerns
 
+**Phase 15 In Progress:**
+- Plan 15-01 complete: ProGuard/R8 rules updated, release APK builds successfully (42.8 MB)
+- Comprehensive R8 keep rules for WebRTC, crow-misia mediasoup, Hilt DI, native methods, @CalledByNative
+- No R8 warnings about missing JNI classes, mapping.txt generated for crash deobfuscation
+- Next: Plan 15-02 physical device testing (login, channel join, PTT, battery profiling)
+
 **From v2.0 Tech Debt:**
-- On-device testing not yet performed (no physical Android device during development) — Phase 15 will address
+- On-device testing not yet performed (no physical Android device during development) — Plan 15-02 will address
 
 **Phase 14 Complete:**
 - Mutex-protected transport lifecycle (createSendTransport, createRecvTransport, cleanupChannel)
@@ -124,10 +133,10 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-13 (plan execution)
-Stopped at: Completed 14-02-PLAN.md — Phase 14 complete (Transport lifecycle hardening and error recovery)
+Stopped at: Completed 15-01-PLAN.md — Phase 15 Plan 01 complete (ProGuard/R8 rules and release build validation)
 Resume file: None
 
-Next step: Continue Phase 15 or next milestone phase
+Next step: Execute Plan 15-02 (Physical device testing and battery profiling)
 
 **Milestone 1 (WebRTC Audio Rebuild + Web UI) SHIPPED 2026-02-07:**
 - 4 phases, 24 plans
@@ -138,4 +147,4 @@ Next step: Continue Phase 15 or next milestone phase
 - See: .planning/milestones/v2.0-ROADMAP.md
 
 ---
-*Last updated: 2026-02-13 after completing 14-02-PLAN.md (Transport error recovery and reconnection resilience)*
+*Last updated: 2026-02-13 after completing 15-01-PLAN.md (ProGuard/R8 rules and release build validation)*
