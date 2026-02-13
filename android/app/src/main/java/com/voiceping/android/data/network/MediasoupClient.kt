@@ -3,13 +3,17 @@ package com.voiceping.android.data.network
 import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
+import com.voiceping.android.data.audio.AudioRouter
 import com.voiceping.android.data.network.dto.SignalingType
 import dagger.hilt.android.qualifiers.ApplicationContext
+import io.github.crow_misia.mediasoup.Device
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import org.webrtc.PeerConnectionFactory
+import org.webrtc.audio.JavaAudioDeviceModule
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -31,11 +35,17 @@ import javax.inject.Singleton
 @Singleton
 class MediasoupClient @Inject constructor(
     private val signalingClient: SignalingClient,
+    private val audioRouter: AudioRouter,
     @ApplicationContext private val context: Context
 ) {
-    // NOTE: These will be actual mediasoup library types when library is integrated
-    // For now, using Any? to represent the library objects
-    private var device: Any? = null
+    // WebRTC factory and audio module
+    private lateinit var audioDeviceModule: JavaAudioDeviceModule
+    private lateinit var peerConnectionFactory: PeerConnectionFactory
+
+    // mediasoup Device (created after PeerConnectionFactory init)
+    private lateinit var device: Device
+
+    // Transport and producer/consumer placeholders (typed in Phase 12/13)
     private var recvTransport: Any? = null
     private var sendTransport: Any? = null
     private val consumers = mutableMapOf<String, Any>()
@@ -50,6 +60,65 @@ class MediasoupClient @Inject constructor(
     }
 
     /**
+     * Initialize PeerConnectionFactory with custom AudioDeviceModule.
+     * MUST be called before Device.load() and any transport creation.
+     *
+     * Configures:
+     * - Hardware acoustic echo cancellation (AEC) — prevents speaker audio feeding back into mic
+     * - Hardware noise suppression (NS) — filters background noise for clear PTT transmission
+     * - Error callbacks for AudioRecord/AudioTrack lifecycle monitoring
+     *
+     * After initialization, disables AudioRouter's MODE_IN_COMMUNICATION control
+     * because WebRTC's AudioDeviceModule now owns that responsibility.
+     */
+    fun initializeWebRTC() {
+        audioDeviceModule = JavaAudioDeviceModule.builder(context)
+            .setUseHardwareAcousticEchoCanceler(true)
+            .setUseHardwareNoiseSuppressor(true)
+            .setAudioRecordErrorCallback(object : JavaAudioDeviceModule.AudioRecordErrorCallback {
+                override fun onWebRtcAudioRecordInitError(errorMessage: String) {
+                    Log.e(TAG, "AudioRecord init error: $errorMessage")
+                }
+                override fun onWebRtcAudioRecordStartError(
+                    errorCode: JavaAudioDeviceModule.AudioRecordStartErrorCode,
+                    errorMessage: String
+                ) {
+                    Log.e(TAG, "AudioRecord start error: $errorCode - $errorMessage")
+                }
+                override fun onWebRtcAudioRecordError(errorMessage: String) {
+                    Log.e(TAG, "AudioRecord error: $errorMessage")
+                }
+            })
+            .setAudioTrackErrorCallback(object : JavaAudioDeviceModule.AudioTrackErrorCallback {
+                override fun onWebRtcAudioTrackInitError(errorMessage: String) {
+                    Log.e(TAG, "AudioTrack init error: $errorMessage")
+                }
+                override fun onWebRtcAudioTrackStartError(
+                    errorCode: JavaAudioDeviceModule.AudioTrackStartErrorCode,
+                    errorMessage: String
+                ) {
+                    Log.e(TAG, "AudioTrack start error: $errorCode - $errorMessage")
+                }
+                override fun onWebRtcAudioTrackError(errorMessage: String) {
+                    Log.e(TAG, "AudioTrack error: $errorMessage")
+                }
+            })
+            .createAudioDeviceModule()
+
+        peerConnectionFactory = PeerConnectionFactory.builder()
+            .setAudioDeviceModule(audioDeviceModule)
+            .createPeerConnectionFactory()
+
+        // Create Device with PeerConnectionFactory
+        device = Device(peerConnectionFactory)
+
+        // Coordinate with AudioRouter: WebRTC now owns MODE_IN_COMMUNICATION
+        audioRouter.disableModeControl()
+
+        Log.d(TAG, "PeerConnectionFactory initialized with AEC and NS enabled")
+    }
+
+    /**
      * Initialize mediasoup Device and load RTP capabilities from server.
      *
      * Steps:
@@ -61,6 +130,9 @@ class MediasoupClient @Inject constructor(
      */
     suspend fun initialize() = withContext(Dispatchers.IO) {
         try {
+            // Step 1: Initialize WebRTC (must happen before Device.load)
+            initializeWebRTC()
+
             Log.d(TAG, "Requesting router RTP capabilities from server")
 
             // Step 1: Get router RTP capabilities from server
