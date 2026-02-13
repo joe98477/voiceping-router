@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 Phase: 10 of 10 (all complete)
 Plan: N/A
 Status: Between milestones
-Last activity: 2026-02-13 - Completed quick task 1: Build debug APK for testing
+Last activity: 2026-02-13 - Completed quick task 2: Fix settings drawer and transport parameters
 
 Progress: [████████████████████] 100% (v1.0: 4/4 phases, v2.0: 6/6 phases)
 
@@ -39,11 +39,12 @@ Deferred to future milestones:
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 1 | Build debug APK for testing | 2026-02-12 | 1855ebc | [1-build-debug-apk-for-testing](./quick/1-build-debug-apk-for-testing/) |
+| 2 | Fix settings drawer and transport parameters | 2026-02-13 | 2f4dabd | [2-fix-settings-drawer-hardcoded-user-info-](./quick/2-fix-settings-drawer-hardcoded-user-info-/) |
 
 ## Session Continuity
 
 Last session: 2026-02-13
-Stopped at: Completed v2.0 milestone archival
+Stopped at: Completed quick task 2 (fix settings drawer and transport parameters)
 Resume file: None
 
 **Milestone 1 (WebRTC Audio Rebuild + Web UI) SHIPPED 2026-02-07:**
