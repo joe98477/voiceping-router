@@ -27,6 +27,7 @@ class AudioRouter @Inject constructor(
 ) {
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private var audioFocusRequest: AudioFocusRequest? = null
+    private var modeControlEnabled = true
 
     // Phone call detection callbacks (wired by ChannelRepository in Plan 03)
     var onPhoneCallStarted: (() -> Unit)? = null
@@ -72,6 +73,16 @@ class AudioRouter @Inject constructor(
     }
 
     /**
+     * Disable AudioManager mode control (called after WebRTC PeerConnectionFactory init).
+     * WebRTC's AudioDeviceModule will own MODE_IN_COMMUNICATION.
+     * AudioRouter continues to handle routing (speakerphone, Bluetooth device selection).
+     */
+    fun disableModeControl() {
+        modeControlEnabled = false
+        Log.d(TAG, "AudioManager mode control disabled (WebRTC owns MODE_IN_COMMUNICATION)")
+    }
+
+    /**
      * Set audio routing to earpiece (default for receive-only mode).
      *
      * Mode: MODE_IN_COMMUNICATION enables echo cancellation and noise suppression.
@@ -79,7 +90,9 @@ class AudioRouter @Inject constructor(
      */
     fun setEarpieceMode() {
         Log.d(TAG, "Setting audio mode: earpiece")
-        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+        if (modeControlEnabled) {
+            audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+        }
         audioManager.isSpeakerphoneOn = false
     }
 
@@ -91,7 +104,9 @@ class AudioRouter @Inject constructor(
      */
     fun setSpeakerMode() {
         Log.d(TAG, "Setting audio mode: speaker")
-        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+        if (modeControlEnabled) {
+            audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+        }
         audioManager.isSpeakerphoneOn = true
     }
 
@@ -159,7 +174,9 @@ class AudioRouter @Inject constructor(
      */
     fun setBluetoothMode(device: AudioDeviceInfo) {
         Log.d(TAG, "Setting audio mode: Bluetooth (${device.productName})")
-        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+        if (modeControlEnabled) {
+            audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             // API 31+: Modern API
@@ -191,7 +208,9 @@ class AudioRouter @Inject constructor(
      */
     fun setWiredHeadsetMode() {
         Log.d(TAG, "Setting audio mode: Wired headset")
-        audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+        if (modeControlEnabled) {
+            audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+        }
         audioManager.isSpeakerphoneOn = false
     }
 
