@@ -648,15 +648,21 @@ class MediasoupClient @Inject constructor(
      * Called when leaving a channel to close its RecvTransport.
      * Consumers should be closed by caller first via closeConsumer().
      *
+     * Mutex-protected to prevent race conditions with concurrent transport creation/destruction.
+     *
      * @param channelId The channel to clean up
      */
-    fun cleanupChannel(channelId: String) {
-        Log.d(TAG, "Cleaning up channel: $channelId")
+    suspend fun cleanupChannel(channelId: String) {
+        transportMutex.withLock {
+            Log.d(TAG, "Cleaning up channel: $channelId")
 
-        // Close RecvTransport for channel
-        recvTransports.remove(channelId)?.let { transport ->
-            transport.close()
-            Log.d(TAG, "RecvTransport closed for channel: $channelId")
+            // Close RecvTransport for channel
+            // Note: Consumers for this channel should already be closed by caller
+            // (ChannelRepository closes consumers before calling this method)
+            recvTransports.remove(channelId)?.let { transport ->
+                transport.close()
+                Log.d(TAG, "RecvTransport closed for channel: $channelId")
+            }
         }
     }
 
