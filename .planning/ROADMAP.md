@@ -102,8 +102,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 12-01-PLAN.md -- RecvTransport creation, Consumer lifecycle, volume control, cleanup
-- [ ] 12-02-PLAN.md -- Consumer statistics for network quality indicator
+- [x] 12-01-PLAN.md -- RecvTransport creation, Consumer lifecycle, volume control, cleanup
+- [x] 12-02-PLAN.md -- Consumer statistics for network quality indicator
 
 #### Phase 13: SendTransport and Producer Integration
 **Goal**: Wire SendTransport and Producer creation for transmitting local microphone audio via PTT
@@ -115,10 +115,11 @@ Plans:
   3. Producer created with Opus PTT config when user presses PTT button (audio transmitted)
   4. Producer closed and audio capture stopped when user releases PTT button (audio stops)
   5. AudioCaptureManager removed from codebase (library handles audio capture)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 13-01: TBD (awaiting planning)
+- [ ] 13-01-PLAN.md -- SendTransport creation, Producer lifecycle with AudioSource/AudioTrack and Opus config
+- [ ] 13-02-PLAN.md -- PttManager refactor and AudioCaptureManager deletion
 
 #### Phase 14: Cleanup Lifecycle and Reconnection Resilience
 **Goal**: Implement ordered disposal and state machine for production-ready lifecycle management
@@ -165,11 +166,11 @@ Phases execute in numeric order: 11 → 12 → 13 → 14 → 15
 | 9. Hardware PTT & Bluetooth Integration | v2.0 | 4/4 | Complete | 2026-02-12 |
 | 10. Network Resilience & UX Polish | v2.0 | 5/5 | Complete | 2026-02-13 |
 | 11. Library Upgrade | v3.0 | 2/2 | Complete | 2026-02-13 |
-| 12. RecvTransport | v3.0 | 0/TBD | Not started | - |
-| 13. SendTransport | v3.0 | 0/TBD | Not started | - |
+| 12. RecvTransport | v3.0 | 2/2 | Complete | 2026-02-13 |
+| 13. SendTransport | v3.0 | 0/2 | Not started | - |
 | 14. Lifecycle | v3.0 | 0/TBD | Not started | - |
 | 15. Validation | v3.0 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-02-06*
-*Last updated: 2026-02-13 after v3.0 roadmap creation*
+*Last updated: 2026-02-13 after Phase 13 planning*
