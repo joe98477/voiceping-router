@@ -107,7 +107,7 @@ fun ChannelListScreen(
 
     // Derive displayed channel state for BottomBar
     val displayedChannel = monitoredChannels[displayedChannelId]
-    val displayedChannelName = displayedChannel?.channelName
+    val displayedChannelName = displayedChannel?.let { "${it.teamName} | ${it.channelName}" }
     val isPrimaryDisplayed = displayedChannel?.isPrimary ?: true
     val displayedSpeaker = displayedChannel?.currentSpeaker
 
