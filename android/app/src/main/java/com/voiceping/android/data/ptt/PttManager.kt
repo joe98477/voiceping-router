@@ -144,8 +144,8 @@ class PttManager @Inject constructor(
                         mediasoupClient.sendAudioData(buffer, length)
                     }
 
-                    // Step 5: Create send transport
-                    mediasoupClient.createSendTransport(channelId)
+                    // Step 5: Create send transport (singleton, no channelId)
+                    mediasoupClient.createSendTransport()
 
                     // Step 6: Start producing (configure Opus codec)
                     mediasoupClient.startProducing()

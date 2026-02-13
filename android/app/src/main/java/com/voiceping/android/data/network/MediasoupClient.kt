@@ -9,7 +9,9 @@ import com.voiceping.android.domain.model.ConsumerNetworkStats
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.crow_misia.mediasoup.Consumer
 import io.github.crow_misia.mediasoup.Device
+import io.github.crow_misia.mediasoup.Producer
 import io.github.crow_misia.mediasoup.RecvTransport
+import io.github.crow_misia.mediasoup.SendTransport
 import io.github.crow_misia.mediasoup.Transport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,7 +19,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import org.webrtc.AudioSource
 import org.webrtc.AudioTrack
+import org.webrtc.MediaConstraints
 import org.webrtc.PeerConnectionFactory
 import org.webrtc.audio.JavaAudioDeviceModule
 import javax.inject.Inject
@@ -28,13 +32,12 @@ import javax.inject.Singleton
  *
  * Handles:
  * - Device creation and RTP capabilities loading
- * - Receive transport creation and audio consumption
- * - Send transport creation and audio production (PTT)
+ * - Receive transport creation and audio consumption (multi-channel monitoring)
+ * - Send transport creation and audio production (PTT transmission)
  *
- * NOTE: This implementation provides the pattern for mediasoup integration.
- * The actual libmediasoup-android library classes (Device, SendTransport, RecvTransport,
- * Producer, Consumer) will be connected when testing on a physical device, as the exact
- * API may differ from documentation. This skeleton allows library wiring.
+ * Audio flow:
+ * - Receive: RecvTransport per channel -> Consumer per producer -> AudioTrack playback
+ * - Send: AudioSource captures mic -> AudioTrack -> Producer encodes Opus -> SendTransport -> server
  *
  * Key pattern: Device -> load capabilities -> create transports -> produce/consume
  */
@@ -53,9 +56,11 @@ class MediasoupClient @Inject constructor(
 
     // Transport and producer/consumer placeholders (typed in Phase 12/13)
     private val recvTransports = mutableMapOf<String, RecvTransport>()
-    private var sendTransport: Any? = null
+    private var sendTransport: SendTransport? = null
     private val consumers = mutableMapOf<String, Consumer>()
-    private var audioProducer: Any? = null
+    private var audioProducer: Producer? = null
+    private var audioSource: AudioSource? = null
+    private var pttAudioTrack: org.webrtc.AudioTrack? = null
     private val gson = Gson()
 
     private val _isInitialized = MutableStateFlow(false)
@@ -404,27 +409,29 @@ class MediasoupClient @Inject constructor(
     }
 
     /**
-     * Create send transport for PTT audio transmission.
+     * Create send transport for PTT audio transmission (singleton).
      *
      * Steps:
-     * 1. Request CREATE_TRANSPORT from server with channelId and direction="send"
+     * 1. Request CREATE_TRANSPORT from server with direction="send" (no channelId)
      * 2. Create SendTransport with server's transport parameters
      * 3. Set up transport listener for DTLS connection and produce events
      *
-     * @param channelId The channel to create transport for
      * @throws Exception if transport creation fails
      */
-    suspend fun createSendTransport(channelId: String) = withContext(Dispatchers.IO) {
+    suspend fun createSendTransport() = withContext(Dispatchers.IO) {
         try {
-            Log.d(TAG, "Creating send transport for channel: $channelId")
+            // Guard: SendTransport is singleton (not per-channel)
+            if (sendTransport != null) {
+                Log.d(TAG, "SendTransport already exists")
+                return@withContext
+            }
 
-            // Step 1: Request transport from server (direction="send")
+            Log.d(TAG, "Creating send transport")
+
+            // Step 1: Request transport from server (direction="send", no channelId)
             val transportResponse = signalingClient.request(
                 SignalingType.CREATE_TRANSPORT,
-                mapOf(
-                    "channelId" to channelId,
-                    "direction" to "send"
-                )
+                mapOf("direction" to "send")
             )
 
             val transportData = transportResponse.data
@@ -439,53 +446,68 @@ class MediasoupClient @Inject constructor(
             Log.d(TAG, "Send transport parameters received: id=$transportId")
 
             // Step 2 & 3: Create SendTransport with listener
-            // TODO: Integrate actual libmediasoup-android library
-            // sendTransport = device?.createSendTransport(
-            //     listener = object : SendTransport.Listener {
-            //         override fun onConnect(transport: Transport, dtlsParameters: String): String {
-            //             runBlocking {
-            //                 signalingClient.request(
-            //                     SignalingType.CONNECT_TRANSPORT,
-            //                     mapOf(
-            //                         "transportId" to transportId,
-            //                         "dtlsParameters" to dtlsParameters
-            //                     )
-            //                 )
-            //             }
-            //             return ""
-            //         }
-            //
-            //         override fun onProduce(
-            //             transport: Transport,
-            //             kind: String,
-            //             rtpParameters: String,
-            //             appData: String
-            //         ): String {
-            //             return runBlocking {
-            //                 val produceResponse = signalingClient.request(
-            //                     SignalingType.PRODUCE,
-            //                     mapOf(
-            //                         "kind" to kind,
-            //                         "rtpParameters" to rtpParameters
-            //                     )
-            //                 )
-            //                 produceResponse.data?.get("id") as? String
-            //                     ?: throw IllegalStateException("No producer id in response")
-            //             }
-            //         }
-            //
-            //         override fun onConnectionStateChange(
-            //             transport: Transport,
-            //             connectionState: TransportState
-            //         ) {
-            //             Log.d(TAG, "Send transport state: $connectionState")
-            //         }
-            //     },
-            //     id = transportId,
-            //     iceParameters = iceParameters,
-            //     iceCandidates = iceCandidates,
-            //     dtlsParameters = dtlsParameters
-            // )
+            sendTransport = device.createSendTransport(
+                listener = object : SendTransport.Listener {
+                    override fun onConnect(transport: Transport, dtlsParameters: String) {
+                        Log.d(TAG, "SendTransport onConnect: $transportId")
+                        runBlocking {
+                            signalingClient.request(
+                                SignalingType.CONNECT_TRANSPORT,
+                                mapOf(
+                                    "transportId" to transportId,
+                                    "dtlsParameters" to dtlsParameters
+                                )
+                            )
+                        }
+                    }
+
+                    override fun onProduce(
+                        transport: Transport,
+                        kind: String,
+                        rtpParameters: String,
+                        appData: String?
+                    ): String {
+                        Log.d(TAG, "SendTransport onProduce: kind=$kind")
+                        return runBlocking {
+                            val produceResponse = signalingClient.request(
+                                SignalingType.PRODUCE,
+                                mapOf(
+                                    "kind" to kind,
+                                    "rtpParameters" to rtpParameters
+                                )
+                            )
+                            produceResponse.data?.get("id") as? String
+                                ?: throw IllegalStateException("No producer id in response")
+                        }
+                    }
+
+                    override fun onProduceData(
+                        transport: Transport,
+                        sctpStreamParameters: String,
+                        label: String,
+                        protocol: String,
+                        appData: String?
+                    ): String {
+                        // Not used for audio-only app
+                        throw UnsupportedOperationException("Data channels not supported")
+                    }
+
+                    override fun onConnectionStateChange(
+                        transport: Transport,
+                        newState: String
+                    ) {
+                        Log.d(TAG, "SendTransport state: $newState")
+                        if (newState == "failed" || newState == "disconnected") {
+                            audioProducer?.close()
+                            audioProducer = null
+                        }
+                    }
+                },
+                id = transportId,
+                iceParameters = iceParameters,
+                iceCandidates = iceCandidates,
+                dtlsParameters = dtlsParameters
+            )
 
             Log.d(TAG, "Send transport created successfully")
 
