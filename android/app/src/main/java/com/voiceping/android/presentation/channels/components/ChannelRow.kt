@@ -48,6 +48,7 @@ fun ChannelRow(
     currentSpeaker: User?,
     lastSpeaker: User?,
     lastSpeakerVisible: Boolean,
+    monitoredUserCount: Int? = null,
     onToggle: () -> Unit,
     onLongPress: () -> Unit,
     onSettingsClick: () -> Unit = {}
@@ -146,9 +147,10 @@ fun ChannelRow(
 
                 // User count (only show when no speaker indicator)
                 if (currentSpeaker == null && !(lastSpeakerVisible && lastSpeaker != null)) {
+                    val displayCount = monitoredUserCount ?: channel.userCount
                     Spacer(modifier = Modifier.padding(top = 2.dp))
                     Text(
-                        text = "${channel.userCount} users",
+                        text = "$displayCount users",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

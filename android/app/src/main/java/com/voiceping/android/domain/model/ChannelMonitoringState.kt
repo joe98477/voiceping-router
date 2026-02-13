@@ -16,5 +16,6 @@ data class ChannelMonitoringState(
     val lastSpeaker: User? = null,
     val speakerStartTime: Long = 0L,  // System.currentTimeMillis() when speaker started
     val consumerId: String? = null,     // mediasoup consumer ID for this channel
-    val volume: Float = 1.0f           // 0.0-1.0 range for per-channel volume
+    val volume: Float = 1.0f,          // 0.0-1.0 range for per-channel volume
+    val userCount: Int = 0             // number of users connected to this channel
 )

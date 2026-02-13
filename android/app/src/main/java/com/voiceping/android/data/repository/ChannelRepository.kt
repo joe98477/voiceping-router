@@ -65,6 +65,9 @@ class ChannelRepository @Inject constructor(
     // Per-channel speaker observer jobs
     private val speakerObserverJobs = mutableMapOf<String, Job>()
 
+    // Per-channel state update observer jobs
+    private val channelStateObserverJobs = mutableMapOf<String, Job>()
+
     // Per-channel last speaker fade jobs
     private val lastSpeakerFadeJobs = mutableMapOf<String, Job>()
 
@@ -279,19 +282,24 @@ class ChannelRepository @Inject constructor(
                 _primaryChannelId.value = channelId
             }
 
+            // Parse user count from join response
+            val joinUserCount = (joinResponse.data?.get("userCount") as? Number)?.toInt() ?: 0
+
             // Create ChannelMonitoringState
             val channelState = ChannelMonitoringState(
                 channelId = channelId,
                 channelName = channelName,
                 teamName = teamName,
-                isPrimary = isFirstChannel
+                isPrimary = isFirstChannel,
+                userCount = joinUserCount
             )
 
             // Add to monitored channels map
             _monitoredChannels.value = _monitoredChannels.value + (channelId to channelState)
 
-            // Start observing speaker changes for this channel
+            // Start observing speaker changes and channel state updates for this channel
             observeSpeakerChangesForChannel(channelId)
+            observeChannelStateUpdates(channelId)
 
             // Persist monitored channels
             settingsRepository.setMonitoredChannels(_monitoredChannels.value.keys)
@@ -340,6 +348,10 @@ class ChannelRepository @Inject constructor(
             // Cancel speaker observer for this channel
             speakerObserverJobs[channelId]?.cancel()
             speakerObserverJobs.remove(channelId)
+
+            // Cancel channel state observer for this channel
+            channelStateObserverJobs[channelId]?.cancel()
+            channelStateObserverJobs.remove(channelId)
 
             // Cancel fade job for this channel
             lastSpeakerFadeJobs[channelId]?.cancel()
@@ -409,6 +421,28 @@ class ChannelRepository @Inject constructor(
         }
     }
 
+    private fun observeChannelStateUpdates(channelId: String) {
+        channelStateObserverJobs[channelId]?.cancel()
+
+        val job = CoroutineScope(Dispatchers.IO).launch {
+            signalingClient.messages
+                .filter { it.type == SignalingType.CHANNEL_STATE }
+                .collect { message ->
+                    val data = message.data ?: return@collect
+                    val messageChannelId = data["channelId"] as? String
+                    if (messageChannelId == channelId) {
+                        val userCount = (data["userCount"] as? Number)?.toInt()
+                        if (userCount != null) {
+                            updateChannelState(channelId) { state ->
+                                state.copy(userCount = userCount)
+                            }
+                        }
+                    }
+                }
+        }
+        channelStateObserverJobs[channelId] = job
+    }
+
     private fun observeSpeakerChangesForChannel(channelId: String) {
         // Cancel any existing observer for this channel
         speakerObserverJobs[channelId]?.cancel()
@@ -422,7 +456,7 @@ class ChannelRepository @Inject constructor(
 
                     // Extract data from broadcast
                     val messageChannelId = data["channelId"] as? String
-                    val speakerUserId = data["speakerUserId"] as? String
+                    val speakerUserId = data["currentSpeaker"] as? String
                     val speakerName = data["speakerName"] as? String
                     val producerId = data["producerId"] as? String
 
@@ -710,6 +744,10 @@ class ChannelRepository @Inject constructor(
         // Cancel all speaker observer jobs
         speakerObserverJobs.values.forEach { it.cancel() }
         speakerObserverJobs.clear()
+
+        // Cancel all channel state observer jobs
+        channelStateObserverJobs.values.forEach { it.cancel() }
+        channelStateObserverJobs.clear()
 
         // Cancel all fade jobs
         lastSpeakerFadeJobs.values.forEach { it.cancel() }

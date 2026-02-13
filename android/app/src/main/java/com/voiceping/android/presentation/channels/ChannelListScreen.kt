@@ -311,6 +311,7 @@ fun ChannelListScreen(
                                 currentSpeaker = channelState?.currentSpeaker,
                                 lastSpeaker = channelState?.lastSpeaker,
                                 lastSpeakerVisible = channelState?.lastSpeaker != null,
+                                monitoredUserCount = channelState?.userCount,
                                 onToggle = { viewModel.toggleChannel(channel) },
                                 onLongPress = {
                                     if (channelState != null) {

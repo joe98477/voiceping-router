@@ -223,10 +223,14 @@ export class SignalingHandlers {
         },
       });
 
+      // Get updated user count after join
+      const updatedUserCount = await this.sessionStore.getChannelUserCount(channelId);
+
       // Send response to requesting client
       this.sendResponse(ctx, message.id, {
         channelId,
         state: currentState,
+        userCount: updatedUserCount,
       });
 
       // Notify other channel members
@@ -237,6 +241,7 @@ export class SignalingHandlers {
           action: 'user-joined',
           userId: ctx.userId,
           userName: ctx.userName,
+          userCount: updatedUserCount,
         }),
         ctx.userId
       );
@@ -295,6 +300,7 @@ export class SignalingHandlers {
 
       // Notify other channel members
       const updatedState = await this.channelStateManager.getChannelState(channelId);
+      const leaveUserCount = await this.sessionStore.getChannelUserCount(channelId);
       this.broadcastToChannel(
         channelId,
         createMessage(SignalingType.CHANNEL_STATE, {
@@ -302,6 +308,7 @@ export class SignalingHandlers {
           action: 'user-left',
           userId: ctx.userId,
           userName: ctx.userName,
+          userCount: leaveUserCount,
         }),
         ctx.userId
       );
