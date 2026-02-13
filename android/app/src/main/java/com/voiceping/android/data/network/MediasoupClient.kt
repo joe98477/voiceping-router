@@ -6,12 +6,17 @@ import com.google.gson.Gson
 import com.voiceping.android.data.audio.AudioRouter
 import com.voiceping.android.data.network.dto.SignalingType
 import dagger.hilt.android.qualifiers.ApplicationContext
+import io.github.crow_misia.mediasoup.Consumer
 import io.github.crow_misia.mediasoup.Device
+import io.github.crow_misia.mediasoup.RecvTransport
+import io.github.crow_misia.mediasoup.Transport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import org.webrtc.AudioTrack
 import org.webrtc.PeerConnectionFactory
 import org.webrtc.audio.JavaAudioDeviceModule
 import javax.inject.Inject
@@ -46,9 +51,9 @@ class MediasoupClient @Inject constructor(
     private lateinit var device: Device
 
     // Transport and producer/consumer placeholders (typed in Phase 12/13)
-    private var recvTransport: Any? = null
+    private val recvTransports = mutableMapOf<String, RecvTransport>()
     private var sendTransport: Any? = null
-    private val consumers = mutableMapOf<String, Any>()
+    private val consumers = mutableMapOf<String, Consumer>()
     private var audioProducer: Any? = null
     private val gson = Gson()
 
@@ -215,34 +220,37 @@ class MediasoupClient @Inject constructor(
             Log.d(TAG, "Transport parameters received: id=$transportId")
 
             // Step 2 & 3: Create RecvTransport with listener
-            // TODO: Integrate actual libmediasoup-android library
-            // recvTransport = device?.createRecvTransport(
-            //     listener = object : RecvTransport.Listener {
-            //         override fun onConnect(transport: Transport, dtlsParameters: String): String {
-            //             runBlocking {
-            //                 signalingClient.request(
-            //                     SignalingType.CONNECT_TRANSPORT,
-            //                     mapOf(
-            //                         "transportId" to transportId,
-            //                         "dtlsParameters" to dtlsParameters
-            //                     )
-            //                 )
-            //             }
-            //             return ""
-            //         }
-            //
-            //         override fun onConnectionStateChange(
-            //             transport: Transport,
-            //             connectionState: TransportState
-            //         ) {
-            //             Log.d(TAG, "Transport state: $connectionState")
-            //         }
-            //     },
-            //     id = transportId,
-            //     iceParameters = iceParameters,
-            //     iceCandidates = iceCandidates,
-            //     dtlsParameters = dtlsParameters
-            // )
+            val transport = device.createRecvTransport(
+                listener = object : RecvTransport.Listener {
+                    override fun onConnect(transport: Transport, dtlsParameters: String) {
+                        Log.d(TAG, "RecvTransport onConnect: $transportId")
+                        runBlocking {
+                            signalingClient.request(
+                                SignalingType.CONNECT_TRANSPORT,
+                                mapOf(
+                                    "transportId" to transportId,
+                                    "dtlsParameters" to dtlsParameters
+                                )
+                            )
+                        }
+                    }
+
+                    override fun onConnectionStateChange(
+                        transport: Transport,
+                        newState: String
+                    ) {
+                        Log.d(TAG, "RecvTransport state: $newState (channel: $channelId)")
+                        if (newState == "failed" || newState == "disconnected") {
+                            recvTransports.remove(channelId)
+                        }
+                    }
+                },
+                id = transportId,
+                iceParameters = iceParameters,
+                iceCandidates = iceCandidates,
+                dtlsParameters = dtlsParameters
+            )
+            recvTransports[channelId] = transport
 
             Log.d(TAG, "Receive transport created successfully")
 
@@ -525,10 +533,7 @@ class MediasoupClient @Inject constructor(
         audioProducer = null
 
         // Step 2: Close all consumers
-        consumers.values.forEach {
-            // TODO: Integrate actual libmediasoup-android library
-            // (it as Consumer).close()
-        }
+        consumers.values.forEach { it.close() }
         consumers.clear()
 
         // Step 3: Close send transport
@@ -538,12 +543,9 @@ class MediasoupClient @Inject constructor(
         }
         sendTransport = null
 
-        // Step 4: Close recv transport
-        recvTransport?.let {
-            // TODO: Integrate actual libmediasoup-android library
-            // (it as RecvTransport).close()
-        }
-        recvTransport = null
+        // Step 4: Close all recv transports
+        recvTransports.values.forEach { it.close() }
+        recvTransports.clear()
 
         // Step 5: DO NOT dispose device (shared across channels)
         // Device persists for lifetime of MediasoupClient singleton
