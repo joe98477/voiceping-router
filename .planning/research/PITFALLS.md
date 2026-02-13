@@ -1,646 +1,877 @@
-# Pitfalls Research: Android PTT Client
+# Domain Pitfalls: mediasoup-android Integration
 
-**Domain:** Android native PTT app with WebRTC/mediasoup
-**Researched:** 2026-02-08
-**Confidence:** HIGH (WebRTC/Android ecosystem well-documented)
-
-## Executive Summary
-
-Building an Android PTT client for an existing mediasoup server presents specific integration challenges beyond standard WebRTC apps. The most critical pitfalls involve: (1) mediasoup-client native library compilation/ABI issues, (2) OEM battery optimization killing foreground services, (3) Bluetooth SCO audio routing race conditions, (4) WebRTC native object memory leaks, and (5) multi-channel audio mixing thread contention. OEM-specific battery killers (Xiaomi, Samsung, Huawei) are the largest deployment risk — even properly configured foreground services get killed without user whitelist configuration.
-
----
+**Domain:** Real-time WebRTC audio communication (PTT) on Android
+**Context:** Adding libmediasoup-android to existing app with custom AudioManager controls
+**Researched:** 2026-02-13
 
 ## Critical Pitfalls
 
-### 1. mediasoup-client Native Build Fragmentation
+These mistakes cause app crashes, audio failures, or require complete rewrites.
 
-**What goes wrong:** mediasoup-client does not have official Android native support. Third-party wrappers like `haiyangwu/mediasoup-client-android` exist but have known crashes (arm64-v8a on Android 10+), are unmaintained, or lack ABI coverage. JNI/NDK linking errors, missing ABIs (x86, armeabi-v7a), and version mismatches between libwebrtc and libmediasoupclient cause build failures or runtime crashes.
+### Pitfall 1: Dual AudioManager Control (WebRTC vs Application)
 
-**Why it happens:** mediasoup maintains official JavaScript (browser/Node.js) client only. Community Android ports wrap C++ `libmediasoupclient` with JNI, but require NDK expertise to maintain. WebRTC ABI support and NDK versions change frequently, breaking builds. Crashes on `PeerConnection.SetRemoteDescription()` have been reported on specific Android versions/ABIs.
+**What goes wrong:**
+WebRTC's `PeerConnectionFactory` internally manages `AudioManager` (sets MODE_IN_COMMUNICATION, controls hardware echo cancellation, manages AudioRecord/AudioTrack). Your existing `AudioRouter` also controls `AudioManager` (sets MODE_IN_COMMUNICATION, manages speakerphone, Bluetooth SCO). When both systems try to control audio simultaneously, you get:
+- AUDIO_RECORD_START_STATE_MISMATCH errors
+- Recording failures: "Can only have one active PC/ADM in WebRTC on Android"
+- Echo issues when hardware AEC is disabled/enabled by conflicting settings
+- Speakerphone routing ignored or fighting between WebRTC and app code
+
+**Why it happens:**
+WebRTC creates `JavaAudioDeviceModule` which wraps `android.media.AudioRecord` and `android.media.AudioTrack`. This ADM automatically sets MODE_IN_COMMUNICATION when starting. If your `AudioRouter.requestAudioFocus()` or `setEarpieceMode()` also sets MODE_IN_COMMUNICATION, you have two systems fighting for the same AudioManager state.
 
 **Consequences:**
-- App crashes on specific devices (Samsung Galaxy S20 on arm64, etc.)
-- Failed builds when upgrading NDK or WebRTC dependencies
-- Client can't connect to mediasoup server despite server working perfectly
-- Debug time measured in days due to native stack traces
+- Microphone access fails (only one AudioRecord allowed)
+- Audio routing becomes unpredictable
+- Bluetooth SCO conflicts between WebRTC's internal management and your `AudioRouter.setBluetoothMode()`
+- Silent failures where audio appears to work but is routed incorrectly
 
 **Prevention:**
-- **Phase 1 (tech spike):** Evaluate ALL available Android mediasoup wrappers BEFORE committing:
-  - `haiyangwu/mediasoup-client-android` (most popular, ~600 stars, last update?)
-  - `crow-misia/libmediasoup-android` (Maven Central, actively maintained?)
-  - Build sample app and test on physical devices (arm64-v8a minimum)
-- **Acceptance criteria for wrapper:** Successful build + connection to your existing server + tested on 3+ physical devices (different OEMs, Android 10-14)
-- **Fallback plan:** If no stable wrapper exists, consider mediasoup-client via WebView hybrid approach for MVP (delay native rewrite to post-MVP)
-- **ABI coverage:** Ensure wrapper supports arm64-v8a (primary) and armeabi-v7a (legacy devices)
-- **Version pinning:** Pin NDK version, libwebrtc version, and mediasoup-client-android version together — do NOT upgrade independently
+
+**Option A: Let WebRTC own AudioManager (RECOMMENDED)**
+1. **Remove AudioRouter's MODE_IN_COMMUNICATION management** - WebRTC's PeerConnectionFactory will handle this
+2. **Keep AudioRouter for routing only** - Use it to set speakerphone/Bluetooth routing AFTER WebRTC initializes
+3. **Use AudioDeviceModule builder for configuration**:
+```kotlin
+val audioDeviceModule = JavaAudioDeviceModule.builder(context)
+    .setUseHardwareAcousticEchoCanceler(true)
+    .setUseHardwareNoiseSuppressor(true)
+    .setAudioRecordErrorCallback(object : JavaAudioDeviceModule.AudioRecordErrorCallback {
+        override fun onWebRtcAudioRecordInitError(errorMessage: String) {
+            Log.e(TAG, "AudioRecord init error: $errorMessage")
+        }
+        override fun onWebRtcAudioRecordStartError(
+            errorCode: JavaAudioDeviceModule.AudioRecordStartErrorCode,
+            errorMessage: String
+        ) {
+            Log.e(TAG, "AudioRecord start error: $errorCode - $errorMessage")
+        }
+        override fun onWebRtcAudioRecordError(errorMessage: String) {
+            Log.e(TAG, "AudioRecord error: $errorMessage")
+        }
+    })
+    .setAudioTrackErrorCallback(object : JavaAudioDeviceModule.AudioTrackErrorCallback {
+        override fun onWebRtcAudioTrackInitError(errorMessage: String) {
+            Log.e(TAG, "AudioTrack init error: $errorMessage")
+        }
+        override fun onWebRtcAudioTrackStartError(
+            errorCode: JavaAudioDeviceModule.AudioTrackStartErrorCode,
+            errorMessage: String
+        ) {
+            Log.e(TAG, "AudioTrack start error: $errorCode - $errorMessage")
+        }
+        override fun onWebRtcAudioTrackError(errorMessage: String) {
+            Log.e(TAG, "AudioTrack error: $errorMessage")
+        }
+    })
+    .createAudioDeviceModule()
+
+val peerConnectionFactory = PeerConnectionFactory.builder()
+    .setAudioDeviceModule(audioDeviceModule)
+    .createPeerConnectionFactory()
+```
+
+4. **Coordinate wake lock management** - WebRTC sets wake locks during audio playout. Your `ChannelMonitoringService` wake lock should be for service lifecycle, not audio.
+
+**Option B: Disable WebRTC's internal audio management**
+- Create custom AudioDeviceModule that doesn't touch AudioManager
+- Let your AudioRouter fully control AudioManager
+- More complex, requires deep WebRTC knowledge
 
 **Detection:**
-- Build failure: `undefined reference to 'mediasoup::...'` or JNI linking errors
-- Runtime crash: `java.lang.UnsatisfiedLinkError: dlopen failed: cannot locate symbol`
-- Device-specific crash: Works on emulator, crashes on Samsung Galaxy S21 (arm64-v8a)
+- Log messages: "AUDIO_RECORD_START_STATE_MISMATCH"
+- AudioRecord.startRecording() throws IllegalStateException
+- Speakerphone state flips unexpectedly during calls
+- Bluetooth SCO starts/stops erratically
+
+**Which phase addresses this:**
+Phase 1 (WebRTC Integration Setup) - Must design AudioManager ownership upfront. Refactor AudioRouter to delegate MODE_IN_COMMUNICATION to WebRTC.
 
 **Sources:**
-- [mediasoup Android/iOS native client support discussion](https://mediasoup.discourse.group/t/android-ios-native-client-support/4298)
-- [haiyangwu/mediasoup-client-android GitHub](https://github.com/haiyangwu/mediasoup-client-android)
-- [mediasoup-client-android crash on SetRemoteDescription](https://github.com/haiyangwu/mediasoup-client-android/issues/17)
+- [WebRTC AudioManager conflicts (Google Groups)](https://groups.google.com/g/discuss-webrtc/c/Pqag6R7QV2c)
+- [Multiple AudioDeviceModule issue (Chromium bugs)](https://bugs.chromium.org/p/webrtc/issues/detail?id=2498)
+- [AudioDeviceModule API guidance](https://github.com/maitrungduc1410/webrtc/blob/master/modules/audio_device/g3doc/audio_device_module.md)
 
 ---
 
-### 2. OEM Battery Optimization Kills Foreground Services
+### Pitfall 2: Native Callbacks on Wrong Thread (JNI Threading)
 
-**What goes wrong:** Despite implementing a proper foreground service with ongoing notification, OEM battery optimization (Xiaomi MIUI, Samsung "Put Apps to Sleep", Huawei PowerGenie) kills the app after 5-10 minutes with screen off. User expects pocket radio behavior but discovers the app stopped running and missed critical PTT messages. Foreground service notification disappears, WebSocket disconnects, audio stops.
+**What goes wrong:**
+mediasoup-android uses JNI to bridge C++ libmediasoupclient to Kotlin. Native callbacks (Transport.Listener, Producer.Listener, Consumer.Listener) are invoked from native threads, NOT the main/UI thread. If you:
+- Update UI directly from callbacks → crashes with "Only the original thread that created a view hierarchy can touch its views"
+- Access Kotlin coroutines without proper dispatcher → race conditions
+- Hold references to Activity/Fragment in listeners → memory leaks (JNI global refs not released)
 
-**Why it happens:** Android's standard Doze mode exempts foreground services. BUT OEMs add aggressive battery savers (Xiaomi "Battery Saver", Samsung "Sleeping Apps", Huawei "App Launch Manager") that kill apps regardless of foreground service status. These OEM layers operate ABOVE Android's Doze mode and ignore standard exemptions. MIUI is notorious: "background processing simply does not work right" in default settings even with proper foreground services.
+**Why it happens:**
+JNI threads don't have a Looper and can't interact with Android UI. The native code calls Java methods via `AttachCurrentThread()`, executes the callback, then may `DetachCurrentThread()`. Your Kotlin code runs in this native thread context.
 
 **Consequences:**
-- App stops responding to PTT after 5-10 minutes with screen off
-- User thinks radio is working but misses emergency broadcasts
-- Trust erosion — field workers abandon app after missing critical communication
-- Support burden — "why isn't the app working?" when settings are device-specific
+- UI updates crash: `CalledFromWrongThreadException`
+- Race conditions accessing shared state (e.g., `_pttState.value` in PttManager)
+- Memory leaks if you store global refs to contexts/activities in listener lambdas
+- Deadlocks if callback tries to acquire locks held by main thread
 
 **Prevention:**
-- **Phase 1 (architecture):** Foreground service with `FOREGROUND_SERVICE_MEDIA_PLAYBACK` permission (API 34+)
-- **Phase 1 (UI):** Implement OEM-specific battery optimization detection and in-app whitelist instructions:
-  - Detect Xiaomi/MIUI: Check `android.os.Build.MANUFACTURER == "Xiaomi"` or `Build.getRadioVersion().contains("MIUI")`
-  - Detect Samsung: Check for "Put Apps to Sleep" feature (API level check)
-  - Detect Huawei: Check for "App Launch Manager" (EMUI/HarmonyOS)
-  - Show device-specific setup wizard on first launch: "To use VoicePing as a pocket radio, disable battery optimization: [screenshots/steps]"
-- **Phase 2 (resilience):** Implement battery optimization permission request flow:
-  - Request `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` permission
-  - Prompt user: "VoicePing needs to stay awake for PTT. Allow?"
-  - Link to device-specific settings: Settings → Battery → App Launch (Huawei), Settings → Battery → Background Usage Limits → Sleeping Apps (Samsung)
-- **Phase 2 (monitoring):** Detect unexpected service death and show prominent "Service stopped — check battery settings" notification on next app open
-- **Documentation:** Include OEM-specific setup guide in onboarding and support docs
+
+1. **Never access UI from listeners**:
+```kotlin
+// BAD
+transport.on("connect") { callback ->
+    // This runs on native thread!
+    textView.text = "Connected" // CRASHES
+}
+
+// GOOD
+transport.on("connect") { callback ->
+    scope.launch(Dispatchers.Main) {
+        textView.text = "Connected"
+    }
+}
+```
+
+2. **Use appropriate coroutine dispatchers**:
+```kotlin
+class MediasoupManager {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private val sendTransportListener = object : SendTransport.Listener {
+        override fun onConnect(transport: Transport, dtlsParameters: String) {
+            // Native thread - dispatch immediately to IO for network calls
+            scope.launch(Dispatchers.IO) {
+                val response = signalingClient.request(
+                    SignalingType.CONNECT_SEND_TRANSPORT,
+                    mapOf("dtlsParameters" to dtlsParameters)
+                )
+                // Callback must be called on same thread as listener
+                if (response.error == null) {
+                    callback.onSuccess()
+                } else {
+                    callback.onFailure(response.error)
+                }
+            }
+        }
+
+        override fun onProduce(
+            transport: Transport,
+            kind: String,
+            rtpParameters: String,
+            appData: String,
+            callback: SendTransport.ProduceCallback
+        ) {
+            scope.launch(Dispatchers.IO) {
+                val response = signalingClient.request(
+                    SignalingType.PRODUCE,
+                    mapOf("kind" to kind, "rtpParameters" to rtpParameters)
+                )
+                val producerId = response.data?.get("id") as? String
+                if (producerId != null) {
+                    callback.onSuccess(producerId)
+                } else {
+                    callback.onFailure(response.error ?: "No producer ID")
+                }
+            }
+        }
+    }
+}
+```
+
+3. **Avoid storing Activity/Fragment refs in listeners**:
+```kotlin
+// BAD - leaks activity
+class MyActivity : AppCompatActivity() {
+    private val listener = object : Consumer.Listener {
+        override fun onTransportClose(consumer: Consumer) {
+            this@MyActivity.finish() // LEAKS via JNI global ref
+        }
+    }
+}
+
+// GOOD - use weak ref or lifecycle-aware component
+class MediasoupRepository @Inject constructor() {
+    private val listeners = mutableListOf<WeakReference<TransportListener>>()
+}
+```
+
+4. **JNIEnv is thread-local - don't share across threads**:
+- Each native callback gets its own JNIEnv
+- Don't cache JNIEnv pointers
+- If spawning threads from JNI, attach them with AttachCurrentThread
 
 **Detection:**
-- Service stops after 5-10 minutes screen-off on Xiaomi/Samsung/Huawei devices
-- Logcat shows service killed without `onDestroy()` callback
-- `adb shell dumpsys battery` shows app in restricted bucket
-- User reports: "App worked for 5 minutes then stopped"
+- Crashes: `android.view.ViewRootImpl$CalledFromWrongThreadException`
+- Log messages about thread violations
+- Memory leaks detected by LeakCanary showing JNI global refs to Activities
+- Intermittent race conditions that don't reproduce consistently
 
-**OEM-Specific Mitigation:**
-- **Xiaomi/MIUI:** Autostart permission + Battery Optimization disabled + App Pinning (lock in recent apps) + avoid Ultra Battery Saver
-- **Samsung:** Remove from "Sleeping Apps" list, disable "Put unused apps to sleep"
-- **Huawei:** App Launch Manager → Disable "Manage automatically" → Enable "Run in background"
+**Which phase addresses this:**
+Phase 1 (WebRTC Integration Setup) - Establish threading patterns for all listeners upfront.
 
 **Sources:**
-- [Don't kill my app! - Xiaomi](https://dontkillmyapp.com/xiaomi)
-- [Don't kill my app! - Samsung](https://dontkillmyapp.com/samsung)
-- [Don't kill my app! - Huawei](https://dontkillmyapp.com/huawei)
-- [Android Doze mode optimization](https://developer.android.com/training/monitoring-device-state/doze-standby)
+- [JNI threading tips (Android NDK)](https://developer.android.com/training/articles/perf-jni)
+- [JNI multithreading guide](https://clintpaul.medium.com/jni-on-android-how-callbacks-work-c350bf08157f)
+- [mediasoup Transport listener docs](https://mediasoup.discourse.group/t/transport-on-connect-not-triggring-the-event/4497)
 
 ---
 
-### 3. Bluetooth SCO Audio Routing Race Conditions
+### Pitfall 3: Incomplete Cleanup Causes Memory Leaks
 
-**What goes wrong:** User presses Bluetooth headset PTT button but audio routes to phone speaker or earpiece instead of headset. Or audio starts on headset, then switches mid-transmission to phone speaker. Or Bluetooth SCO connection takes 2-3 seconds to establish, cutting off first words of PTT transmission. User releases PTT button, audio stays stuck on Bluetooth when they expected speaker playback.
+**What goes wrong:**
+mediasoup objects (Device, Transport, Producer, Consumer) hold native memory via JNI. If you don't explicitly close/dispose them in correct order, you leak:
+- ~30MB per unclosed transport/producer/consumer (iOS reports, likely similar on Android)
+- Native WebRTC threads keep running
+- AudioRecord/AudioTrack remain active → microphone stays captured
+- Event listeners accumulate → multiple callbacks fire for same event
 
-**Why it happens:** Bluetooth SCO (Synchronous Connection-Oriented) audio is a separate audio channel requiring explicit start/stop via `AudioManager.startBluetoothSco()`. This operation is ASYNCHRONOUS and takes 500ms-2s to establish. If you attempt to play audio before SCO is ready, Android routes to default output (earpiece/speaker). WebRTC's audio routing is managed internally and doesn't always wait for SCO establishment. Additionally, SCO sampling rate is restricted to 16kHz or 8kHz — your server uses 48kHz Opus, requiring resampling.
-
-**Timing issues:**
-- User presses PTT → app starts SCO → app starts WebRTC transmission BEFORE SCO ready → audio routes to speaker
-- User releases PTT → SCO stays active → next incoming PTT plays on Bluetooth when user expected speaker
-- Device switches between WiFi/cellular → Bluetooth disconnects/reconnects → audio routing changes mid-call
-
-**Device-specific issues:**
-- OnePlus devices: `setAudioRoute()` to Bluetooth doesn't work reliably
-- Android 14+: More restrictive Bluetooth permissions (BLUETOOTH_CONNECT runtime permission)
+**Why it happens:**
+Java GC doesn't know about native memory. Even if Kotlin object is garbage collected, the underlying C++ object persists until you call `.close()`. mediasoup has strict lifecycle rules: must close consumers before transport, producers before transport, transport before device.
 
 **Consequences:**
-- First 1-2 seconds of PTT transmission cut off (user says "Team 3, we need—" but "Team 3" doesn't transmit)
-- Audio plays through phone speaker in noisy environment, can't hear dispatch
-- User thinks PTT failed because they didn't hear audio feedback through expected device
-- Confusing audio routing behavior erodes trust in app reliability
+- Out of memory crashes after repeated connect/disconnect cycles
+- Microphone remains captured preventing other apps from using it
+- Battery drain from zombie threads
+- Multiple event handlers fire → duplicate audio playback
 
 **Prevention:**
-- **Phase 2 (Bluetooth integration):** Implement proper SCO lifecycle:
-  - Register `AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED` broadcast receiver
-  - When user presses PTT on Bluetooth button: start SCO, WAIT for `SCO_AUDIO_STATE_CONNECTED`, THEN start WebRTC transmission
-  - Add 200ms pre-roll time before transmitting audio (visual countdown "Connecting to headset...")
-  - When user releases PTT: optionally stop SCO (or keep alive for 5s for quick re-transmission)
-- **Phase 2 (audio routing):** Maintain explicit audio routing state machine:
-  - Track current output device (SPEAKER, EARPIECE, WIRED_HEADSET, BLUETOOTH)
-  - On Bluetooth connect: set mode to `MODE_IN_COMMUNICATION`, route to Bluetooth
-  - On Bluetooth disconnect: fallback to wired headset if present, else speaker
-  - Provide manual audio output selector in UI for testing/override
-- **Phase 3 (advanced):** Pre-start SCO when Bluetooth headset connects (keep SCO alive for duration of session for zero latency)
-- **Testing:** Test with physical Bluetooth headsets from multiple manufacturers (Plantronics, Jabra, cheap AliExpress PTT headsets)
+
+1. **Follow cleanup hierarchy**:
+```kotlin
+// Cleanup order: Consumers → Producers → Transports → Device
+
+// Step 1: Close all consumers
+recvTransport?.consumers?.forEach { consumer ->
+    consumer.close()
+}
+
+// Step 2: Close all producers
+sendTransport?.producer?.close()
+
+// Step 3: Close transports
+recvTransport?.close()
+sendTransport?.close()
+
+// Step 4: ONLY if completely done with mediasoup
+device?.dispose() // Rare - usually keep device for reconnects
+```
+
+2. **Listen for transportclose events**:
+```kotlin
+val consumerListener = object : Consumer.Listener {
+    override fun onTransportClose(consumer: Consumer) {
+        // Transport closed → consumer auto-closed
+        // Remove from collection, don't call close() again
+        consumers.remove(consumer.id)
+    }
+}
+```
+
+3. **Use try-finally for cleanup**:
+```kotlin
+suspend fun disconnect() {
+    try {
+        // Stop producing first (stops audio capture)
+        producer?.close()
+        producer = null
+
+        // Then close transport
+        sendTransport?.close()
+        sendTransport = null
+    } catch (e: Exception) {
+        Log.e(TAG, "Error during cleanup", e)
+    } finally {
+        // Even if close() throws, ensure state is reset
+        isConnected = false
+    }
+}
+```
+
+4. **Track object lifecycle in collections**:
+```kotlin
+class MediasoupClient {
+    private val consumers = ConcurrentHashMap<String, Consumer>()
+
+    fun addConsumer(consumer: Consumer) {
+        consumers[consumer.id] = consumer
+        consumer.on("transportclose") {
+            consumers.remove(consumer.id)
+        }
+    }
+
+    suspend fun cleanup() {
+        consumers.values.forEach { it.close() }
+        consumers.clear()
+    }
+}
+```
+
+5. **Don't rely on finalize() or GC**:
+```kotlin
+// BAD - GC timing is unpredictable
+class TransportWrapper(private val transport: Transport) {
+    protected fun finalize() {
+        transport.close() // May never be called!
+    }
+}
+
+// GOOD - explicit lifecycle
+class TransportWrapper(private val transport: Transport) : Closeable {
+    override fun close() {
+        transport.close()
+    }
+}
+```
 
 **Detection:**
-- Audio routing logs show `setAudioRoute(BLUETOOTH)` but actual route is `SPEAKER`
-- Logcat shows `SCO_AUDIO_STATE_CONNECTING` but transmission starts before `SCO_AUDIO_STATE_CONNECTED`
-- User reports: "First word of my message is cut off when using Bluetooth"
+- Memory profiler shows native heap growing on repeated connect/disconnect
+- LeakCanary reports Transport/Producer/Consumer leaks
+- Microphone stays active after leaving channel (notification LED on)
+- Log messages about multiple listener invocations
+
+**Which phase addresses this:**
+Phase 2 (Transport Lifecycle Management) - Design cleanup sequences for reconnection, disconnection, and error recovery.
 
 **Sources:**
-- [Android Bluetooth SCO audio routing issues (react-native-webrtc)](https://deepwiki.com/react-native-webrtc/react-native-incall-manager/7.2-bluetooth-sco-audio)
-- [Signal Android Bluetooth headset microphone issue](https://github.com/signalapp/Signal-Android/issues/6184)
-- [flutter-webrtc audio routing issue](https://github.com/flutter-webrtc/flutter-webrtc/issues/811)
+- [mediasoup garbage collection docs](https://mediasoup.org/documentation/v3/mediasoup/garbage-collection/)
+- [mediasoup iOS memory leak report (30MB)](https://github.com/ethand91/mediasoup-ios-client/issues/55)
+- [Transport/Consumer close events](https://mediasoup.discourse.group/t/observer-events-and-know-if-producers-or-consumers-closed-abruptly/2916)
 
 ---
 
-### 4. WebRTC Native Object Memory Leaks
+### Pitfall 4: AGP 9.0 Breaks NDK in Library Modules
 
-**What goes wrong:** After 30-60 minutes of use (multiple channel joins/leaves, network reconnections), app memory usage climbs from 80MB to 300MB+ and eventually crashes with `OutOfMemoryError`. Or app crashes on second channel join with `IllegalStateException: MediaStreamTrack has been disposed`. Native heap shows thousands of undisposed `PeerConnection`, `MediaStream`, `MediaStreamTrack` objects.
+**What goes wrong:**
+Android Gradle Plugin 9.0 **disallows NDK execution in library modules**. If you structure your project with mediasoup code in a separate `:mediasoup` library module, build fails with: "NDK execution in library modules and C++ code execution and JNI will not be supported at all since AGP 9.0".
 
-**Why it happens:** WebRTC native objects (PeerConnection, MediaStream, MediaStreamTrack, VideoTrack, AudioTrack) are backed by C++ objects managed through JNI. Java garbage collector does NOT automatically free these native objects — you must explicitly call `.dispose()` on each. If you:
-- Create PeerConnection and forget to call `.close()` + `.dispose()` on disconnect
-- Remove MediaStream from PeerConnection without calling `.dispose()` on the stream
-- Dispose PeerConnection before disposing individual MediaStreamTrack objects (wrong order)
-- Re-connect after network drop without cleaning up previous PeerConnection
+libmediasoup-android is a native library (C++ with JNI). If integrated incorrectly, builds break on AGP 9.0+.
 
-...then native memory leaks accumulate until OOM crash.
-
-**Multi-channel context:** VoicePing monitors up to 5 channels simultaneously = 5 PeerConnections + 5+ MediaStreams. Each reconnection creates new objects. After 10 reconnects across 5 channels = 50+ leaked PeerConnections if not disposed properly.
+**Why it happens:**
+AGP 9.0 policy: native code (CMake, ndk-build) must live in application module, not library modules. This breaks multi-module architectures where you isolate WebRTC/mediasoup in separate module.
 
 **Consequences:**
-- App crashes after 30-60 minutes of normal use
-- Memory pressure triggers Android low-memory killer, app gets killed in background
-- Difficult to debug — leak is in native heap, not visible in Java heap profiler
-- User reports: "App worked fine for an hour then crashed"
+- Build fails on AGP 9.0+ if mediasoup code in library module
+- Forced to move all mediasoup code to `:app` module → loss of modularity
+- CI/CD breaks if you upgrade AGP without restructuring
 
 **Prevention:**
-- **Phase 1 (architecture):** Implement strict lifecycle management for WebRTC objects:
-  - Track all PeerConnections in map: `channelId -> PeerConnection`
-  - On disconnect/channel leave: call in order:
-    1. `peerConnection.close()`
-    2. For each `MediaStream`: `stream.dispose()`
-    3. For each `MediaStreamTrack`: `track.dispose()`
-    4. `peerConnection.dispose()`
-    5. Remove from tracking map
-  - NEVER reuse disposed objects — create fresh instances on reconnect
-- **Phase 2 (reconnection):** On network drop, ensure old PeerConnection is fully disposed BEFORE creating new one
-- **Phase 3 (monitoring):** Add memory leak detection in debug builds:
-  - Track count of created vs disposed PeerConnections
-  - Log warning if count > number of active channels
-  - Use LeakCanary library to detect native leaks
-- **Testing:** Run app for 2+ hours with repeated channel joins/leaves and network disconnections, monitor memory usage with Android Profiler
+
+1. **Keep mediasoup in application module from day one**:
+```
+android/
+  app/
+    src/main/java/com/voiceping/android/
+      data/
+        network/
+          MediasoupClient.kt  ← Here, not in separate module
+```
+
+2. **If you need modularity, use pure Kotlin wrapper**:
+```
+android/
+  mediasoup-wrapper/  ← Pure Kotlin/Java library module (no NDK)
+    src/main/java/
+      MediasoupRepository.kt
+  app/  ← Contains actual mediasoup-android dependency
+    build.gradle.kts:
+      dependencies {
+        implementation("io.github.crow-misia.libmediasoup-android:libmediasoup-android:0.21.0")
+        implementation(project(":mediasoup-wrapper"))
+      }
+```
+
+3. **Verify AGP compatibility**:
+```kotlin
+// android/gradle/libs.versions.toml
+[versions]
+agp = "9.0.0"  # Confirm compatible with libmediasoup-android
+
+// Check libmediasoup-android release notes for AGP compatibility
+```
+
+4. **NDK version compatibility**:
+- NDK r26: No 16KB page size support
+- NDK r27: Supports flexible page sizes (required for some newer devices)
+- Ensure libmediasoup-android built with compatible NDK version
 
 **Detection:**
-- Native heap size grows continuously (Android Studio Profiler → Memory → Native)
-- Crash log: `java.lang.OutOfMemoryError: Failed to allocate...`
-- Crash on second channel join: `IllegalStateException: MediaStreamTrack has been disposed`
-- Logcat shows `PeerConnection.dispose() not called` warnings
+- Build error: "NDK execution in library modules... not supported"
+- Gradle sync fails after AGP upgrade to 9.0+
+
+**Which phase addresses this:**
+Phase 0 (Pre-Integration Planning) - Architecture decisions before writing code.
 
 **Sources:**
-- [WebRTC Android MediaStream memory leak fix](https://codereview.webrtc.org/1308733004)
-- [Android dispose MediaStream fails (Chromium bug)](https://bugs.chromium.org/p/webrtc/issues/detail?id=5128)
-- [flutter-webrtc local stream disposing issue](https://github.com/flutter-webrtc/flutter-webrtc/issues/106)
-- [Best practices for closing WebRTC PeerConnections](https://medium.com/@BeingOttoman/best-practices-for-closing-webrtc-peerconnections-b60616b1352)
+- [AGP 9.0 migration guide (NDK restrictions)](https://nek12.dev/blog/en/agp-9-0-migration-guide-android-gradle-plugin-9-kmp-migration-kotlin)
+- [NDK r27 flexible page sizes](https://github.com/android/ndk/wiki/Changelog-r27)
 
 ---
 
-### 5. Multi-Channel Audio Mixing Thread Contention
+### Pitfall 5: Race Conditions During Reconnection
 
-**What goes wrong:** User monitors 3 channels. All 3 channels have active PTT simultaneously (overlapping speech). Audio stutters, glitches, or one channel's audio drops entirely. Or CPU usage spikes to 80%+ and device gets hot. Or audio mixing introduces 500ms+ latency (violates <300ms requirement).
+**What goes wrong:**
+Network disconnects while PTT active. Your code tries to reconnect while mediasoup is still tearing down the previous transport. You get:
+- Duplicate producers (old producer not closed, new one created)
+- Transport.connect() called on closed transport
+- State inconsistency: `PttManager` thinks transmitting, but transport is closed
 
-**Why it happens:** Android WebRTC uses `JavaAudioDeviceModule` which creates a single `AudioTrack` output for playback. When you have 5 separate PeerConnections (one per channel), each has its own audio thread delivering decoded audio buffers. These must be MIXED in software before sending to `AudioTrack`. Naive mixing approach:
-- Each PeerConnection delivers audio to separate `AudioTrack` instances → AudioTracks "take turns" if same thread (stuttering), or if separate threads, audio glitches due to contention
-- Manual mixing in callback: 5 channels × 20ms buffers = need to mix 5 buffers every 20ms in audio thread callback → if callback takes >20ms due to mixing overhead, buffer underrun occurs (glitch)
-
-**WebRTC's internal audio management:** WebRTC for mobile doesn't expose API for custom audio mixing. Default assumes single audio stream per PeerConnection.
+**Why it happens:**
+Async operations overlap: disconnect cleanup coroutine still running while reconnect coroutine starts. mediasoup operations like `producer.pause()` don't block, so calling `transport.pipeToRouter()` immediately after can read stale state.
 
 **Consequences:**
-- Audio glitches (clicks, pops, dropouts) when 2+ channels active simultaneously
-- High CPU usage (40%+ on low-end devices) due to mixing overhead
-- Increased latency (mixing adds 50-200ms processing time)
-- User reports: "Audio is garbled when multiple people talk at once"
+- Producer/consumer count grows on every reconnect → memory leak
+- "Transport already closed" exceptions
+- Audio stops working after reconnect (producer paused but consumer.producerPaused still false)
+- PTT button unresponsive after network recovery
 
 **Prevention:**
-- **Phase 2 (audio architecture):** Choose one approach:
-  - **Option A (WebRTC internal mixing):** Use single PeerConnection with multiple incoming audio tracks (1 track per channel). Let WebRTC mix internally. **ISSUE:** mediasoup creates 1 consumer per channel — requires server-side mixer or client-side track multiplexing (complex).
-  - **Option B (Custom AudioTrack mixer):** Implement custom audio mixing outside WebRTC:
-    - Disable WebRTC's audio playback (`peerConnection.setAudioEnabled(false)` or similar)
-    - Extract decoded audio buffers from each PeerConnection (requires accessing WebRTC internals — may not be exposed in Java API)
-    - Mix buffers in separate mixer thread: sum samples with clipping protection (`output = clamp(sum(inputs), -32768, 32767)`)
-    - Feed mixed buffer to single `AudioTrack`
-  - **Option C (Priority-based selective playback):** Only play ONE channel at a time (highest priority: emergency > dispatch > first-to-speak). Simpler but loses multi-channel awareness.
-- **Phase 2 (Oboe for low latency):** Use Oboe library instead of AudioTrack for output:
-  - Oboe uses AAudio (API 27+) or OpenSL ES (older) for lower latency
-  - Callback-based model better suited for real-time mixing
-  - Set `PerformanceMode::LowLatency` and `SharingMode::Exclusive`
-  - Set buffer size to 2× burst size (double buffering)
-- **Phase 3 (optimization):** Implement per-channel volume control and muting to reduce mixing overhead (muted channels skip mixing)
-- **Testing:** Test with 5 channels all transmitting simultaneously, measure CPU usage and latency with Android Profiler
+
+1. **Use state machine with atomic transitions**:
+```kotlin
+sealed class ConnectionState {
+    object Disconnected : ConnectionState()
+    object Connecting : ConnectionState()
+    object Connected : ConnectionState()
+    object Reconnecting : ConnectionState()  // Key: separate state for reconnect
+}
+
+class MediasoupClient {
+    private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
+    private val stateMutex = Mutex()
+
+    suspend fun reconnect() {
+        stateMutex.withLock {
+            // Prevent concurrent reconnects
+            if (_connectionState.value == ConnectionState.Reconnecting) {
+                Log.w(TAG, "Already reconnecting, ignoring")
+                return
+            }
+            _connectionState.value = ConnectionState.Reconnecting
+        }
+
+        // Cleanup old connection
+        cleanup()
+
+        // Wait for cleanup to complete (join on coroutines)
+        cleanupJob?.join()
+
+        // Now safe to create new transport
+        connect()
+    }
+}
+```
+
+2. **Cancel ongoing operations before reconnect**:
+```kotlin
+class PttManager {
+    private var transmissionJob: Job? = null
+
+    suspend fun handleReconnection() {
+        // Cancel ongoing transmission
+        transmissionJob?.cancelAndJoin()  // Wait for cancellation
+
+        // Force state to Idle
+        _pttState.value = PttState.Idle
+
+        // Now safe to reconnect
+        mediasoupClient.reconnect()
+    }
+}
+```
+
+3. **Wait for producer.pause/resume to complete**:
+```kotlin
+// BAD - race condition
+producer.pause()
+transport.pipeToRouter(...)  // May see stale producer.paused state
+
+// GOOD - documented pattern
+producer.pause()
+// mediasoup operations complete synchronously (blocking current thread)
+// Safe to proceed immediately after call returns
+transport.pipeToRouter(...)
+```
+
+4. **Handle transportclose events**:
+```kotlin
+val producerListener = object : Producer.Listener {
+    override fun onTransportClose(producer: Producer) {
+        // Transport closed unexpectedly (network error, server restart)
+        Log.w(TAG, "Producer's transport closed, triggering reconnect")
+
+        // Clean up immediately
+        _pttState.value = PttState.Idle
+        producer.close()  // Safe even though already closed
+
+        // Trigger reconnect
+        scope.launch {
+            delay(1000)  // Backoff before reconnect
+            reconnect()
+        }
+    }
+}
+```
+
+5. **Implement exponential backoff**:
+```kotlin
+class ReconnectionManager {
+    private var reconnectAttempts = 0
+
+    suspend fun reconnect() {
+        val delay = min(1000L * (2.0.pow(reconnectAttempts).toLong()), 30000L)
+        Log.d(TAG, "Reconnecting in ${delay}ms (attempt ${reconnectAttempts + 1})")
+
+        delay(delay)
+
+        try {
+            mediasoupClient.connect()
+            reconnectAttempts = 0  // Reset on success
+        } catch (e: Exception) {
+            reconnectAttempts++
+            if (reconnectAttempts < 5) {
+                reconnect()  // Retry
+            } else {
+                Log.e(TAG, "Max reconnect attempts reached")
+            }
+        }
+    }
+}
+```
 
 **Detection:**
-- Audio glitches when multiple channels active (clicks, pops, silence)
-- CPU usage >40% during multi-channel playback
-- Logcat shows `AudioTrack underrun` warnings
-- User reports: "Can't hear all channels clearly when multiple people talk"
+- Multiple producers/consumers for same channel in logs
+- IllegalStateException: "Transport is closed"
+- Inconsistent state: UI shows transmitting, but no audio flows
+- Memory growth during network flapping
+
+**Which phase addresses this:**
+Phase 3 (Network Resilience & Reconnection) - Design reconnection state machine with race condition guards.
 
 **Sources:**
-- [Mixing multiparty audio from multiple peer connections (discuss-webrtc)](https://groups.google.com/d/topic/discuss-webrtc/ruhDuK8N8KA)
-- [How We Built Local Audio Streaming in Android (100ms.live)](https://www.100ms.live/blog/webrtc-audio-streaming-android)
-- [Android: Mixing multiple AudioTrack instances](https://bugsdb.com/_en/debug/2670846503c9b35bd45b53b61ade90db)
-- [Android Oboe low latency audio](https://developer.android.com/games/sdk/oboe/low-latency-audio)
+- [mediasoup reconnection handling](https://mediasoup.discourse.group/t/recording-reconnection-handling/4907)
+- [Race condition example (pause/resume + pipeToRouter)](https://mediasoup.discourse.group/t/observer-events-and-know-if-producers-or-consumers-closed-abruptly/2916)
+- [Transport connection state disconnected](https://github.com/Blancduman/mediasoup-client-flutter/issues/36)
 
 ---
 
 ## Moderate Pitfalls
 
-### 6. Android API Fragmentation for Foreground Services
+These cause bugs or poor UX, but not catastrophic failures.
 
-**What goes wrong:** App builds and runs fine on Android 13 (API 33) but crashes on Android 14 (API 34) with `SecurityException: Permission Denial: startForeground requires android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK`. Or app works on API 28 but crashes on API 26 (target minimum) with missing foreground service type.
+### Pitfall 6: ProGuard/R8 Strips JNI Methods
 
-**Why it happens:** Foreground service requirements evolved significantly across Android versions:
-- **API 26-27:** `startForeground()` requires ongoing notification
-- **API 28:** `FOREGROUND_SERVICE` permission required in manifest
-- **API 31:** Foreground service type parameter introduced (optional)
-- **API 34+:** Type-specific permissions MANDATORY — must request `FOREGROUND_SERVICE_MEDIA_PLAYBACK` permission in manifest AND at runtime for media playback services
-
-This creates 3 different code paths depending on API level. Missing any causes `SecurityException` on specific Android versions.
+**What goes wrong:**
+Release build crashes with `NoSuchMethodError` or `UnsatisfiedLinkError` when calling mediasoup methods. ProGuard/R8 obfuscates/removes JNI methods because it doesn't detect they're called from native code.
 
 **Prevention:**
-- **Phase 1 (manifest):** Declare ALL required permissions and service types:
-  ```xml
-  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
-  <service android:name=".PttForegroundService"
-           android:foregroundServiceType="mediaPlayback" />
-  ```
-- **Phase 1 (runtime):** Check API level and request permissions conditionally:
-  ```kotlin
-  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) { // API 34
-      if (ContextCompat.checkSelfPermission(this, Manifest.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK)
-          != PackageManager.PERMISSION_GRANTED) {
-          // Request permission
-      }
-  }
-  ```
-- **Testing:** Test on physical devices running API 26, 28, 31, 33, 34 (emulators may not enforce fully)
+1. **Add consumer ProGuard rules** (libmediasoup-android should provide these, but verify):
+```proguard
+# Keep all mediasoup classes and JNI methods
+-keep class org.mediasoup.droid.** { *; }
+-keepclassmembers class org.mediasoup.droid.** {
+    native <methods>;
+}
+
+# Keep WebRTC classes used by mediasoup
+-keep class org.webrtc.** { *; }
+-keepclassmembers class org.webrtc.** {
+    native <methods>;
+}
+```
+
+2. **Check AAR for consumer-rules.pro**:
+```bash
+# Verify libmediasoup-android AAR includes ProGuard rules
+unzip -l libmediasoup-android-0.21.0.aar | grep proguard
+# Should see: META-INF/proguard/consumer-proguard-rules.pro
+```
+
+3. **Test release builds early**:
+```bash
+./gradlew assembleRelease
+adb install android/app/build/outputs/apk/release/app-release.apk
+# Test PTT immediately
+```
 
 **Detection:**
-- Crash on Android 14: `SecurityException: ... requires android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK`
-- Crash on Android 8: `IllegalStateException: foregroundServiceType not specified`
+- Release build crashes, debug build works
+- `NoSuchMethodError` for native methods
+- Logcat: "UnsatisfiedLinkError: No implementation found for..."
+
+**Which phase addresses this:**
+Phase 4 (Release Build Testing) - Test ProGuard configuration with actual release builds.
 
 **Sources:**
-- [Android foreground service changes (developer.android.com)](https://developer.android.com/develop/background-work/services/fgs/changes)
-- [Foreground service types (developer.android.com)](https://developer.android.com/develop/background-work/services/fgs/service-types)
+- [ProGuard consumer rules guide](https://drjansari.medium.com/mastering-proguard-in-android-multi-module-projects-agp-8-4-r8-and-consumable-rules-ae28074b6f1f)
+- [ProGuard troubleshooting (Android Developers)](https://medium.com/androiddevelopers/troubleshooting-proguard-issues-on-android-bce9de4f8a74)
 
 ---
 
-### 7. WebSocket Heartbeat Timing in Doze Mode
+### Pitfall 7: Device.load() Codec Compatibility Issues
 
-**What goes wrong:** User locks phone, device enters Doze mode after 5-10 minutes. WebSocket heartbeat fails to send every 30 seconds as expected (server closes connection after 60s of no heartbeat). User unlocks phone, discovers they've been disconnected for 10 minutes and missed PTT messages. Reconnection takes 5-10 seconds (ICE gathering, WebRTC negotiation).
-
-**Why it happens:** Doze mode suspends network access and defers alarms/timers to maintenance windows (every 15-30 minutes). Your 30-second heartbeat timer (likely `Handler.postDelayed()` or Kotlin coroutine `delay()`) gets deferred until next maintenance window. Foreground services EXEMPT from App Standby but NOT fully exempt from Doze mode network restrictions. Chrome on Android suspends WebSocket timers completely when screen off — similar behavior can affect native WebSocket libraries.
+**What goes wrong:**
+`device.load(routerRtpCapabilities)` succeeds on test devices but fails on production devices (Huawei, Samsung). Some devices support H.264 decode but not encode, causing asymmetric codec negotiation. Audio-only apps get video codecs in RTP capabilities, audio codecs missing.
 
 **Prevention:**
-- **Phase 1 (foreground service):** Foreground service with partial wake lock keeps CPU awake → heartbeat timer should fire reliably
-- **Phase 2 (heartbeat mechanism):** Use `AlarmManager.setExactAndAllowWhileIdle()` for heartbeat timer (bypasses Doze restrictions):
-  ```kotlin
-  val alarmManager = getSystemService(AlarmManager::class.java)
-  val intent = PendingIntent.getBroadcast(this, 0, Intent(ACTION_HEARTBEAT), FLAGS)
-  alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, intent)
-  ```
-- **Phase 2 (resilience):** Implement server-side grace period (120s instead of 60s) to tolerate occasional missed heartbeats
-- **Phase 3 (monitoring):** Detect missed heartbeats and log to analytics: "Missed heartbeat — Doze mode interference detected"
-- **Alternative:** Use FCM high-priority push notification to wake device when PTT message arrives (requires server changes — out of scope for pure client milestone)
+
+1. **Validate RTP capabilities after load**:
+```kotlin
+try {
+    device.load(routerRtpCapabilities)
+
+    val caps = device.getRtpCapabilities()
+    val hasOpus = caps.codecs.any { it.mimeType.equals("audio/opus", ignoreCase = true) }
+
+    if (!hasOpus) {
+        Log.e(TAG, "Device does not support Opus codec")
+        // Fallback: request different codec from server or show error
+    }
+} catch (e: Exception) {
+    Log.e(TAG, "Failed to load device capabilities", e)
+    // Handle: maybe device WebRTC support is broken
+}
+```
+
+2. **Test on wide device range**:
+- Huawei devices (many lack H.264 encode)
+- Samsung Galaxy A series (low-end)
+- Older devices (API 26-28)
+
+3. **Server-side codec fallback**:
+```typescript
+// Server should offer multiple codecs
+router.rtpCapabilities.codecs = [
+  { kind: 'audio', mimeType: 'audio/opus', clockRate: 48000, channels: 2 },
+  { kind: 'audio', mimeType: 'audio/PCMU', clockRate: 8000, channels: 1 },  // Fallback
+]
+```
+
+4. **Handle load() errors gracefully**:
+```kotlin
+suspend fun initializeDevice(): Result<Unit> = withContext(Dispatchers.IO) {
+    try {
+        val response = signalingClient.request(SignalingType.GET_ROUTER_RTP_CAPABILITIES)
+        val capsJson = response.data?.get("rtpCapabilities") as? String
+            ?: return@withContext Result.failure(Exception("No RTP capabilities"))
+
+        device.load(capsJson)
+        Result.success(Unit)
+    } catch (e: Exception) {
+        Log.e(TAG, "Device load failed", e)
+        Result.failure(e)
+    }
+}
+```
 
 **Detection:**
-- WebSocket disconnects after 5-10 minutes screen-off despite foreground service running
-- Logcat shows: "Heartbeat scheduled but not executed for 15 minutes"
-- User reports: "App disconnects when I lock my phone"
+- TypeError: "caps is not an object" during device.load()
+- RTP capabilities missing expected codecs
+- Crash reports from specific device models (Huawei, Samsung)
+
+**Which phase addresses this:**
+Phase 1 (WebRTC Integration Setup) - Device initialization with error handling.
+Phase 5 (Device Compatibility Testing) - Test on diverse hardware.
 
 **Sources:**
-- [Android WebSocket Doze mode issues (Qt Forum)](https://forum.qt.io/topic/90939/sending-keep-alive-messages-on-android-even-if-the-device-is-in-sleep-doze-mode)
-- [WebSocket connections and Android Doze (Ably)](https://ably.com/topic/websockets-android)
-- [Android AlarmManager and Doze mode](https://developer.android.com/develop/background-work/services/alarms)
+- [Device.load() codec issues on Android](https://github.com/haiyangwu/mediasoup-client-android/issues/9)
+- [Chrome Android RTP capabilities bug](https://mediasoup.discourse.group/t/weird-issue-with-chrome-android-and-rtpcapabilities-after-device-load/1537)
+- [Huawei H.264 encode limitation](https://github.com/versatica/mediasoup-client/issues/141)
 
 ---
 
-### 8. Cellular Network NAT Traversal Failures
+### Pitfall 8: Wake Lock Conflicts with WebRTC
 
-**What goes wrong:** App works perfectly on WiFi but fails to connect on 4G/5G cellular. User sees "Connecting..." spinner indefinitely. WebRTC ICE gathering times out or only gathers `srflx` (server reflexive) candidates but connection fails. Or connection works but drops after 2-3 minutes when carrier NAT mapping times out.
-
-**Why it happens:** Cellular networks use aggressive NAT (often Carrier-Grade NAT / CGN) with restrictive policies:
-- **Symmetric NAT:** Most restrictive type, requires TURN relay (STUN alone insufficient)
-- **Short NAT mapping timeout:** 30-60 seconds — if no traffic, mapping expires and connection drops
-- **Different NAT types across carriers:** AT&T, Verizon, T-Mobile have different policies
-- **Dual-SIM devices:** ICE gathering on wrong interface causes STUN storm, carrier blocks STUN packets
-
-**Dual-SIM issue:** When using 'all' interfaces for ICE candidates, device queries both SIMs → sends STUN requests to both → triggers carrier firewall → STUN blocked → ICE fails.
+**What goes wrong:**
+Your `ChannelMonitoringService` holds PARTIAL_WAKE_LOCK. WebRTC's AudioTrack also holds wake lock during playout. Both wake locks active simultaneously drains battery excessively. User reports "app uses 50% battery in 2 hours".
 
 **Prevention:**
-- **Phase 1 (TURN server):** Ensure mediasoup server has TURN server configured (not just STUN). Verify TURN credentials passed to Android client via WebSocket signaling.
-- **Phase 1 (ICE configuration):** Configure ICE with proper candidate gathering:
-  ```kotlin
-  val iceServers = listOf(
-      PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer(),
-      PeerConnection.IceServer.builder("turn:your-server.com:3478")
-          .setUsername("user")
-          .setPassword("pass")
-          .createIceServer()
-  )
-  ```
-- **Phase 2 (network detection):** Detect cellular vs WiFi and adjust ICE timeout (cellular needs 10-15s vs WiFi 5s)
-- **Phase 3 (keepalive):** Send periodic dummy packets (every 20s) to keep NAT mapping alive during silent periods
-- **Testing:** Test on physical devices with 4G/5G SIM cards from multiple carriers (AT&T, Verizon, T-Mobile). Disable WiFi to force cellular.
+
+1. **Let WebRTC manage audio wake locks**:
+```kotlin
+class ChannelMonitoringService : Service() {
+    private var wakeLock: PowerManager.WakeLock? = null
+
+    override fun onCreate() {
+        // ONLY acquire wake lock for non-audio tasks (e.g., keeping service alive)
+        // WebRTC handles audio wake lock automatically
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "VoicePing::ServiceKeepAlive"  // NOT for audio
+        )
+    }
+
+    fun onAudioStarted() {
+        // Release our wake lock - let WebRTC handle it
+        wakeLock?.release()
+    }
+
+    fun onAudioStopped() {
+        // Re-acquire if service should stay alive
+        if (shouldKeepServiceAlive()) {
+            wakeLock?.acquire(10 * 60 * 1000L)  // 10 min timeout
+        }
+    }
+}
+```
+
+2. **Monitor wake lock usage**:
+```bash
+# Check wake locks held by app
+adb shell dumpsys power | grep -A 10 "com.voiceping.android"
+
+# Battery stats
+adb shell dumpsys batterystats --charged com.voiceping.android
+```
+
+3. **Use wake lock best practices**:
+- Set timeout: `wakeLock.acquire(timeout)`
+- Release in onDestroy() even if exception thrown
+- Use foreground service + notification (Android 11+ requirement)
 
 **Detection:**
-- Connection works on WiFi, fails on cellular
-- ICE state stuck in `checking` or `failed`
-- Logcat shows: `No TURN candidates gathered` or `ICE gathering timeout`
-- User reports: "App doesn't work when I'm in the field without WiFi"
+- Battery drain reports from users
+- Android Vitals: "Excessive wake locks"
+- Multiple wake locks shown in dumpsys power
+
+**Which phase addresses this:**
+Phase 2 (Audio Integration) - Coordinate wake lock strategy with WebRTC.
 
 **Sources:**
-- [WebRTC NAT traversal on cellular (moldstud.com)](https://moldstud.com/articles/p-troubleshooting-webrtc-ice-candidates-common-issues-and-solutions-explained)
-- [Dual-SIM iPhone ICE connectivity issue](https://issues.webrtc.org/issues/42221045)
-- [WebRTC NAT traversal methods](https://www.liveswitch.io/blog/webrtc-nat-traversal-methods-a-case-for-embedded-turn)
-
----
-
-### 9. Volume Button Capture Conflicts with System Volume
-
-**What goes wrong:** User configures volume keys as PTT buttons. Pressing volume down starts PTT transmission BUT also lowers media volume to zero (can't hear incoming PTT audio). Or Android's "Select to Speak" accessibility feature is enabled and volume buttons control TTS volume instead of media volume, causing confusing behavior.
-
-**Why it happens:** Android volume buttons are hardware keys that generate `KEYCODE_VOLUME_DOWN` / `KEYCODE_VOLUME_UP` events. By default, these adjust the active audio stream volume (media/call/alarm). To use volume keys for PTT, you must intercept the key event in `onKeyDown()` and return `true` to consume it (prevent default volume adjustment). BUT:
-- **Activity lifecycle:** Volume key interception only works when activity is in foreground. When screen is off or app in background, volume keys adjust volume normally (can't intercept).
-- **Select to Speak bug (Android 14+):** When "Select to Speak" accessibility feature is enabled, volume keys control accessibility service volume instead of media volume, even when your app intercepts the event.
-- **System volume dialog:** Even if you consume the key event, Android may still show volume slider UI (distracting).
-
-**Consequences:**
-- User presses volume down for PTT → media volume drops to zero → can't hear response
-- User enables "Select to Speak" for accessibility → volume buttons stop working as PTT (no PTT transmission triggered)
-- Confusing UX: volume slider appears during PTT transmission
-
-**Prevention:**
-- **Phase 2 (volume key PTT):** Implement volume key interception:
-  ```kotlin
-  override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-      if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN && pttEnabled) {
-          startPtt()
-          return true // Consume event
-      }
-      return super.onKeyDown(keyCode, event)
-  }
-  ```
-- **Phase 2 (workaround for system volume):** Set audio focus to `AUDIOFOCUS_GAIN` before PTT session → locks media volume
-- **Phase 3 (accessibility detection):** Detect "Select to Speak" enabled and show warning:
-  ```kotlin
-  val accessibilityManager = getSystemService(AccessibilityManager::class.java)
-  if (/* Select to Speak enabled */) {
-      showDialog("Volume keys may not work as PTT. Disable Select to Speak in Accessibility settings.")
-  }
-  ```
-- **Phase 3 (alternative PTT trigger):** Offer on-screen PTT button as fallback when volume keys unreliable
-- **Documentation:** Warn users that volume key PTT only works when screen is on (limitation of Android)
-
-**Detection:**
-- Volume slider appears when user presses volume key for PTT
-- Media volume drops to zero after repeated PTT transmissions
-- User reports: "Volume keys don't work as PTT after enabling accessibility features"
-
-**Sources:**
-- [Android volume button bug with Select to Speak](https://android.gadgethacks.com/news/android-volume-bug-confirmed-by-google-fix-coming/)
-- [Zello: Using volume key for PTT on Android](https://support.zello.com/hc/en-us/articles/230745107)
-- [Android intercepting hardware buttons](https://www.b4x.com/android/forum/threads/intercepting-hardware-buttons.135065/)
-
----
-
-### 10. Audio Buffer Underruns with Oboe (XRuns)
-
-**What goes wrong:** User monitors 2-3 channels on older device (Samsung Galaxy A50, Snapdragon 665). Audio playback has frequent clicks, pops, and brief moments of silence every 2-3 seconds. Logcat shows `AudioTrack underrun` warnings. Audio latency increases over time from 100ms to 500ms+.
-
-**Why it happens:** Oboe uses low-latency audio with small buffer sizes (typically 2× burst size = ~5ms of audio). Audio callback runs every 5ms and must deliver next audio buffer BEFORE previous buffer exhausted. If callback takes >5ms (blocked by GC, CPU contention, heavy mixing logic), buffer underrun occurs (XRun). Common causes:
-- **Memory allocation in callback:** `new`, `malloc`, Kotlin list operations → triggers GC → callback blocked 20ms → underrun
-- **Thread locking:** Synchronization on shared state in callback → other thread holds lock → callback blocked → underrun
-- **Heavy mixing logic:** Mixing 5 channels with volume adjustment, sample rate conversion → takes 10ms → underrun
-- **File I/O in callback:** Logging to file, reading config → disk I/O → callback blocked → underrun
-
-**Low-end devices:** Budget phones (Snapdragon 4xx/6xx series) have slower CPUs → callback overhead is proportionally higher → more frequent underruns.
-
-**Prevention:**
-- **Phase 2 (Oboe implementation):** Follow real-time audio best practices:
-  - NEVER allocate memory in audio callback (pre-allocate all buffers)
-  - NEVER lock mutexes in callback (use lock-free data structures or atomic operations)
-  - NEVER perform I/O in callback (no logging, no file access)
-  - Keep callback logic under 50% of buffer duration (if buffer is 5ms, callback must complete in <2.5ms)
-- **Phase 2 (buffer sizing):** Start with larger buffer (4× burst size) for stability, optimize down to 2× after testing:
-  ```cpp
-  builder.setPerformanceMode(oboe::PerformanceMode::LowLatency);
-  builder.setFramesPerCallback(2 * burstSize); // Double buffering
-  ```
-- **Phase 3 (monitoring):** Monitor XRun count in production:
-  ```cpp
-  int32_t xruns = stream->getXRunCount();
-  if (xruns > previousXruns) {
-      logXRunEvent(); // Track in analytics
-  }
-  ```
-- **Phase 3 (fallback):** If XRun rate >10/minute, automatically increase buffer size (trade latency for stability)
-- **Testing:** Test on low-end devices (2GB RAM, Snapdragon 4xx) with 5 channels active + background CPU load
-
-**Detection:**
-- Audio clicks, pops, glitches during playback
-- Logcat: `AudioTrack: getXRunCount() returned XRun count > 0`
-- Latency increases over time (buffer backlog)
-- User reports: "Audio sounds choppy on my older phone"
-
-**Sources:**
-- [Oboe TechNote: Glitches](https://github.com/google/oboe/wiki/TechNote_Glitches)
-- [Android low latency audio with Oboe](https://developer.android.com/games/sdk/oboe/low-latency-audio)
-- [Real-time audio processing best practices](https://oboe.com/learn/c-for-audio-dsp-1qhwprx/real-time-audio-processing-1mzn463)
+- [WebRTC wake lock behavior](https://groups.google.com/g/discuss-webrtc/c/CHG9ndvMN7M)
+- [Wake lock best practices (Android Developers)](https://developer.android.com/develop/background-work/background-tasks/scheduling/wakelock)
 
 ---
 
 ## Minor Pitfalls
 
-### 11. Audio Focus Loss During Phone Calls
+These cause inconvenience but are easily fixed.
 
-**What goes wrong:** User receives phone call while monitoring PTT channels. App continues playing incoming PTT audio during phone call (user misses important call audio or PTT audio leaks to caller). Or app loses audio focus and can't resume PTT after call ends.
+### Pitfall 9: Listener Registration Leaks
 
-**Why it happens:** Android audio focus system allows multiple apps to request audio output. When phone call starts, Phone app requests `AUDIOFOCUS_GAIN` → your app receives `AUDIOFOCUS_LOSS` → should pause/stop audio. If you don't handle this, Android may forcibly duck (lower volume) your audio or route it to unexpected output.
-
-**Prevention:**
-- **Phase 2 (audio focus):** Implement `OnAudioFocusChangeListener`:
-  ```kotlin
-  val focusListener = OnAudioFocusChangeListener { focusChange ->
-      when (focusChange) {
-          AudioManager.AUDIOFOCUS_LOSS -> pausePtt() // Stop PTT
-          AudioManager.AUDIOFOCUS_GAIN -> resumePtt() // Resume PTT
-          AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> /* Pause temporarily */
-      }
-  }
-  audioManager.requestAudioFocus(focusListener, AudioManager.STREAM_VOICE_CALL,
-                                  AudioManager.AUDIOFOCUS_GAIN)
-  ```
-- **Phase 3 (notification):** Show notification: "PTT paused during phone call. Will resume after call ends."
-- **Testing:** Test with incoming call, outgoing call, and WhatsApp/Signal calls
-
-**Detection:**
-- PTT audio continues playing during phone call
-- User reports: "Caller heard my radio traffic" or "Couldn't hear my phone call"
-
----
-
-### 12. Wake Lock Battery Drain
-
-**What goes wrong:** App keeps device awake 24/7 even when user is not actively monitoring channels. Battery drains from 100% to 0% in 8 hours (expected: 24+ hours). Device gets noticeably warm in pocket.
-
-**Why it happens:** Foreground service with `PARTIAL_WAKE_LOCK` keeps CPU awake to maintain WebSocket and audio. If wake lock is held continuously without release, CPU never enters deep sleep → high battery drain.
+**What goes wrong:**
+You register Transport.Listener but never unregister. Listener accumulates across reconnects. After 5 reconnects, each transport event triggers 5 callbacks.
 
 **Prevention:**
-- **Phase 1 (wake lock management):** Only acquire wake lock when channels are actively monitored:
-  ```kotlin
-  val wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "VoicePing::PttWakeLock")
-  wakeLock.acquire(10*60*1000L /* 10 minutes */) // Timeout for safety
-  ```
-- **Phase 2 (optimization):** Release wake lock during idle periods (no active PTT for 5+ minutes)
-- **Phase 3 (monitoring):** Track wake lock duration in analytics, alert if held >12 hours continuously
+```kotlin
+class MediasoupClient {
+    private val listeners = mutableMapOf<String, Transport.Listener>()
 
-**Detection:**
-- Battery drain rate >10%/hour with screen off
-- Device warm to touch after 2-3 hours idle
-- Android battery stats show app as top battery consumer
+    fun createTransport(direction: String) {
+        // Remove old listener if exists
+        listeners[direction]?.let { oldListener ->
+            transport?.removeListener(oldListener)
+        }
+
+        val listener = object : Transport.Listener {
+            override fun onConnect(...) { ... }
+        }
+
+        transport.setListener(listener)
+        listeners[direction] = listener
+    }
+
+    fun cleanup() {
+        listeners.forEach { (_, listener) ->
+            transport?.removeListener(listener)
+        }
+        listeners.clear()
+    }
+}
+```
+
+**Which phase addresses this:**
+Phase 2 (Transport Lifecycle Management)
 
 ---
 
-### 13. Incorrect Opus Decoder Configuration
+### Pitfall 10: Missing LibraryLoader.initialize()
 
-**What goes wrong:** Audio sounds robotic, garbled, or has metallic artifacts. Or audio decoding fails entirely with `Opus decode error: invalid packet`.
-
-**Why it happens:** Server sends Opus at 48kHz but Android client expects 16kHz. Or server uses VBR (Variable Bit Rate) but client decoder configured for CBR. WebRTC's Opus decoder must match server encoder settings (sample rate, channels, packet duration).
+**What goes wrong:**
+First mediasoup call crashes with `UnsatisfiedLinkError: couldn't find DSO to load: libjingle_peerconnection_so.so`.
 
 **Prevention:**
-- **Phase 1 (decoder config):** Match server Opus configuration exactly:
-  - Sample rate: 48kHz (server uses 48kHz per PROJECT.md)
-  - Channels: 1 (mono) for PTT
-  - Packet duration: 20ms (standard for WebRTC)
-  - FEC: Enabled (server has FEC enabled)
-  - DTX: Disabled (server has DTX disabled)
-- **Testing:** Verify audio quality with side-by-side web client (known-good) vs Android client
+```kotlin
+class VoicePingApplication : Application() {
+    override fun onCreate() {
+        super.onCreate()
 
-**Detection:**
-- Audio sounds robotic or garbled
-- Decoding errors in logcat
-- User reports: "Audio sounds weird on Android but fine on web"
+        // Load WebRTC native library BEFORE any mediasoup calls
+        System.loadLibrary("jingle_peerconnection_so")
 
----
+        // Initialize mediasoup
+        mediasoupclient.Initialize()
+    }
+}
+```
 
-## OEM-Specific Issues
-
-### Xiaomi/MIUI
-
-**Primary issue:** MIUI kills background apps aggressively even with foreground service + battery optimization disabled.
-
-**Required mitigation (all must be configured by user):**
-1. Disable battery optimization: Settings → Battery & Performance → App battery saver → VoicePing → No restrictions
-2. Enable Autostart: Settings → Apps → Manage apps → VoicePing → Autostart → Enable
-3. Lock app in recent apps: Recent apps → Drag VoicePing down → Tap lock icon
-4. Disable "Put app to sleep after lock screen": Settings → Battery & Performance → App battery saver → Disable
-
-**Detection:** `Build.MANUFACTURER == "Xiaomi"` or check for MIUI ROM
-
-**In-app guidance:** Show Xiaomi-specific setup wizard with screenshots on first launch
+**Which phase addresses this:**
+Phase 1 (WebRTC Integration Setup) - Application initialization.
 
 ---
 
-### Samsung One UI
+## Phase-Specific Warnings
 
-**Primary issue:** "Sleeping Apps" and "Deep Sleeping Apps" features put unused apps to sleep, killing foreground services.
-
-**Required mitigation:**
-1. Remove from Sleeping Apps: Settings → Battery → Background usage limits → Sleeping apps → Remove VoicePing
-2. Disable "Put unused apps to sleep": Settings → Battery → Background usage limits → Toggle off
-
-**One UI 8+ (2026):** AI-powered battery optimization is more aggressive, automatically moves apps to deep sleep after 3 days of no use.
-
-**Detection:** `Build.MANUFACTURER == "samsung"`
-
-**In-app guidance:** Show Samsung-specific setup wizard with device screenshots
-
----
-
-### Huawei EMUI / HarmonyOS
-
-**Primary issue:** PowerGenie task killer and App Launch Manager kill apps not on whitelist.
-
-**Required mitigation:**
-1. App Launch Manager: Settings → Battery → App launch → VoicePing → Disable "Manage automatically" → Enable "Run in background"
-2. Battery optimization: Settings → Battery optimization → VoicePing → Don't allow
-
-**PowerGenie:** EMUI 9+ has hard-coded app killer that ignores foreground services unless app is on system whitelist (can't be controlled by user or app).
-
-**Detection:** `Build.MANUFACTURER == "HUAWEI"` or check for EMUI/HarmonyOS
-
-**In-app guidance:** Show Huawei-specific setup wizard; warn that some EMUI versions may still kill app
-
----
-
-### OnePlus OxygenOS
-
-**Primary issue:** Bluetooth audio routing (`setAudioRoute()`) doesn't work reliably on OnePlus devices.
-
-**Workaround:** Use `AudioManager.startBluetoothSco()` + explicit routing instead of relying on automatic routing.
-
-**Detection:** `Build.MANUFACTURER == "OnePlus"`
-
----
-
-### Oppo / Realme ColorOS
-
-**Primary issue:** Similar to Xiaomi — aggressive battery optimization with "Sleeping apps" feature.
-
-**Required mitigation:**
-1. Disable battery optimization: Settings → Battery → App Battery Saver → VoicePing → No restrictions
-2. Startup manager: Settings → Security → Startup Manager → VoicePing → Enable
-
-**Detection:** `Build.MANUFACTURER == "OPPO"` or `"Realme"`
-
----
-
-## Phase Mapping
-
-| Phase | Pitfalls to Address | Why This Phase |
-|-------|---------------------|----------------|
-| **Phase 1: WebRTC Foundation** | #1 (mediasoup-client native), #4 (memory leaks), #6 (API fragmentation), #13 (Opus config) | Core WebRTC integration must be stable before building UI/features on top. Memory leak prevention is architectural. |
-| **Phase 2: Foreground Service & Audio** | #2 (OEM battery killers), #5 (multi-channel mixing), #7 (WebSocket Doze), #10 (Oboe XRuns), #11 (audio focus), #12 (wake lock) | Background operation and audio reliability are critical for pocket radio use case. |
-| **Phase 3: Hardware PTT & Bluetooth** | #3 (Bluetooth SCO), #9 (volume button conflicts) | Hardware integration comes after core audio works. Bluetooth is complex and can be iterated. |
-| **Phase 4: Network Resilience** | #8 (cellular NAT traversal) | Network edge cases addressed after core functionality proven on WiFi. |
+| Phase Topic | Likely Pitfall | Mitigation |
+|-------------|---------------|------------|
+| Phase 1: WebRTC Integration Setup | Pitfall 1 (AudioManager conflicts), Pitfall 2 (JNI threading) | Design AudioManager ownership, establish listener threading patterns |
+| Phase 2: Transport Lifecycle Management | Pitfall 3 (memory leaks), Pitfall 5 (race conditions) | Implement cleanup hierarchy, use state machine with mutex |
+| Phase 2: Audio Integration | Pitfall 1 (AudioManager conflicts), Pitfall 8 (wake lock conflicts) | Refactor AudioRouter, coordinate wake locks |
+| Phase 3: Network Resilience | Pitfall 5 (race conditions during reconnection) | Atomic state transitions, cancel ongoing ops before reconnect |
+| Phase 4: Release Build Testing | Pitfall 6 (ProGuard strips JNI) | Add consumer ProGuard rules, test release builds |
+| Phase 5: Device Compatibility Testing | Pitfall 7 (Device.load() codec issues) | Test on Huawei/Samsung devices, validate RTP caps |
 
 ---
 
 ## Research Confidence Assessment
 
-| Pitfall | Confidence | Source Quality |
-|---------|------------|----------------|
-| mediasoup-client native | HIGH | Official mediasoup forums, GitHub issues with crash reports |
-| OEM battery killers | HIGH | dontkillmyapp.com (community-maintained), official Android docs |
-| Bluetooth SCO | HIGH | Multiple WebRTC project issue trackers (Signal, flutter-webrtc) |
-| WebRTC memory leaks | HIGH | Chromium bug tracker, WebRTC code reviews |
-| Multi-channel mixing | MEDIUM | Community forums, need to verify with your specific architecture |
-| API fragmentation | HIGH | Official Android developer docs |
-| WebSocket Doze | MEDIUM | Community reports, need device testing to confirm |
-| Cellular NAT | HIGH | WebRTC documentation, carrier NAT is well-known issue |
-| Volume button conflicts | HIGH | Google confirmed bug, community workarounds |
-| Oboe XRuns | HIGH | Official Oboe documentation |
-| Audio focus | HIGH | Official Android audio docs |
-| Wake lock drain | MEDIUM | Standard Android practice |
-| Opus config | MEDIUM | Verified server uses 48kHz from PROJECT.md |
+| Area | Confidence | Basis |
+|------|------------|-------|
+| AudioManager conflicts | HIGH | Multiple WebRTC official discussions, documented ADM conflicts, your existing AudioRouter code analysis |
+| JNI threading | HIGH | Android NDK official docs, JNI threading guides, mediasoup architecture (C++ + JNI) |
+| Memory leaks | MEDIUM | mediasoup iOS reports (30MB), mediasoup docs on garbage collection, but Android-specific numbers unverified |
+| AGP 9.0 NDK restrictions | HIGH | Official AGP 9.0 migration guide, your project already on AGP 9.0.0 |
+| Race conditions | MEDIUM | mediasoup discourse examples, general async pattern knowledge, but mediasoup-android specific examples limited |
+| ProGuard issues | MEDIUM | General Android ProGuard knowledge, consumer rules best practices, but no mediasoup-android specific ProGuard rules found |
+| Device.load() issues | MEDIUM | Multiple GitHub issues on mediasoup-client-android, but scattered anecdotal reports |
+| Wake lock conflicts | MEDIUM | WebRTC wake lock behavior documented, Android best practices, but specific interaction with mediasoup unverified |
 
----
+## Research Gaps
 
-## Open Questions for Phase-Specific Research
+**Critical gaps requiring phase-specific research:**
 
-1. **mediasoup-client wrapper maintenance status** — Check GitHub last commit date, open issues count, maintainer responsiveness for selected wrapper before committing (Phase 1 acceptance criteria)
+1. **Phase 1: libmediasoup-android ProGuard rules** - Could not verify if AAR includes consumer-rules.pro. Must inspect AAR before Phase 4.
 
-2. **Multi-channel mixing architecture** — Does chosen mediasoup-client wrapper expose API for custom audio mixing? Or must we work around WebRTC's internal AudioTrack? (Phase 2 spike)
+2. **Phase 2: Exact threading model of mediasoup-android listeners** - Docs say methods "block current thread" but don't specify which thread callbacks run on. Needs experimentation.
 
-3. **Bluetooth PTT button event handling** — How do different Bluetooth headset manufacturers send PTT button events? (Some use media button, some use vendor-specific commands) (Phase 3 research)
+3. **Phase 5: Android-specific memory leak magnitudes** - iOS reports 30MB per leak, but Android numbers unknown. Monitor with Android Profiler.
 
-4. **TURN server capacity** — Current TURN server can handle 30%+ of Android clients needing relay on cellular? Verify TURN server capacity before production. (Phase 4)
+4. **Phase 1: AudioDeviceModule configuration compatibility with existing AudioRouter** - No examples found of WebRTC + custom AudioManager. May need trial-and-error.
 
----
+**Non-critical gaps (low priority):**
 
-**Recommendations:**
-1. **Phase 1 acceptance gate:** Build minimal WebRTC connection demo with selected mediasoup wrapper, test on 3 physical devices (different OEMs, API levels) before proceeding to full implementation
-2. **Phase 2 OEM setup wizard:** Make OEM-specific battery optimization setup mandatory on first launch for Xiaomi/Samsung/Huawei devices (block app use until configured)
-3. **Phase 3 Bluetooth pre-warming:** Keep SCO connection alive during entire PTT session (trade battery for zero-latency PTT response)
-4. **Phase 4 cellular testing:** Dedicate test devices with SIM cards from AT&T, Verizon, T-Mobile for real-world NAT traversal validation
+- Performance characteristics of mediasoup-android on low-end devices (API 26, 2GB RAM)
+- Battery consumption benchmarks (WebRTC + foreground service + wake locks)
+- Specific NDK version used by libmediasoup-android 0.21.0
 
----
+## Sources
 
-*Researched: 2026-02-08*
-*Next: This research informs roadmap phase structure and per-phase acceptance criteria*
+**HIGH confidence (official/authoritative):**
+- [Android NDK JNI Tips](https://developer.android.com/training/articles/perf-jni)
+- [WebRTC AudioDeviceModule docs](https://github.com/maitrungduc1410/webrtc/blob/master/modules/audio_device/g3doc/audio_device_module.md)
+- [mediasoup Garbage Collection](https://mediasoup.org/documentation/v3/mediasoup/garbage-collection/)
+- [mediasoup libmediasoupclient API](https://mediasoup.org/documentation/v3/libmediasoupclient/api/)
+- [AGP 9.0 Migration Guide](https://nek12.dev/blog/en/agp-9-0-migration-guide-android-gradle-plugin-9-kmp-migration-kotlin)
+- [Android Wake Lock Best Practices](https://developer.android.com/develop/background-work/background-tasks/scheduling/wakelock)
+- [ProGuard Consumer Rules (Android Developers)](https://developer.android.com/topic/performance/app-optimization/library-optimization)
+
+**MEDIUM confidence (community/issue trackers):**
+- [WebRTC AudioManager Conflicts](https://groups.google.com/g/discuss-webrtc/c/Pqag6R7QV2c)
+- [Multiple ADM Issue](https://bugs.chromium.org/p/webrtc/issues/detail?id=2498)
+- [mediasoup-client-android Issues](https://github.com/haiyangwu/mediasoup-client-android/issues)
+- [mediasoup iOS Memory Leak Report](https://github.com/ethand91/mediasoup-ios-client/issues/55)
+- [JNI Callbacks Guide](https://clintpaul.medium.com/jni-on-android-how-callbacks-work-c350bf08157f)
+- [WebRTC Wake Lock Discussion](https://groups.google.com/g/discuss-webrtc/c/CHG9ndvMN7M)
+
+**LOW confidence (needs verification):**
+- mediasoup-android specific ProGuard configuration (no official rules found)
+- Android-specific memory leak magnitudes (extrapolated from iOS)
+- Device.load() failure patterns on specific manufacturers (anecdotal GitHub issues)
