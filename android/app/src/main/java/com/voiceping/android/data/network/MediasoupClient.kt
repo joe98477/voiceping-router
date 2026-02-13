@@ -257,9 +257,21 @@ class MediasoupClient @Inject constructor(
                             transport: Transport,
                             newState: String
                         ) {
-                            Log.d(TAG, "RecvTransport state: $newState (channel: $channelId)")
-                            if (newState == "failed" || newState == "disconnected") {
-                                recvTransports.remove(channelId)
+                            when (newState) {
+                                "disconnected" -> {
+                                    // ICE connectivity lost — WebRTC will attempt auto-recovery (~15s window)
+                                    // Do NOT remove transport, it may reconnect
+                                    Log.w(TAG, "RecvTransport disconnected, waiting for auto-recovery (channel: $channelId)")
+                                }
+                                "failed" -> {
+                                    // Auto-recovery failed — cleanup this channel's resources
+                                    Log.e(TAG, "RecvTransport failed, cleaning up channel: $channelId")
+                                    // Remove transport — Consumer.onTransportClose will clean up consumers
+                                    recvTransports.remove(channelId)
+                                }
+                                "connected" -> {
+                                    Log.d(TAG, "RecvTransport (re)connected: $channelId")
+                                }
                             }
                         }
                     },
@@ -510,10 +522,25 @@ class MediasoupClient @Inject constructor(
                             transport: Transport,
                             newState: String
                         ) {
-                            Log.d(TAG, "SendTransport state: $newState")
-                            if (newState == "failed" || newState == "disconnected") {
-                                audioProducer?.close()
-                                audioProducer = null
+                            when (newState) {
+                                "disconnected" -> {
+                                    // ICE connectivity lost — WebRTC will attempt auto-recovery (~15s window)
+                                    // Do NOT cleanup resources yet, transport may reconnect
+                                    Log.w(TAG, "SendTransport disconnected, waiting for auto-recovery")
+                                }
+                                "failed" -> {
+                                    // Auto-recovery failed — manual cleanup required
+                                    // Close producer and audio resources, null the transport
+                                    // Next PTT press will recreate SendTransport
+                                    Log.e(TAG, "SendTransport failed, cleaning up producer and transport")
+                                    audioProducer?.close()
+                                    audioProducer = null
+                                    cleanupAudioResources()
+                                    sendTransport = null
+                                }
+                                "connected" -> {
+                                    Log.d(TAG, "SendTransport (re)connected")
+                                }
                             }
                         }
                     },
