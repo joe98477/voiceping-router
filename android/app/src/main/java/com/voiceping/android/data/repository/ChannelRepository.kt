@@ -237,6 +237,13 @@ class ChannelRepository @Inject constructor(
                     }
                 }
 
+                // Handle transition to DISCONNECTED (full connection loss)
+                if (currentState == com.voiceping.android.domain.model.ConnectionState.DISCONNECTED &&
+                    prevState != com.voiceping.android.domain.model.ConnectionState.DISCONNECTED) {
+                    Log.d(TAG, "Signaling disconnected, cleaning up mediasoup resources")
+                    mediasoupClient.cleanup()
+                }
+
                 // Track previous state for next transition
                 previousConnectionState = currentState
             }
