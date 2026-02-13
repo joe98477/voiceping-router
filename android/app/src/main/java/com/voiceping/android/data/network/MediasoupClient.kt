@@ -65,8 +65,8 @@ class MediasoupClient @Inject constructor(
 
             // Step 1: Get router RTP capabilities from server
             val capsResponse = signalingClient.request(SignalingType.GET_ROUTER_CAPABILITIES)
-            val rtpCapabilities = capsResponse.data?.get("routerRtpCapabilities") as? String
-                ?: throw IllegalStateException("No routerRtpCapabilities in response")
+            val rtpCapabilities = toJsonString(capsResponse.data?.get("routerRtpCapabilities")
+                ?: throw IllegalStateException("No routerRtpCapabilities in response"))
 
             Log.d(TAG, "Received RTP capabilities, creating Device")
 
@@ -190,8 +190,7 @@ class MediasoupClient @Inject constructor(
                 ?: throw IllegalStateException("No consumer id")
             val kind = consumeData["kind"] as? String
                 ?: throw IllegalStateException("No kind")
-            val rtpParameters = consumeData["rtpParameters"] as? String
-                ?: throw IllegalStateException("No rtpParameters")
+            val rtpParameters = toJsonString(consumeData["rtpParameters"])
 
             Log.d(TAG, "Consume parameters received: consumerId=$consumerId, kind=$kind")
 

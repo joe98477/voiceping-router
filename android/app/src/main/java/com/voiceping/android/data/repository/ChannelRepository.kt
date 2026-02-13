@@ -315,9 +315,12 @@ class ChannelRepository @Inject constructor(
                 // Start AudioDeviceManager and MediaButtonHandler
                 audioDeviceManager.start()
                 mediaButtonHandler.setActive(true)
-                // Load configured BT keycode from settings
-                val btKeycode = runBlocking {
+                // Load configured BT keycode from settings (use default if read fails)
+                val btKeycode = try {
                     settingsRepository.getBluetoothPttButtonKeycode().first()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to read BT keycode, using default", e)
+                    85 // default keycode
                 }
                 mediaButtonHandler.setConfiguredKeyCode(btKeycode)
                 Log.d(TAG, "Started AudioDeviceManager and MediaButtonHandler")
