@@ -133,8 +133,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 14-01-PLAN.md -- Mutex-protected transport lifecycle and correct disposal ordering
-- [ ] 14-02-PLAN.md -- Transport error recovery handlers and ChannelRepository disconnect cleanup
+- [x] 14-01-PLAN.md -- Mutex-protected transport lifecycle and correct disposal ordering
+- [x] 14-02-PLAN.md -- Transport error recovery handlers and ChannelRepository disconnect cleanup
 
 #### Phase 15: Release Build Validation and Device Testing
 **Goal**: Verify ProGuard rules and validate end-to-end audio on physical Android device
@@ -169,9 +169,9 @@ Phases execute in numeric order: 11 → 12 → 13 → 14 → 15
 | 11. Library Upgrade | v3.0 | 2/2 | Complete | 2026-02-13 |
 | 12. RecvTransport | v3.0 | 2/2 | Complete | 2026-02-13 |
 | 13. SendTransport | v3.0 | 2/2 | Complete | 2026-02-13 |
-| 14. Lifecycle | v3.0 | 0/TBD | Not started | - |
+| 14. Lifecycle | v3.0 | 2/2 | Complete | 2026-02-13 |
 | 15. Validation | v3.0 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-02-06*
-*Last updated: 2026-02-13 after Phase 13 execution complete*
+*Last updated: 2026-02-13 after Phase 14 execution complete*
