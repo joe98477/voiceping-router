@@ -144,10 +144,11 @@ Plans:
   1. ProGuard/R8 rules verified — release APK built successfully without JNI class stripping errors
   2. Release APK tested on physical Android device with end-to-end audio (user can transmit and receive)
   3. Battery profiling shows no excessive drain from WebRTC threads (under 10%/hour with screen off)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 15-01: TBD (awaiting planning)
+- [ ] 15-01-PLAN.md -- ProGuard/R8 rule update and release APK build verification
+- [ ] 15-02-PLAN.md -- Physical device end-to-end audio testing and battery profiling
 
 ## Progress
 
@@ -170,8 +171,8 @@ Phases execute in numeric order: 11 → 12 → 13 → 14 → 15
 | 12. RecvTransport | v3.0 | 2/2 | Complete | 2026-02-13 |
 | 13. SendTransport | v3.0 | 2/2 | Complete | 2026-02-13 |
 | 14. Lifecycle | v3.0 | 2/2 | Complete | 2026-02-13 |
-| 15. Validation | v3.0 | 0/TBD | Not started | - |
+| 15. Validation | v3.0 | 0/2 | Not started | - |
 
 ---
 *Roadmap created: 2026-02-06*
-*Last updated: 2026-02-13 after Phase 14 execution complete*
+*Last updated: 2026-02-13 after Phase 15 planning complete*
