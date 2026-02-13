@@ -363,6 +363,9 @@ class ChannelRepository @Inject constructor(
             }
             channelConsumers.remove(channelId)
 
+            // Clean up channel's RecvTransport
+            mediasoupClient.cleanupChannel(channelId)
+
             // Remove from monitored channels map
             _monitoredChannels.value = _monitoredChannels.value - channelId
 
@@ -493,7 +496,7 @@ class ChannelRepository @Inject constructor(
                             // Consume audio from this producer (guard: only if not muted)
                             val channelState = _monitoredChannels.value[channelId]
                             if (channelState?.isMuted == false) {
-                                mediasoupClient.consumeAudio(producerId, speakerUserId)
+                                mediasoupClient.consumeAudio(channelId, producerId, speakerUserId)
 
                                 // Track consumer
                                 if (channelConsumers[channelId] == null) {
@@ -602,7 +605,7 @@ class ChannelRepository @Inject constructor(
             val producerId = channelState.consumerId
             val speakerId = channelState.currentSpeaker.id
 
-            mediasoupClient.consumeAudio(producerId, speakerId)
+            mediasoupClient.consumeAudio(channelId, producerId, speakerId)
 
             // Track consumer
             if (channelConsumers[channelId] == null) {

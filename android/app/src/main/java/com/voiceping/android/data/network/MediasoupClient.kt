@@ -268,20 +268,23 @@ class MediasoupClient @Inject constructor(
      * 2. Create consumer on receive transport
      * 3. Resume consumer to start audio playback
      *
+     * @param channelId The channel ID for transport lookup
      * @param producerId The producer ID from server
      * @param peerId The peer ID producing audio
+     * @return consumerId for tracking
      * @throws Exception if consume fails
      */
-    suspend fun consumeAudio(producerId: String, peerId: String) = withContext(Dispatchers.IO) {
+    suspend fun consumeAudio(channelId: String, producerId: String, peerId: String): String = withContext(Dispatchers.IO) {
         try {
-            Log.d(TAG, "Consuming audio: producerId=$producerId, peerId=$peerId")
+            Log.d(TAG, "Consuming audio: channel=$channelId, producer=$producerId, peer=$peerId")
 
             // Step 1: Request consume from server
             val consumeResponse = signalingClient.request(
                 SignalingType.CONSUME,
                 mapOf(
+                    "channelId" to channelId,
                     "producerId" to producerId,
-                    "peerId" to peerId
+                    "rtpCapabilities" to device.rtpCapabilities
                 )
             )
 
@@ -294,34 +297,33 @@ class MediasoupClient @Inject constructor(
                 ?: throw IllegalStateException("No kind")
             val rtpParameters = toJsonString(consumeData["rtpParameters"])
 
-            Log.d(TAG, "Consume parameters received: consumerId=$consumerId, kind=$kind")
+            val transport = recvTransports[channelId]
+                ?: throw IllegalStateException("RecvTransport not found for channel: $channelId")
 
-            // Step 2 & 3: Create consumer and resume
-            // TODO: Integrate actual libmediasoup-android library
-            // val consumer = recvTransport?.consume(
-            //     listener = object : Consumer.Listener {
-            //         override fun onTransportClose(consumer: Consumer) {
-            //             consumers.remove(consumerId)
-            //             Log.d(TAG, "Consumer transport closed: $consumerId")
-            //         }
-            //     },
-            //     id = consumerId,
-            //     producerId = producerId,
-            //     kind = kind,
-            //     rtpParameters = rtpParameters,
-            //     appData = ""
-            // )
-            //
-            // consumer?.let {
-            //     consumers[consumerId] = it
-            //     it.resume() // Start audio playback
-            //     Log.d(TAG, "Consumer resumed, audio playing")
-            // }
+            val consumer = transport.consume(
+                listener = object : Consumer.Listener {
+                    override fun onTransportClose(consumer: Consumer) {
+                        Log.d(TAG, "Consumer transport closed: $consumerId")
+                        consumers.remove(consumerId)
+                    }
+                },
+                id = consumerId,
+                producerId = producerId,
+                kind = kind,
+                rtpParameters = rtpParameters
+            )
 
-            Log.d(TAG, "Audio consumption setup complete")
+            // CRITICAL: Resume consumer to start audio playback
+            consumer.resume()
+
+            consumers[consumerId] = consumer
+            Log.d(TAG, "Consumer created and resumed: $consumerId")
+
+            return@withContext consumerId
 
         } catch (e: Exception) {
             Log.e(TAG, "Failed to consume audio", e)
+            throw e
         }
     }
 
@@ -331,9 +333,8 @@ class MediasoupClient @Inject constructor(
      * @param consumerId The consumer ID to close
      */
     fun closeConsumer(consumerId: String) {
-        consumers.remove(consumerId)?.let {
-            // TODO: Integrate actual libmediasoup-android library
-            // (it as Consumer).close()
+        consumers.remove(consumerId)?.let { consumer ->
+            consumer.close()
             Log.d(TAG, "Consumer closed: $consumerId")
         }
     }
@@ -343,11 +344,17 @@ class MediasoupClient @Inject constructor(
      * Used for per-channel volume control and audio mix mode.
      */
     fun setConsumerVolume(consumerId: String, volume: Float) {
-        consumers[consumerId]?.let {
-            // TODO: Integrate actual libmediasoup-android library
-            // (it as Consumer).volume = volume.coerceIn(0f, 1f)
-            Log.d(TAG, "Consumer volume set: $consumerId -> $volume")
-        }
+        consumers[consumerId]?.let { consumer ->
+            val audioTrack = consumer.track as? AudioTrack
+            if (audioTrack != null) {
+                // Convert 0.0-1.0 app range to 0.0-10.0 WebRTC range
+                val webRtcVolume = (volume.coerceIn(0f, 1f) * 10.0)
+                audioTrack.setVolume(webRtcVolume)
+                Log.d(TAG, "Consumer volume set: $consumerId -> $volume (WebRTC: $webRtcVolume)")
+            } else {
+                Log.w(TAG, "Consumer track is not AudioTrack: $consumerId")
+            }
+        } ?: Log.w(TAG, "Consumer not found for volume control: $consumerId")
     }
 
     /**
@@ -513,6 +520,24 @@ class MediasoupClient @Inject constructor(
             Log.d(TAG, "Audio producer stopped")
         } catch (e: Exception) {
             Log.e(TAG, "Error stopping producer", e)
+        }
+    }
+
+    /**
+     * Clean up resources for a specific channel.
+     *
+     * Called when leaving a channel to close its RecvTransport.
+     * Consumers should be closed by caller first via closeConsumer().
+     *
+     * @param channelId The channel to clean up
+     */
+    fun cleanupChannel(channelId: String) {
+        Log.d(TAG, "Cleaning up channel: $channelId")
+
+        // Close RecvTransport for channel
+        recvTransports.remove(channelId)?.let { transport ->
+            transport.close()
+            Log.d(TAG, "RecvTransport closed for channel: $channelId")
         }
     }
 
