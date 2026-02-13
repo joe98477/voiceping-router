@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 ## Current Position
 
 Phase: 13-send-transport-producer-integration
-Plan: 1 of 2 in phase 13
-Status: Phase 13 in progress
-Last activity: 2026-02-13 — Plan 13-01 complete (SendTransport and Producer integration)
+Plan: 2 of 2 in phase 13
+Status: Phase 13 complete
+Last activity: 2026-02-13 — Plan 13-02 complete (PttManager Producer lifecycle wiring)
 
-Progress: [████████░░░░░░░░░░░░] 38/TBD plans complete (v1.0: 24, v2.0: 26, v3.0: 6)
+Progress: [████████░░░░░░░░░░░░] 40/TBD plans complete (v1.0: 24, v2.0: 26, v3.0: 8)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 38 (v1.0: 24, v2.0: 26, v3.0: 6)
-- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~4.7 min (6 plans)
-- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.47 hours
+- Total plans completed: 40 (v1.0: 24, v2.0: 26, v3.0: 8)
+- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~3.9 min (8 plans)
+- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.52 hours
 
 **By Milestone:**
 
@@ -32,7 +32,7 @@ Progress: [████████░░░░░░░░░░░░] 38/TBD 
 | v3.0 mediasoup Integration | 5 | TBD | In progress |
 
 **Recent Trend:**
-- v3.0 in progress: 6 plans complete, 10 commits, Phase 13 in progress (SendTransport, Producer)
+- v3.0 in progress: 8 plans complete, 12 commits, Phase 13 complete (SendTransport, Producer integrated)
 - v2.0 shipped 6 phases, 26 plans, 70 commits, 9,233 LOC Kotlin
 
 *Updated after each plan completion*
@@ -44,6 +44,7 @@ Progress: [████████░░░░░░░░░░░░] 38/TBD 
 | Phase 12 P01 | 218 | 2 tasks | 2 files |
 | Phase 12 P02 | 228 | 2 tasks | 3 files |
 | Phase 13 P01 | 362 | 2 tasks | 2 files |
+| Phase 13 P02 | 117 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -67,6 +68,7 @@ Recent decisions affecting current work:
 - [12-02]: 5-second network quality polling — Balances responsiveness with battery/CPU efficiency for VoIP monitoring
 - [13-01]: SendTransport singleton (no channelId) — PTT is mutually exclusive, one transport per device vs RecvTransport per channel
 - [13-01]: WebRTC AudioSource for PTT capture — Replaces AudioCaptureManager callback pattern, AudioSource captures mic internally
+- [13-02]: Delete AudioCaptureManager entirely — WebRTC AudioSource handles all microphone capture, no manual buffer forwarding needed
 
 ### Pending Todos
 
@@ -77,12 +79,14 @@ None yet.
 **From v2.0 Tech Debt:**
 - On-device testing not yet performed (no physical Android device during development) — Phase 15 will address
 
-**Phase 13 in progress:**
-- SendTransport singleton created with onConnect/onProduce callbacks
-- Producer lifecycle implemented with WebRTC AudioSource/AudioTrack
+**Phase 13 Complete:**
+- SendTransport singleton with onConnect/onProduce callbacks ✓
+- Producer lifecycle with WebRTC AudioSource/AudioTrack ✓
+- PttManager wired to Producer lifecycle (no AudioCaptureManager) ✓
+- AudioCaptureManager.kt deleted (168 LOC removed) ✓
+- PTT flow: requestPtt -> createSendTransport + startProducing, releasePtt -> stopProducing
 - Opus PTT config: mono, DTX, FEC, 48kHz, 20ms ptime
 - Native resource disposal order validated (AudioTrack before AudioSource)
-- Next: Wire into PttManager (Plan 02)
 
 **Phase 12 Complete:**
 - RecvTransport per-channel pattern — Map-based storage for multi-channel monitoring
@@ -104,10 +108,10 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-13 (plan execution)
-Stopped at: Completed 13-01-PLAN.md — SendTransport and Producer integration complete
+Stopped at: Completed 13-02-PLAN.md — Phase 13 complete (PttManager Producer lifecycle wiring)
 Resume file: None
 
-Next step: Execute Plan 13-02 to wire SendTransport/Producer into PttManager
+Next step: Plan Phase 14 (error recovery and reconnection logic)
 
 **Milestone 1 (WebRTC Audio Rebuild + Web UI) SHIPPED 2026-02-07:**
 - 4 phases, 24 plans
@@ -118,4 +122,4 @@ Next step: Execute Plan 13-02 to wire SendTransport/Producer into PttManager
 - See: .planning/milestones/v2.0-ROADMAP.md
 
 ---
-*Last updated: 2026-02-13 after completing 13-01-PLAN.md (SendTransport and Producer integration)*
+*Last updated: 2026-02-13 after completing 13-02-PLAN.md (PttManager Producer lifecycle wiring)*
