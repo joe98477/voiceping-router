@@ -46,9 +46,9 @@ sealed class PttState {
  *
  * Flow:
  * 1. requestPtt() -> send PTT_START to server -> wait for response
- * 2. If granted: start foreground service -> create send transport -> start producing -> start capture
- * 3. Audio flows: AudioRecord -> AudioCaptureManager callback -> MediasoupClient.sendAudioData()
- * 4. releasePtt() -> stop capture -> stop producing -> stop service -> send PTT_STOP
+ * 2. If granted: start foreground service -> create send transport -> start producing
+ * 3. Audio flows: WebRTC AudioSource captures mic -> Producer encodes Opus -> SendTransport -> server
+ * 4. releasePtt() -> stop producing -> stop service -> send PTT_STOP
  *
  * Callbacks: onPttGranted, onPttDenied, onPttReleased allow Plan 04 to wire in
  * TonePlayer/HapticFeedback without circular dependencies.
@@ -139,24 +139,17 @@ class PttManager @Inject constructor(
                     }
                     context.startForegroundService(startIntent)
 
-                    // Step 4: Set audio capture callback to forward to mediasoup
-                    audioCaptureManager.onAudioData = { buffer, length ->
-                        mediasoupClient.sendAudioData(buffer, length)
-                    }
-
-                    // Step 5: Create send transport (singleton, no channelId)
+                    // Step 4: Create send transport (singleton, no channelId)
                     mediasoupClient.createSendTransport()
 
-                    // Step 6: Start producing (configure Opus codec)
+                    // Step 5: Start producing (creates AudioSource + AudioTrack, configures Opus codec)
+                    // AudioSource captures microphone internally, no manual buffer forwarding needed
                     mediasoupClient.startProducing()
 
-                    // Step 7: Start audio capture
-                    audioCaptureManager.startCapture()
-
-                    // Step 8: Notify callback (Plan 04 will wire in tone/haptic)
+                    // Step 6: Notify callback (Plan 04 will wire in tone/haptic)
                     onPttGranted?.invoke()
 
-                    // Step 9: If TOGGLE mode, start max duration timer
+                    // Step 7: If TOGGLE mode, start max duration timer
                     if (currentPttMode == com.voiceping.android.domain.model.PttMode.TOGGLE) {
                         maxDurationJob?.cancel()
                         maxDurationJob = scope.launch {
@@ -190,7 +183,7 @@ class PttManager @Inject constructor(
     /**
      * Release PTT (stop transmission).
      *
-     * Cleanup order: callback -> stop capture -> stop producing -> stop service -> send PTT_STOP
+     * Cleanup order: callback -> stop producing -> stop service -> send PTT_STOP
      */
     fun releasePtt() {
         if (_pttState.value !is PttState.Transmitting) {
@@ -213,10 +206,10 @@ class PttManager @Inject constructor(
         transmissionStartTime = 0
         currentChannelId = null
 
-        // Step 4: Cleanup on IO thread (stopCapture joins thread for up to 1s)
+        // Step 4: Cleanup on IO thread
         scope.launch {
             try {
-                audioCaptureManager.stopCapture()
+                // Stop producing (closes Producer, disposes AudioSource + AudioTrack)
                 mediasoupClient.stopProducing()
 
                 val stopIntent = Intent(context, AudioCaptureService::class.java).apply {
@@ -273,7 +266,7 @@ class PttManager @Inject constructor(
         // Step 4: Cleanup on IO thread
         scope.launch {
             try {
-                audioCaptureManager.stopCapture()
+                // Stop producing (closes Producer, disposes AudioSource + AudioTrack)
                 mediasoupClient.stopProducing()
 
                 val stopIntent = Intent(context, AudioCaptureService::class.java).apply {

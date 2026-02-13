@@ -527,68 +527,98 @@ class MediasoupClient @Inject constructor(
      * - 48kHz playback rate
      * - 20ms ptime
      *
+     * Creates WebRTC AudioSource and AudioTrack for microphone capture,
+     * then produces via SendTransport.
+     *
      * @throws Exception if producer creation fails
      */
     suspend fun startProducing() = withContext(Dispatchers.IO) {
         try {
             Log.d(TAG, "Starting audio producer")
 
-            // TODO: Integrate actual libmediasoup-android library
+            // Guard: SendTransport must exist
+            val transport = sendTransport
+                ?: throw IllegalStateException("SendTransport not created")
+
+            // Create AudioSource for microphone capture
+            val source = peerConnectionFactory.createAudioSource(MediaConstraints())
+            audioSource = source
+
+            // Create AudioTrack from AudioSource
+            val track = peerConnectionFactory.createAudioTrack("audio-ptt", source)
+            pttAudioTrack = track
+
             // Opus codec configuration for PTT
-            // audioProducer = sendTransport?.produce(
-            //     listener = object : Producer.Listener {
-            //         override fun onTransportClose(producer: Producer) {
-            //             audioProducer = null
-            //             Log.d(TAG, "Producer transport closed")
-            //         }
-            //     },
-            //     track = null, // Will be set to audio track from AudioRecord
-            //     codecOptions = mapOf(
-            //         "opusStereo" to false,
-            //         "opusDtx" to true,
-            //         "opusFec" to true,
-            //         "opusMaxPlaybackRate" to 48000,
-            //         "opusPtime" to 20
-            //     ),
-            //     appData = ""
-            // )
+            val codecOptions = mapOf(
+                "opusStereo" to false,
+                "opusDtx" to true,
+                "opusFec" to true,
+                "opusMaxPlaybackRate" to 48000,
+                "opusPtime" to 20
+            )
+
+            // Create Producer
+            audioProducer = transport.produce(
+                listener = object : Producer.Listener {
+                    override fun onTransportClose(producer: Producer) {
+                        audioProducer = null
+                        cleanupAudioResources()
+                        Log.d(TAG, "Producer transport closed")
+                    }
+                },
+                track = track,
+                encodings = emptyList(),
+                codecOptions = toJsonString(codecOptions),
+                codec = null,
+                appData = null
+            )
 
             Log.d(TAG, "Audio producer started")
 
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start producer", e)
+            cleanupAudioResources()
             throw e
         }
     }
 
     /**
-     * Send captured audio data to producer.
-     *
-     * Called by PttManager's audio capture callback to forward PCM buffers.
-     * Producer handles Opus encoding internally.
-     *
-     * @param buffer PCM audio buffer from AudioRecord
-     * @param length Number of bytes in buffer
-     */
-    fun sendAudioData(buffer: ByteArray, length: Int) {
-        // TODO: Integrate actual libmediasoup-android library
-        // Forward buffer to audioProducer
-        // Producer will handle Opus encoding and RTP packetization
-        // audioProducer?.send(buffer, length)
-    }
-
-    /**
      * Stop producing audio (PTT release).
+     *
+     * Closes Producer and disposes native WebRTC resources in correct order.
      */
     fun stopProducing() {
         try {
-            // TODO: Integrate actual libmediasoup-android library
-            // audioProducer?.close()
+            Log.d(TAG, "Stopping audio producer")
+
+            // Close producer
+            audioProducer?.close()
             audioProducer = null
-            Log.d(TAG, "Audio producer stopped")
+
+            // Cleanup native resources
+            cleanupAudioResources()
+
         } catch (e: Exception) {
             Log.e(TAG, "Error stopping producer", e)
+            // Ensure cleanup happens even on error
+            cleanupAudioResources()
         }
+    }
+
+    /**
+     * Clean up audio resources (AudioTrack and AudioSource).
+     *
+     * CRITICAL: Disposal order matters for native memory.
+     * AudioTrack must be disposed before AudioSource.
+     */
+    private fun cleanupAudioResources() {
+        pttAudioTrack?.dispose()
+        pttAudioTrack = null
+
+        audioSource?.dispose()
+        audioSource = null
+
+        Log.d(TAG, "Audio resources cleaned up")
     }
 
     /**
@@ -619,21 +649,16 @@ class MediasoupClient @Inject constructor(
         Log.d(TAG, "Cleaning up mediasoup resources")
 
         // Step 1: Close producer FIRST
-        audioProducer?.let {
-            // TODO: Integrate actual libmediasoup-android library
-            // (it as Producer).close()
-        }
+        audioProducer?.close()
         audioProducer = null
+        cleanupAudioResources()
 
         // Step 2: Close all consumers
         consumers.values.forEach { it.close() }
         consumers.clear()
 
         // Step 3: Close send transport
-        sendTransport?.let {
-            // TODO: Integrate actual libmediasoup-android library
-            // (it as SendTransport).close()
-        }
+        sendTransport?.close()
         sendTransport = null
 
         // Step 4: Close all recv transports
