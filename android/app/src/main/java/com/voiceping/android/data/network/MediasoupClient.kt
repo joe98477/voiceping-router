@@ -140,21 +140,43 @@ class MediasoupClient @Inject constructor(
             val rtpCapabilities = toJsonString(capsResponse.data?.get("routerRtpCapabilities")
                 ?: throw IllegalStateException("No routerRtpCapabilities in response"))
 
-            Log.d(TAG, "Received RTP capabilities, creating Device")
+            Log.d(TAG, "Received RTP capabilities, loading into Device")
 
-            // Step 2 & 3: Create Device and load capabilities
-            // TODO: Integrate actual libmediasoup-android library
-            // device = Device()
-            // device?.load(rtpCapabilities)
+            // Step 2: Load capabilities into Device (blocks IO thread 50-200ms)
+            // Validates device can handle router's codecs
+            device.load(rtpCapabilities, null)
 
-            // Placeholder: Mark as initialized once library is integrated
+            // Step 3: Validate Opus codec support (required for audio-only app)
+            val deviceCapsJson = device.rtpCapabilities
+            val hasOpus = deviceCapsJson.contains("\"mimeType\":\"audio/opus\"", ignoreCase = true) ||
+                          deviceCapsJson.contains("\"mimeType\": \"audio/opus\"", ignoreCase = true)
+
+            if (!hasOpus) {
+                throw IllegalStateException("Device does not support Opus codec — cannot proceed with audio")
+            }
+
+            Log.d(TAG, "Device loaded with Opus codec support validated")
+
             _isInitialized.value = true
-            Log.d(TAG, "Device initialized successfully")
 
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize Device", e)
             throw e
         }
+    }
+
+    /**
+     * Get device RTP capabilities for server consume requests.
+     * Server needs this to create consumers compatible with device's codecs.
+     *
+     * @return JSON string of device's RTP capabilities
+     * @throws IllegalStateException if device not initialized
+     */
+    fun getRtpCapabilities(): String {
+        if (!_isInitialized.value) {
+            throw IllegalStateException("Device not initialized, call initialize() first")
+        }
+        return toJsonString(device.rtpCapabilities)
     }
 
     /**
