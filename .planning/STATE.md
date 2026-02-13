@@ -9,19 +9,19 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 
 ## Current Position
 
-Phase: 12-recv-transport-integration (in progress)
-Plan: 1 of 2 in phase 12
-Status: Plan 12-01 complete, ready for 12-02
-Last activity: 2026-02-13 — Plan 12-01 complete (RecvTransport and Consumer integration)
+Phase: 12-recv-transport-integration (complete)
+Plan: 2 of 2 in phase 12
+Status: Phase 12 complete, ready for phase 13
+Last activity: 2026-02-13 — Plan 12-02 complete (Consumer statistics and network quality polling)
 
-Progress: [████████░░░░░░░░░░░░] 35/TBD plans complete (v1.0: 24, v2.0: 26, v3.0: 3)
+Progress: [████████░░░░░░░░░░░░] 37/TBD plans complete (v1.0: 24, v2.0: 26, v3.0: 5)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 35 (v1.0: 24, v2.0: 26, v3.0: 3)
-- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~3.8 min (3 plans)
-- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.19 hours
+- Total plans completed: 37 (v1.0: 24, v2.0: 26, v3.0: 5)
+- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~3.8 min (5 plans)
+- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.32 hours
 
 **By Milestone:**
 
@@ -32,7 +32,7 @@ Progress: [████████░░░░░░░░░░░░] 35/TBD 
 | v3.0 mediasoup Integration | 5 | TBD | In progress |
 
 **Recent Trend:**
-- v3.0 in progress: 3 plans complete, 6 commits, RecvTransport and Consumer integrated with real libmediasoup-android
+- v3.0 in progress: 5 plans complete, 8 commits, Phase 12 complete (RecvTransport, Consumer, network quality)
 - v2.0 shipped 6 phases, 26 plans, 70 commits, 9,233 LOC Kotlin
 
 *Updated after each plan completion*
@@ -42,6 +42,7 @@ Progress: [████████░░░░░░░░░░░░] 35/TBD 
 | Phase 11 P01 | 313 | 2 tasks | 3 files |
 | Phase 11 P02 | 234 | 2 tasks | 1 files |
 | Phase 12 P01 | 218 | 2 tasks | 2 files |
+| Phase 12 P02 | 228 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -61,6 +62,8 @@ Recent decisions affecting current work:
 - [12-01]: runBlocking bridge for Transport callbacks — Native JNI threads need blocking bridge to suspend functions
 - [12-01]: Per-channel RecvTransport map — Multi-channel monitoring requires independent transport lifecycle
 - [12-01]: AudioTrack volume 0-10 range — WebRTC uses 0-10 not 0-1, convert via multiplication
+- [12-02]: Stub getConsumerStats() implementation — Consumer.stats API undocumented, stub returns "Good" until on-device testing
+- [12-02]: 5-second network quality polling — Balances responsiveness with battery/CPU efficiency for VoIP monitoring
 
 ### Pending Todos
 
@@ -70,12 +73,13 @@ None yet.
 
 **From v2.0 Tech Debt:**
 - On-device testing not yet performed (no physical Android device during development) — Phase 15 will address
-- MediasoupClient SendTransport and Producer still TODO — Phase 12 Plan 02 will implement
+- MediasoupClient SendTransport and Producer still TODO — Phase 13 will implement
 
-**Phase 12 Focus:**
+**Phase 12 Complete:**
 - RecvTransport per-channel pattern — Map-based storage for multi-channel monitoring
 - Consumer.resume() critical — Consumers start paused, must resume for audio playback
 - runBlocking bridge validated — Native JNI thread → runBlocking → suspend signaling works for one-time DTLS handshake
+- Network quality polling — 5-second intervals with Good/Fair/Poor indicators, stub stats until API confirmed
 
 **Carried forward:**
 - Multi-server state consistency strategy needs research for distributed Redis pub/sub pattern
@@ -91,10 +95,10 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-13 (plan execution)
-Stopped at: Completed 12-01-PLAN.md — RecvTransport per-channel, Consumer with resume, AudioTrack volume control
+Stopped at: Completed 12-02-PLAN.md — Phase 12 complete (Consumer statistics, network quality polling)
 Resume file: None
 
-Next step: Execute 12-02-PLAN.md for SendTransport and Producer integration
+Next step: Begin Phase 13 for SendTransport and Producer integration
 
 **Milestone 1 (WebRTC Audio Rebuild + Web UI) SHIPPED 2026-02-07:**
 - 4 phases, 24 plans
@@ -105,4 +109,4 @@ Next step: Execute 12-02-PLAN.md for SendTransport and Producer integration
 - See: .planning/milestones/v2.0-ROADMAP.md
 
 ---
-*Last updated: 2026-02-13 after completing 12-01-PLAN.md (RecvTransport and Consumer integration)*
+*Last updated: 2026-02-13 after completing 12-02-PLAN.md (Consumer statistics and network quality polling)*
