@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.voiceping.android.BuildConfig
 import com.voiceping.android.data.audio.AudioRouter
+import com.voiceping.android.data.network.MediasoupClient
 import com.voiceping.android.data.network.NetworkMonitor
 import com.voiceping.android.data.network.SignalingClient
 import com.voiceping.android.data.ptt.PttManager
@@ -19,6 +20,7 @@ import com.voiceping.android.data.storage.SettingsRepository
 import com.voiceping.android.domain.model.AudioMixMode
 import com.voiceping.android.domain.model.AudioOutputDevice
 import com.voiceping.android.domain.model.AudioRoute
+import com.voiceping.android.domain.model.ConsumerNetworkStats
 import com.voiceping.android.domain.model.Channel
 import com.voiceping.android.domain.model.ChannelMonitoringState
 import com.voiceping.android.domain.model.ConnectionState
@@ -29,15 +31,19 @@ import com.voiceping.android.domain.model.TransmissionHistoryEntry
 import com.voiceping.android.domain.model.VolumeKeyPttConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -53,6 +59,7 @@ class ChannelListViewModel @Inject constructor(
     private val networkMonitor: NetworkMonitor,
     private val transmissionHistoryRepository: TransmissionHistoryRepository,
     private val tokenManager: com.voiceping.android.data.storage.TokenManager,
+    private val mediasoupClient: MediasoupClient,
     @ApplicationContext private val context: Context,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -164,6 +171,13 @@ class ChannelListViewModel @Inject constructor(
     val networkType: StateFlow<NetworkType> = networkMonitor.networkType
     val serverUrl: String = BuildConfig.SERVER_URL
 
+    // Network quality per channel: channelId -> ConsumerNetworkStats
+    private val _networkQuality = MutableStateFlow<Map<String, ConsumerNetworkStats>>(emptyMap())
+    val networkQuality: StateFlow<Map<String, ConsumerNetworkStats>> = _networkQuality.asStateFlow()
+
+    // Active polling jobs tracker
+    private val networkQualityJobs = mutableMapOf<String, Job>()
+
     // Transmission history
     private val _selectedHistoryChannelId = MutableStateFlow<String?>(null)
     val selectedHistoryChannelId: StateFlow<String?> = _selectedHistoryChannelId.asStateFlow()
@@ -204,6 +218,34 @@ class ChannelListViewModel @Inject constructor(
         viewModelScope.launch {
             displayedChannelId.collect { channelId ->
                 channelRepository.currentDisplayedChannelId = channelId
+            }
+        }
+
+        // Observe monitored channels for network quality polling lifecycle
+        viewModelScope.launch {
+            monitoredChannels.collect { channels ->
+                channels.forEach { (channelId, state) ->
+                    val hasActiveConsumer = state.currentSpeaker != null && state.consumerId != null
+                    val isPollingActive = networkQualityJobs.containsKey(channelId)
+
+                    when {
+                        hasActiveConsumer && !isPollingActive -> {
+                            // Start polling for new active consumer
+                            startNetworkQualityPolling(channelId, state.consumerId!!)
+                        }
+                        !hasActiveConsumer && isPollingActive -> {
+                            // Stop polling when consumer becomes inactive
+                            stopNetworkQualityPolling(channelId)
+                        }
+                    }
+                }
+
+                // Stop polling for channels that are no longer monitored
+                networkQualityJobs.keys.toList().forEach { channelId ->
+                    if (!channels.containsKey(channelId)) {
+                        stopNetworkQualityPolling(channelId)
+                    }
+                }
             }
         }
     }
@@ -463,8 +505,41 @@ class ChannelListViewModel @Inject constructor(
         _selectedHistoryChannelId.value = null
     }
 
+    /**
+     * Start polling network quality for a channel's active consumer.
+     * Polls every 5 seconds while the consumer is active.
+     */
+    private fun startNetworkQualityPolling(channelId: String, consumerId: String) {
+        // Cancel existing polling for this channel
+        networkQualityJobs[channelId]?.cancel()
+
+        networkQualityJobs[channelId] = viewModelScope.launch {
+            while (isActive) {
+                delay(5000) // Poll every 5 seconds
+
+                mediasoupClient.getConsumerStats(consumerId)?.let { stats ->
+                    _networkQuality.update { current ->
+                        current + (channelId to stats)
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Stop polling network quality for a channel.
+     */
+    private fun stopNetworkQualityPolling(channelId: String) {
+        networkQualityJobs[channelId]?.cancel()
+        networkQualityJobs.remove(channelId)
+        _networkQuality.update { it - channelId }
+    }
+
     override fun onCleared() {
         super.onCleared()
+        // Clean up network quality polling jobs
+        networkQualityJobs.values.forEach { it.cancel() }
+        networkQualityJobs.clear()
         // Disconnect from all channels on ViewModel cleanup
         channelRepository.disconnectAll()
         // Stop NetworkMonitor
