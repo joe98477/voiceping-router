@@ -84,7 +84,7 @@ dependencies {
     implementation("com.google.code.gson:gson:2.11.0")
 
     // mediasoup (crow-misia wrapper, bundles WebRTC)
-    implementation("io.github.crow-misia.libmediasoup-android:libmediasoup-android:0.7.0")
+    implementation("io.github.crow-misia.libmediasoup-android:libmediasoup-android:0.21.0")
 
     // Security
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
