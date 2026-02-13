@@ -2,6 +2,7 @@ package com.voiceping.android.data.network
 
 import android.content.Context
 import android.util.Log
+import com.google.gson.Gson
 import com.voiceping.android.data.network.dto.SignalingType
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -39,9 +40,14 @@ class MediasoupClient @Inject constructor(
     private var sendTransport: Any? = null
     private val consumers = mutableMapOf<String, Any>()
     private var audioProducer: Any? = null
+    private val gson = Gson()
 
     private val _isInitialized = MutableStateFlow(false)
     val isInitialized: StateFlow<Boolean> = _isInitialized.asStateFlow()
+
+    private fun toJsonString(data: Any?): String {
+        return gson.toJson(data) ?: throw IllegalStateException("Failed to serialize to JSON")
+    }
 
     /**
      * Initialize mediasoup Device and load RTP capabilities from server.
@@ -108,12 +114,9 @@ class MediasoupClient @Inject constructor(
 
             val transportId = transportData["id"] as? String
                 ?: throw IllegalStateException("No transport id")
-            val iceParameters = transportData["iceParameters"] as? String
-                ?: throw IllegalStateException("No iceParameters")
-            val iceCandidates = transportData["iceCandidates"] as? String
-                ?: throw IllegalStateException("No iceCandidates")
-            val dtlsParameters = transportData["dtlsParameters"] as? String
-                ?: throw IllegalStateException("No dtlsParameters")
+            val iceParameters = toJsonString(transportData["iceParameters"])
+            val iceCandidates = toJsonString(transportData["iceCandidates"])
+            val dtlsParameters = toJsonString(transportData["dtlsParameters"])
 
             Log.d(TAG, "Transport parameters received: id=$transportId")
 
@@ -276,12 +279,9 @@ class MediasoupClient @Inject constructor(
 
             val transportId = transportData["id"] as? String
                 ?: throw IllegalStateException("No transport id")
-            val iceParameters = transportData["iceParameters"] as? String
-                ?: throw IllegalStateException("No iceParameters")
-            val iceCandidates = transportData["iceCandidates"] as? String
-                ?: throw IllegalStateException("No iceCandidates")
-            val dtlsParameters = transportData["dtlsParameters"] as? String
-                ?: throw IllegalStateException("No dtlsParameters")
+            val iceParameters = toJsonString(transportData["iceParameters"])
+            val iceCandidates = toJsonString(transportData["iceCandidates"])
+            val dtlsParameters = toJsonString(transportData["dtlsParameters"])
 
             Log.d(TAG, "Send transport parameters received: id=$transportId")
 
