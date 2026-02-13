@@ -130,10 +130,11 @@ Plans:
   2. transportclose events handled for both send and recv transports (reconnection triggered)
   3. Reconnection uses Mutex-based state machine (no duplicate transports during network flapping)
   4. Rapid PTT press/release doesn't cause duplicate producers (state transitions atomic)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 14-01: TBD (awaiting planning)
+- [ ] 14-01-PLAN.md -- Mutex-protected transport lifecycle and correct disposal ordering
+- [ ] 14-02-PLAN.md -- Transport error recovery handlers and ChannelRepository disconnect cleanup
 
 #### Phase 15: Release Build Validation and Device Testing
 **Goal**: Verify ProGuard rules and validate end-to-end audio on physical Android device
