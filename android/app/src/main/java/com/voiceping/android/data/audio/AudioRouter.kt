@@ -163,11 +163,17 @@ class AudioRouter @Inject constructor(
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             // API 31+: Modern API
-            val result = audioManager.setCommunicationDevice(device)
-            if (result) {
-                Log.d(TAG, "Bluetooth communication device set successfully")
-            } else {
-                Log.w(TAG, "Failed to set Bluetooth communication device")
+            // Only SCO and BLE devices can be set as communication devices;
+            // A2DP is media-only and throws IllegalArgumentException
+            try {
+                val result = audioManager.setCommunicationDevice(device)
+                if (result) {
+                    Log.d(TAG, "Bluetooth communication device set successfully")
+                } else {
+                    Log.w(TAG, "Failed to set Bluetooth communication device")
+                }
+            } catch (e: IllegalArgumentException) {
+                Log.w(TAG, "Device type ${device.type} not valid for communication: ${e.message}")
             }
         } else {
             // API 26-30: Legacy SCO API

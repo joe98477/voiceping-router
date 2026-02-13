@@ -58,11 +58,10 @@ class AudioDeviceManager @Inject constructor(
 
             for (device in outputDevices) {
                 when (device.type) {
-                    AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
                     AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
                     AudioDeviceInfo.TYPE_BLE_HEADSET -> {
-                        // Bluetooth headset connected
-                        Log.d(TAG, "Bluetooth device connected: ${device.productName} (type=${device.type})")
+                        // Bluetooth communication device connected (SCO/BLE)
+                        Log.d(TAG, "Bluetooth comm device connected: ${device.productName} (type=${device.type})")
 
                         // Save previous device for fallback, update last connected
                         if (lastConnectedExternalDevice == null) {
@@ -73,6 +72,11 @@ class AudioDeviceManager @Inject constructor(
                         // Route audio to Bluetooth
                         audioRouter.setBluetoothMode(device)
                         _currentOutputDevice.value = AudioOutputDevice.BLUETOOTH
+                    }
+
+                    AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> {
+                        // A2DP is media-only, cannot be used as communication device
+                        Log.d(TAG, "Bluetooth A2DP device connected: ${device.productName} (media-only, skipping comm routing)")
                     }
 
                     AudioDeviceInfo.TYPE_WIRED_HEADSET,
