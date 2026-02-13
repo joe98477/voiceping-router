@@ -220,7 +220,6 @@ class MediasoupClient @Inject constructor(
 
         } catch (e: Exception) {
             Log.e(TAG, "Failed to consume audio", e)
-            throw e
         }
     }
 
