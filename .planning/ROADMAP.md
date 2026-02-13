@@ -83,10 +83,11 @@ See: `.planning/milestones/v2.0-ROADMAP.md` for full details.
   2. PeerConnectionFactory initializes with echo cancellation and noise suppression enabled
   3. AudioRouter coordinates with WebRTC's AudioDeviceModule without MODE_IN_COMMUNICATION conflicts
   4. Device loads server RTP capabilities and returns its own RTP capabilities
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 11-01: TBD (awaiting planning)
+- [ ] 11-01-PLAN.md -- Dependency upgrade, WebRTC init, AudioRouter coordination flag
+- [ ] 11-02-PLAN.md -- PeerConnectionFactory with AudioDeviceModule, Device RTP capabilities
 
 #### Phase 12: Device and RecvTransport Integration
 **Goal**: Wire RecvTransport and Consumer creation for receiving remote audio producers
