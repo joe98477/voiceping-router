@@ -1,30 +1,68 @@
-# Add project specific ProGuard rules here.
+# VoicePing Android - ProGuard/R8 Rules
+# Updated: 2026-02-13 for Phase 15 release build validation
+# Libraries: libmediasoup-android 0.21.0, AGP 9.0.0, WebRTC (bundled)
 
-# Keep mediasoup JNI classes
+# ===== WebRTC (org.webrtc) =====
+# WebRTC contains extensive JNI bindings to native C++ code.
+# R8 cannot detect method calls from C++, so we must preserve all classes.
+
+-keep class org.webrtc.** { *; }
+-keepclassmembers class org.webrtc.** { *; }
+-keep interface org.webrtc.** { *; }
+
+# Keep methods annotated with @CalledByNative (JNI upcalls from C++ to Java/Kotlin)
+-keepclassmembers class * {
+    @org.webrtc.CalledByNative <methods>;
+}
+
+# ===== mediasoup (io.github.crow_misia) =====
+# crow-misia wrapper library for mediasoup, uses JNI bindings to WebRTC.
+# Library does not provide consumer-rules.pro, so we preserve manually.
+
+-keep class io.github.crow_misia.mediasoup.** { *; }
+-keepclassmembers class io.github.crow_misia.mediasoup.** { *; }
+
+# Alternative package name (org.mediasoup) - keep for safety
 -keep class org.mediasoup.** { *; }
 -keepclassmembers class org.mediasoup.** { *; }
 
-# Keep WebRTC classes
--keep class org.webrtc.** { *; }
--keepclassmembers class org.webrtc.** { *; }
+# ===== Native Methods (JNI) =====
+# Preserve all native method signatures (called from Java/Kotlin to C++)
 
-# Keep Gson models (for JSON serialization)
+-keepclasseswithmembernames,includedescriptorclasses class * {
+    native <methods>;
+}
+
+# ===== Hilt Dependency Injection =====
+# Hilt uses code generation that R8 may strip
+
+-keep class dagger.hilt.** { *; }
+-keep class javax.inject.** { *; }
+-keep class * extends dagger.hilt.android.internal.managers.ViewComponentManager$FragmentContextWrapper { *; }
+
+# ===== Gson Serialization =====
+# mediasoup uses Gson for JSON serialization of RTP parameters, ICE candidates, etc.
+# Keep model classes and their field signatures.
+
 -keepattributes Signature
 -keepattributes *Annotation*
 -keep class com.voiceping.android.data.model.** { *; }
-
-# Keep domain models
 -keep class com.voiceping.android.domain.model.** { *; }
 
-# OkHttp
+# ===== OkHttp/Okio =====
+# Networking layer for signaling
+
 -dontwarn okhttp3.**
 -dontwarn okio.**
 
-# Retrofit
+# ===== Retrofit =====
+# API client annotations
+
 -keepattributes RuntimeVisibleAnnotations
 -keepattributes RuntimeInvisibleAnnotations
 -keepattributes RuntimeVisibleParameterAnnotations
 -keepattributes RuntimeInvisibleParameterAnnotations
+
 -keepclassmembers,allowshrinking,allowobfuscation interface * {
     @retrofit2.http.* <methods>;
 }
