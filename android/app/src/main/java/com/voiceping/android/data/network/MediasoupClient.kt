@@ -18,6 +18,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.webrtc.AudioSource
 import org.webrtc.AudioTrack
@@ -62,6 +64,9 @@ class MediasoupClient @Inject constructor(
     private var audioSource: AudioSource? = null
     private var pttAudioTrack: org.webrtc.AudioTrack? = null
     private val gson = Gson()
+
+    // Mutex for transport lifecycle protection (prevents concurrent creation/destruction)
+    private val transportMutex = Mutex()
 
     private val _isInitialized = MutableStateFlow(false)
     val isInitialized: StateFlow<Boolean> = _isInitialized.asStateFlow()
@@ -202,67 +207,75 @@ class MediasoupClient @Inject constructor(
      * @throws Exception if transport creation fails
      */
     suspend fun createRecvTransport(channelId: String) = withContext(Dispatchers.IO) {
-        try {
-            Log.d(TAG, "Creating receive transport for channel: $channelId")
+        transportMutex.withLock {
+            try {
+                // Guard: Prevent duplicate RecvTransport creation for same channel
+                if (recvTransports.containsKey(channelId)) {
+                    Log.d(TAG, "RecvTransport already exists for channel: $channelId")
+                    return@withContext
+                }
 
-            // Step 1: Request transport from server
-            val transportResponse = signalingClient.request(
-                SignalingType.CREATE_TRANSPORT,
-                mapOf(
-                    "channelId" to channelId,
-                    "direction" to "recv"
+                Log.d(TAG, "Creating receive transport for channel: $channelId")
+
+                // Step 1: Request transport from server
+                val transportResponse = signalingClient.request(
+                    SignalingType.CREATE_TRANSPORT,
+                    mapOf(
+                        "channelId" to channelId,
+                        "direction" to "recv"
+                    )
                 )
-            )
 
-            val transportData = transportResponse.data
-                ?: throw IllegalStateException("No transport data in response")
+                val transportData = transportResponse.data
+                    ?: throw IllegalStateException("No transport data in response")
 
-            val transportId = transportData["id"] as? String
-                ?: throw IllegalStateException("No transport id")
-            val iceParameters = toJsonString(transportData["iceParameters"])
-            val iceCandidates = toJsonString(transportData["iceCandidates"])
-            val dtlsParameters = toJsonString(transportData["dtlsParameters"])
+                val transportId = transportData["id"] as? String
+                    ?: throw IllegalStateException("No transport id")
+                val iceParameters = toJsonString(transportData["iceParameters"])
+                val iceCandidates = toJsonString(transportData["iceCandidates"])
+                val dtlsParameters = toJsonString(transportData["dtlsParameters"])
 
-            Log.d(TAG, "Transport parameters received: id=$transportId")
+                Log.d(TAG, "Transport parameters received: id=$transportId")
 
-            // Step 2 & 3: Create RecvTransport with listener
-            val transport = device.createRecvTransport(
-                listener = object : RecvTransport.Listener {
-                    override fun onConnect(transport: Transport, dtlsParameters: String) {
-                        Log.d(TAG, "RecvTransport onConnect: $transportId")
-                        runBlocking {
-                            signalingClient.request(
-                                SignalingType.CONNECT_TRANSPORT,
-                                mapOf(
-                                    "transportId" to transportId,
-                                    "dtlsParameters" to dtlsParameters
+                // Step 2 & 3: Create RecvTransport with listener
+                val transport = device.createRecvTransport(
+                    listener = object : RecvTransport.Listener {
+                        override fun onConnect(transport: Transport, dtlsParameters: String) {
+                            Log.d(TAG, "RecvTransport onConnect: $transportId")
+                            runBlocking {
+                                signalingClient.request(
+                                    SignalingType.CONNECT_TRANSPORT,
+                                    mapOf(
+                                        "transportId" to transportId,
+                                        "dtlsParameters" to dtlsParameters
+                                    )
                                 )
-                            )
+                            }
                         }
-                    }
 
-                    override fun onConnectionStateChange(
-                        transport: Transport,
-                        newState: String
-                    ) {
-                        Log.d(TAG, "RecvTransport state: $newState (channel: $channelId)")
-                        if (newState == "failed" || newState == "disconnected") {
-                            recvTransports.remove(channelId)
+                        override fun onConnectionStateChange(
+                            transport: Transport,
+                            newState: String
+                        ) {
+                            Log.d(TAG, "RecvTransport state: $newState (channel: $channelId)")
+                            if (newState == "failed" || newState == "disconnected") {
+                                recvTransports.remove(channelId)
+                            }
                         }
-                    }
-                },
-                id = transportId,
-                iceParameters = iceParameters,
-                iceCandidates = iceCandidates,
-                dtlsParameters = dtlsParameters
-            )
-            recvTransports[channelId] = transport
+                    },
+                    id = transportId,
+                    iceParameters = iceParameters,
+                    iceCandidates = iceCandidates,
+                    dtlsParameters = dtlsParameters
+                )
+                recvTransports[channelId] = transport
 
-            Log.d(TAG, "Receive transport created successfully")
+                Log.d(TAG, "Receive transport created successfully")
 
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to create receive transport", e)
-            throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to create receive transport", e)
+                throw e
+            }
         }
     }
 
@@ -419,101 +432,103 @@ class MediasoupClient @Inject constructor(
      * @throws Exception if transport creation fails
      */
     suspend fun createSendTransport() = withContext(Dispatchers.IO) {
-        try {
-            // Guard: SendTransport is singleton (not per-channel)
-            if (sendTransport != null) {
-                Log.d(TAG, "SendTransport already exists")
-                return@withContext
+        transportMutex.withLock {
+            try {
+                // Guard: SendTransport is singleton (not per-channel)
+                if (sendTransport != null) {
+                    Log.d(TAG, "SendTransport already exists")
+                    return@withContext
+                }
+
+                Log.d(TAG, "Creating send transport")
+
+                // Step 1: Request transport from server (direction="send", no channelId)
+                val transportResponse = signalingClient.request(
+                    SignalingType.CREATE_TRANSPORT,
+                    mapOf("direction" to "send")
+                )
+
+                val transportData = transportResponse.data
+                    ?: throw IllegalStateException("No transport data in response")
+
+                val transportId = transportData["id"] as? String
+                    ?: throw IllegalStateException("No transport id")
+                val iceParameters = toJsonString(transportData["iceParameters"])
+                val iceCandidates = toJsonString(transportData["iceCandidates"])
+                val dtlsParameters = toJsonString(transportData["dtlsParameters"])
+
+                Log.d(TAG, "Send transport parameters received: id=$transportId")
+
+                // Step 2 & 3: Create SendTransport with listener
+                sendTransport = device.createSendTransport(
+                    listener = object : SendTransport.Listener {
+                        override fun onConnect(transport: Transport, dtlsParameters: String) {
+                            Log.d(TAG, "SendTransport onConnect: $transportId")
+                            runBlocking {
+                                signalingClient.request(
+                                    SignalingType.CONNECT_TRANSPORT,
+                                    mapOf(
+                                        "transportId" to transportId,
+                                        "dtlsParameters" to dtlsParameters
+                                    )
+                                )
+                            }
+                        }
+
+                        override fun onProduce(
+                            transport: Transport,
+                            kind: String,
+                            rtpParameters: String,
+                            appData: String?
+                        ): String {
+                            Log.d(TAG, "SendTransport onProduce: kind=$kind")
+                            return runBlocking {
+                                val produceResponse = signalingClient.request(
+                                    SignalingType.PRODUCE,
+                                    mapOf(
+                                        "kind" to kind,
+                                        "rtpParameters" to rtpParameters
+                                    )
+                                )
+                                produceResponse.data?.get("id") as? String
+                                    ?: throw IllegalStateException("No producer id in response")
+                            }
+                        }
+
+                        override fun onProduceData(
+                            transport: Transport,
+                            sctpStreamParameters: String,
+                            label: String,
+                            protocol: String,
+                            appData: String?
+                        ): String {
+                            // Not used for audio-only app
+                            throw UnsupportedOperationException("Data channels not supported")
+                        }
+
+                        override fun onConnectionStateChange(
+                            transport: Transport,
+                            newState: String
+                        ) {
+                            Log.d(TAG, "SendTransport state: $newState")
+                            if (newState == "failed" || newState == "disconnected") {
+                                audioProducer?.close()
+                                audioProducer = null
+                            }
+                        }
+                    },
+                    id = transportId,
+                    iceParameters = iceParameters,
+                    iceCandidates = iceCandidates,
+                    dtlsParameters = dtlsParameters
+                )
+
+                Log.d(TAG, "Send transport created successfully")
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to create send transport", e)
+                throw e
             }
-
-            Log.d(TAG, "Creating send transport")
-
-            // Step 1: Request transport from server (direction="send", no channelId)
-            val transportResponse = signalingClient.request(
-                SignalingType.CREATE_TRANSPORT,
-                mapOf("direction" to "send")
-            )
-
-            val transportData = transportResponse.data
-                ?: throw IllegalStateException("No transport data in response")
-
-            val transportId = transportData["id"] as? String
-                ?: throw IllegalStateException("No transport id")
-            val iceParameters = toJsonString(transportData["iceParameters"])
-            val iceCandidates = toJsonString(transportData["iceCandidates"])
-            val dtlsParameters = toJsonString(transportData["dtlsParameters"])
-
-            Log.d(TAG, "Send transport parameters received: id=$transportId")
-
-            // Step 2 & 3: Create SendTransport with listener
-            sendTransport = device.createSendTransport(
-                listener = object : SendTransport.Listener {
-                    override fun onConnect(transport: Transport, dtlsParameters: String) {
-                        Log.d(TAG, "SendTransport onConnect: $transportId")
-                        runBlocking {
-                            signalingClient.request(
-                                SignalingType.CONNECT_TRANSPORT,
-                                mapOf(
-                                    "transportId" to transportId,
-                                    "dtlsParameters" to dtlsParameters
-                                )
-                            )
-                        }
-                    }
-
-                    override fun onProduce(
-                        transport: Transport,
-                        kind: String,
-                        rtpParameters: String,
-                        appData: String?
-                    ): String {
-                        Log.d(TAG, "SendTransport onProduce: kind=$kind")
-                        return runBlocking {
-                            val produceResponse = signalingClient.request(
-                                SignalingType.PRODUCE,
-                                mapOf(
-                                    "kind" to kind,
-                                    "rtpParameters" to rtpParameters
-                                )
-                            )
-                            produceResponse.data?.get("id") as? String
-                                ?: throw IllegalStateException("No producer id in response")
-                        }
-                    }
-
-                    override fun onProduceData(
-                        transport: Transport,
-                        sctpStreamParameters: String,
-                        label: String,
-                        protocol: String,
-                        appData: String?
-                    ): String {
-                        // Not used for audio-only app
-                        throw UnsupportedOperationException("Data channels not supported")
-                    }
-
-                    override fun onConnectionStateChange(
-                        transport: Transport,
-                        newState: String
-                    ) {
-                        Log.d(TAG, "SendTransport state: $newState")
-                        if (newState == "failed" || newState == "disconnected") {
-                            audioProducer?.close()
-                            audioProducer = null
-                        }
-                    }
-                },
-                id = transportId,
-                iceParameters = iceParameters,
-                iceCandidates = iceCandidates,
-                dtlsParameters = dtlsParameters
-            )
-
-            Log.d(TAG, "Send transport created successfully")
-
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to create send transport", e)
-            throw e
         }
     }
 
@@ -534,6 +549,12 @@ class MediasoupClient @Inject constructor(
      */
     suspend fun startProducing() = withContext(Dispatchers.IO) {
         try {
+            // Guard: Prevent duplicate Producer creation
+            if (audioProducer != null) {
+                Log.d(TAG, "Producer already exists, skipping")
+                return@withContext
+            }
+
             Log.d(TAG, "Starting audio producer")
 
             // Guard: SendTransport must exist
