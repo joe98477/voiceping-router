@@ -5,6 +5,7 @@ import android.util.Log
 import com.google.gson.Gson
 import com.voiceping.android.data.audio.AudioRouter
 import com.voiceping.android.data.network.dto.SignalingType
+import com.voiceping.android.domain.model.ConsumerNetworkStats
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.crow_misia.mediasoup.Consumer
 import io.github.crow_misia.mediasoup.Device
@@ -355,6 +356,51 @@ class MediasoupClient @Inject constructor(
                 Log.w(TAG, "Consumer track is not AudioTrack: $consumerId")
             }
         } ?: Log.w(TAG, "Consumer not found for volume control: $consumerId")
+    }
+
+    /**
+     * Get consumer statistics for network quality indicator.
+     *
+     * Parses RTCStatsReport from Consumer.stats to extract:
+     * - packetsLost: Cumulative packets lost
+     * - jitter: Packet arrival time variance
+     * - packetsReceived: Total packets received
+     *
+     * Note: The actual implementation depends on crow-misia API. If consumer.stats
+     * returns a String (JSON), we parse it. If it returns an RTCStatsReport object,
+     * we iterate it. This stub returns default "Good" stats for compilation.
+     *
+     * @param consumerId Consumer ID to get stats for
+     * @return ConsumerNetworkStats or null if consumer not found or stats unavailable
+     */
+    suspend fun getConsumerStats(consumerId: String): ConsumerNetworkStats? = withContext(Dispatchers.IO) {
+        consumers[consumerId]?.let { consumer ->
+            try {
+                // TODO: Implement actual stats parsing when library API is confirmed
+                // The crow-misia library's Consumer.stats property type is not documented.
+                // Options:
+                // 1. If it returns String (JSON like device.rtpCapabilities):
+                //    val statsJson = consumer.stats as? String
+                //    Parse JSON to extract inbound-rtp metrics
+                // 2. If it returns RTCStatsReport object:
+                //    Iterate through statsReport.getStatsIds() or similar
+                // 3. If it's a method getStats() with callback:
+                //    Wrap in suspendCancellableCoroutine
+                //
+                // For now, return default "Good" stats to allow compilation and UI wiring.
+                // Will be updated after library API testing on device.
+
+                return@withContext ConsumerNetworkStats(
+                    packetsLost = 0,
+                    jitter = 0.0,
+                    packetsReceived = 100,
+                    indicator = "Good"
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to get consumer stats: $consumerId", e)
+                null
+            }
+        }
     }
 
     /**
