@@ -173,15 +173,21 @@ class AudioRouter @Inject constructor(
      * @param device The Bluetooth AudioDeviceInfo to route audio to
      */
     fun setBluetoothMode(device: AudioDeviceInfo) {
-        Log.d(TAG, "Setting audio mode: Bluetooth (${device.productName})")
+        Log.d(TAG, "Setting audio mode: Bluetooth (${device.productName}, type=${device.type})")
+
+        // Reject A2DP devices — they are media-only and cannot be communication devices
+        if (device.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP) {
+            Log.w(TAG, "Rejecting A2DP device for communication routing (media-only)")
+            return
+        }
+
         if (modeControlEnabled) {
             audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             // API 31+: Modern API
-            // Only SCO and BLE devices can be set as communication devices;
-            // A2DP is media-only and throws IllegalArgumentException
+            // Only SCO and BLE devices can be set as communication devices
             try {
                 val result = audioManager.setCommunicationDevice(device)
                 if (result) {
@@ -191,6 +197,8 @@ class AudioRouter @Inject constructor(
                 }
             } catch (e: IllegalArgumentException) {
                 Log.w(TAG, "Device type ${device.type} not valid for communication: ${e.message}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Unexpected error setting communication device: ${e.message}")
             }
         } else {
             // API 26-30: Legacy SCO API

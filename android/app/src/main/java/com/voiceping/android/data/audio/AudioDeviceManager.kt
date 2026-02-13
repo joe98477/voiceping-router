@@ -171,14 +171,17 @@ class AudioDeviceManager @Inject constructor(
         for (device in currentDevices) {
             if (device.isSink) {
                 when (device.type) {
-                    AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
                     AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
                     AudioDeviceInfo.TYPE_BLE_HEADSET -> {
-                        Log.d(TAG, "Already connected Bluetooth device detected: ${device.productName}")
+                        Log.d(TAG, "Already connected Bluetooth comm device detected: ${device.productName}")
                         previousDevice = _currentOutputDevice.value
                         lastConnectedExternalDevice = device
                         audioRouter.setBluetoothMode(device)
                         _currentOutputDevice.value = AudioOutputDevice.BLUETOOTH
+                    }
+
+                    AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> {
+                        Log.d(TAG, "Already connected Bluetooth A2DP device: ${device.productName} (media-only, skipping comm routing)")
                     }
 
                     AudioDeviceInfo.TYPE_WIRED_HEADSET,

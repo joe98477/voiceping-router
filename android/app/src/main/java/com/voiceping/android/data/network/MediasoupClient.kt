@@ -47,6 +47,7 @@ import javax.inject.Singleton
 class MediasoupClient @Inject constructor(
     private val signalingClient: SignalingClient,
     private val audioRouter: AudioRouter,
+    private val gson: Gson,
     @ApplicationContext private val context: Context
 ) {
     // WebRTC factory and audio module
@@ -63,7 +64,6 @@ class MediasoupClient @Inject constructor(
     private var audioProducer: Producer? = null
     private var audioSource: AudioSource? = null
     private var pttAudioTrack: org.webrtc.AudioTrack? = null
-    private val gson = Gson()
 
     // Mutex for transport lifecycle protection (prevents concurrent creation/destruction)
     private val transportMutex = Mutex()
@@ -153,8 +153,11 @@ class MediasoupClient @Inject constructor(
 
             // Step 1: Get router RTP capabilities from server
             val capsResponse = signalingClient.request(SignalingType.GET_ROUTER_CAPABILITIES)
+            if (capsResponse.error != null) {
+                throw IllegalStateException("Server error: ${capsResponse.error}")
+            }
             val rtpCapabilities = toJsonString(capsResponse.data?.get("routerRtpCapabilities")
-                ?: throw IllegalStateException("No routerRtpCapabilities in response"))
+                ?: throw IllegalStateException("No routerRtpCapabilities in response (data keys: ${capsResponse.data?.keys})"))
 
             Log.d(TAG, "Received RTP capabilities, loading into Device")
 

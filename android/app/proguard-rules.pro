@@ -22,6 +22,9 @@
 -keep class io.github.crow_misia.mediasoup.** { *; }
 -keepclassmembers class io.github.crow_misia.mediasoup.** { *; }
 
+# crow-misia WebRTC extensions (transitive dependency, used by MediasoupClient.initialize)
+-keep class io.github.crow_misia.webrtc.** { *; }
+
 # Alternative package name (org.mediasoup) - keep for safety
 -keep class org.mediasoup.** { *; }
 -keepclassmembers class org.mediasoup.** { *; }
@@ -41,13 +44,20 @@
 -keep class * extends dagger.hilt.android.internal.managers.ViewComponentManager$FragmentContextWrapper { *; }
 
 # ===== Gson Serialization =====
-# mediasoup uses Gson for JSON serialization of RTP parameters, ICE candidates, etc.
-# Keep model classes and their field signatures.
+# Gson uses reflection to read @SerializedName annotations at runtime.
+# R8 must preserve Gson's annotation classes AND annotated fields/enums.
 
 -keepattributes Signature
 -keepattributes *Annotation*
+-keep class com.google.gson.** { *; }
 -keep class com.voiceping.android.data.model.** { *; }
+-keep class com.voiceping.android.data.network.dto.** { *; }
 -keep class com.voiceping.android.domain.model.** { *; }
+
+# Preserve @SerializedName on enum constants (Gson enum deserialization)
+-keepclassmembers enum * {
+    @com.google.gson.annotations.SerializedName <fields>;
+}
 
 # ===== OkHttp/Okio =====
 # Networking layer for signaling

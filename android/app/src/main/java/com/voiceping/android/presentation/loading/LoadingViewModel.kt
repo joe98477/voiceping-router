@@ -92,12 +92,8 @@ class LoadingViewModel @Inject constructor(
                 Log.d(TAG, "WebSocket connected, initializing mediasoup")
 
                 // 6. Initialize mediasoup Device
-                try {
-                    mediasoupClient.initialize()
-                    Log.d(TAG, "Mediasoup initialized successfully")
-                } catch (e: Exception) {
-                    Log.w(TAG, "Mediasoup initialization failed, will retry on channel join", e)
-                }
+                mediasoupClient.initialize()
+                Log.d(TAG, "Mediasoup initialized successfully")
 
                 // 7. Emit connected state with saved event ID
                 _uiState.value = LoadingUiState.Connected(savedEventId)

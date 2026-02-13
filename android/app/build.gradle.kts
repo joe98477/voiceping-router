@@ -27,6 +27,7 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -85,6 +86,7 @@ dependencies {
 
     // mediasoup (crow-misia wrapper, bundles WebRTC)
     implementation("io.github.crow-misia.libmediasoup-android:libmediasoup-android:0.21.0")
+    implementation("io.github.crow-misia.libwebrtc:libwebrtc-ktx:1.12.0")
 
     // Security
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
