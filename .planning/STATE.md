@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 ## Current Position
 
 Phase: 11 of 15 (Library Upgrade and WebRTC Foundation)
-Plan: 1 of TBD in current phase
+Plan: 2 of TBD in current phase
 Status: Executing phase plans
-Last activity: 2026-02-13 — Completed 11-01: Library upgrade and WebRTC initialization
+Last activity: 2026-02-13 — Completed 11-02: Device initialization with RTP capabilities
 
-Progress: [████████░░░░░░░░░░░░] 33/TBD plans complete (v1.0: 24, v2.0: 26, v3.0: 1)
+Progress: [████████░░░░░░░░░░░░] 34/TBD plans complete (v1.0: 24, v2.0: 26, v3.0: 2)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 33 (v1.0: 24, v2.0: 26, v3.0: 1)
-- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~5.2 min (1 plan)
-- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.1 hours
+- Total plans completed: 34 (v1.0: 24, v2.0: 26, v3.0: 2)
+- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~4.5 min (2 plans)
+- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.15 hours
 
 **By Milestone:**
 
@@ -32,10 +32,15 @@ Progress: [████████░░░░░░░░░░░░] 33/TBD 
 | v3.0 mediasoup Integration | 5 | TBD | In progress |
 
 **Recent Trend:**
-- v3.0 in progress: 1 plan complete, 2 commits, library upgrade foundation laid
+- v3.0 in progress: 2 plans complete, 4 commits, WebRTC factory initialized with Device RTP capabilities
 - v2.0 shipped 6 phases, 26 plans, 70 commits, 9,233 LOC Kotlin
 
 *Updated after each plan completion*
+
+| Plan | Duration (s) | Tasks | Files |
+|------|--------------|-------|-------|
+| Phase 11 P01 | 313 | 2 tasks | 3 files |
+| Phase 11 P02 | 234 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -50,6 +55,8 @@ Recent decisions affecting current work:
 - [v3.0]: Replace MediasoupClient stubs with libmediasoup-android 0.21.0 — Real WebRTC audio vs web-only approach
 - [11-01]: Use PeerConnectionFactory.initialize() not MediasoupClient.initialize() — crow-misia API differs from haiyangwu wrapper
 - [11-01]: Default modeControlEnabled=true in AudioRouter — Backward compatible until WebRTC takes over in Plan 02
+- [11-02]: Device(peerConnectionFactory) constructor pattern — crow-misia 0.21.0 requires factory parameter
+- [11-02]: String-based Opus validation — Device.rtpCapabilities returns JSON string, not object
 
 ### Pending Todos
 
@@ -62,7 +69,7 @@ None yet.
 - MediasoupClient contains TODO placeholders for libmediasoup-android library integration — Phases 11-14 will implement
 
 **Phase 11 Focus:**
-- AudioManager ownership conflict risk — WebRTC vs AudioRouter dual control must be resolved first
+- AudioManager ownership conflict RESOLVED — WebRTC AudioDeviceModule now owns MODE_IN_COMMUNICATION, AudioRouter mode control disabled
 - JNI threading pattern — Transport callbacks run on native threads, need runBlocking bridges
 
 **Carried forward:**
@@ -79,10 +86,10 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-13 (plan execution)
-Stopped at: Completed 11-01-PLAN.md — library upgraded to 0.21.0, WebRTC initialized, AudioRouter coordination ready
+Stopped at: Completed 11-02-PLAN.md — PeerConnectionFactory with AEC/NS, Device with RTP capabilities, AudioRouter coordination active
 Resume file: None
 
-Next step: Execute 11-02-PLAN.md (Device initialization with RTP capabilities exchange)
+Next step: Execute 11-03-PLAN.md (Transport creation and DTLS connection)
 
 **Milestone 1 (WebRTC Audio Rebuild + Web UI) SHIPPED 2026-02-07:**
 - 4 phases, 24 plans
@@ -93,4 +100,4 @@ Next step: Execute 11-02-PLAN.md (Device initialization with RTP capabilities ex
 - See: .planning/milestones/v2.0-ROADMAP.md
 
 ---
-*Last updated: 2026-02-13 after completing 11-01-PLAN.md (library upgrade and WebRTC initialization)*
+*Last updated: 2026-02-13 after completing 11-02-PLAN.md (Device initialization with RTP capabilities)*
