@@ -86,8 +86,8 @@ See: `.planning/milestones/v2.0-ROADMAP.md` for full details.
 **Plans**: 2 plans
 
 Plans:
-- [ ] 11-01-PLAN.md -- Dependency upgrade, WebRTC init, AudioRouter coordination flag
-- [ ] 11-02-PLAN.md -- PeerConnectionFactory with AudioDeviceModule, Device RTP capabilities
+- [x] 11-01-PLAN.md -- Dependency upgrade, WebRTC init, AudioRouter coordination flag
+- [x] 11-02-PLAN.md -- PeerConnectionFactory with AudioDeviceModule, Device RTP capabilities
 
 #### Phase 12: Device and RecvTransport Integration
 **Goal**: Wire RecvTransport and Consumer creation for receiving remote audio producers
@@ -163,7 +163,7 @@ Phases execute in numeric order: 11 → 12 → 13 → 14 → 15
 | 8. Multi-Channel Monitoring & Scan Mode | v2.0 | 4/4 | Complete | 2026-02-11 |
 | 9. Hardware PTT & Bluetooth Integration | v2.0 | 4/4 | Complete | 2026-02-12 |
 | 10. Network Resilience & UX Polish | v2.0 | 5/5 | Complete | 2026-02-13 |
-| 11. Library Upgrade | v3.0 | 0/TBD | Not started | - |
+| 11. Library Upgrade | v3.0 | 2/2 | Complete | 2026-02-13 |
 | 12. RecvTransport | v3.0 | 0/TBD | Not started | - |
 | 13. SendTransport | v3.0 | 0/TBD | Not started | - |
 | 14. Lifecycle | v3.0 | 0/TBD | Not started | - |

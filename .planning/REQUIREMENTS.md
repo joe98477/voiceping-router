@@ -67,10 +67,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| WEBRTC-01 | Phase 11 | Pending |
-| WEBRTC-02 | Phase 11 | Pending |
-| WEBRTC-03 | Phase 11 | Pending |
-| WEBRTC-04 | Phase 11 | Pending |
+| WEBRTC-01 | Phase 11 | Complete |
+| WEBRTC-02 | Phase 11 | Complete |
+| WEBRTC-03 | Phase 11 | Complete |
+| WEBRTC-04 | Phase 11 | Complete |
 | RECV-01 | Phase 12 | Pending |
 | RECV-02 | Phase 12 | Pending |
 | RECV-03 | Phase 12 | Pending |
