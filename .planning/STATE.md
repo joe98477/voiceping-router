@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 Phase: 10 of 10 (all complete)
 Plan: N/A
 Status: Between milestones
-Last activity: 2026-02-13 - Completed quick task 2: Fix settings drawer and transport parameters
+Last activity: 2026-02-12 - Completed quick task 2: Fix settings drawer hardcoded user info and channel selection iceParameters error
 
 Progress: [████████████████████] 100% (v1.0: 4/4 phases, v2.0: 6/6 phases)
 
@@ -39,7 +39,7 @@ Deferred to future milestones:
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 1 | Build debug APK for testing | 2026-02-12 | 1855ebc | [1-build-debug-apk-for-testing](./quick/1-build-debug-apk-for-testing/) |
-| 2 | Fix settings drawer and transport parameters | 2026-02-13 | 2f4dabd | [2-fix-settings-drawer-hardcoded-user-info-](./quick/2-fix-settings-drawer-hardcoded-user-info-/) |
+| 2 | Fix settings drawer hardcoded user info and iceParameters error | 2026-02-12 | 1028b03 | [2-fix-settings-drawer-hardcoded-user-info-](./quick/2-fix-settings-drawer-hardcoded-user-info-/) |
 
 ## Session Continuity
 
