@@ -52,7 +52,18 @@ Reliable, secure real-time audio communication for coordinating 1000+ distribute
 
 ### Active
 
-(None — define with `/gsd:new-milestone`)
+## Current Milestone: v3.0 mediasoup Library Integration
+
+**Goal:** Wire the actual libmediasoup-android library into the existing MediasoupClient skeleton to enable real bidirectional WebRTC voice audio on Android.
+
+**Target features:**
+- Add libmediasoup-android library dependency to Gradle
+- Initialize mediasoup Device with server RTP capabilities
+- Create real RecvTransport and SendTransport with WebRTC DTLS/ICE
+- Consume remote audio producers (hear other users)
+- Produce local audio from microphone (transmit via PTT)
+- Per-channel volume control on real consumers
+- Cleanup and resource disposal
 
 ### Out of Scope
 
@@ -88,7 +99,7 @@ Two milestones shipped. Server-side WebRTC audio subsystem with mediasoup SFU, R
 
 - **Platform:** Android 8+ (API 26) — covers ~95% of devices
 - **Stack:** Server: Node.js/TypeScript/mediasoup. Android: Kotlin/Compose/Hilt. Web: React/Vite
-- **Backend:** Android app is a pure client consuming existing WebSocket protocol (no server changes)
+- **Backend:** Android app is a pure client consuming existing WebSocket protocol (minimal server changes)
 - **Latency:** 100-300ms target for PTT activation to audio
 - **Background:** Foreground service with partial wake lock for pocket radio mode
 - **Channels:** Max 5 simultaneous monitored channels per general user (bandwidth constraint)
@@ -113,4 +124,4 @@ Two milestones shipped. Server-side WebRTC audio subsystem with mediasoup SFU, R
 | Room database for offline caching | Cache-first loading pattern, 3 entities (Event, Channel, Team) | ✓ Good — seamless offline experience |
 
 ---
-*Last updated: 2026-02-13 after v2.0 milestone*
+*Last updated: 2026-02-13 after v3.0 milestone start*

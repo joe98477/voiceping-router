@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-13)
 
 **Core value:** Reliable, secure real-time audio communication for coordinating 1000+ distributed team members during high-profile events where security and uptime are critical
-**Current focus:** Planning next milestone
+**Current focus:** v3.0 mediasoup Library Integration
 
 ## Current Position
 
-Phase: 10 of 10 (all complete)
-Plan: N/A
-Status: Between milestones
-Last activity: 2026-02-12 - Completed quick task 2: Fix settings drawer hardcoded user info and channel selection iceParameters error
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-02-13 — Milestone v3.0 started
 
-Progress: [████████████████████] 100% (v1.0: 4/4 phases, v2.0: 6/6 phases)
+Progress: [░░░░░░░░░░░░░░░░░░░░] 0%
 
 ## Accumulated Context
 
@@ -28,11 +28,13 @@ None.
 
 ### Blockers/Concerns
 
-Deferred to future milestones:
+Carried from v2.0:
 - Multi-server state consistency strategy needs research for distributed Redis pub/sub pattern
 - Replace self-signed certificates with real TLS certificates for production deployment
-- On-device Android testing needed (no physical device during v2.0 development)
-- MediasoupClient library integration (TODO stubs in place)
+
+Resolved by v3.0:
+- ~~MediasoupClient library integration (TODO stubs in place)~~ — this milestone
+- ~~On-device Android testing needed~~ — physical device now available
 
 ### Quick Tasks Completed
 
@@ -44,7 +46,7 @@ Deferred to future milestones:
 ## Session Continuity
 
 Last session: 2026-02-13
-Stopped at: Completed quick task 2 (fix settings drawer and transport parameters)
+Stopped at: Starting milestone v3.0 (mediasoup library integration)
 Resume file: None
 
 **Milestone 1 (WebRTC Audio Rebuild + Web UI) SHIPPED 2026-02-07:**
