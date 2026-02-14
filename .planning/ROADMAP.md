@@ -4,7 +4,7 @@
 
 - ✅ **v1.0 WebRTC Audio Rebuild + Web UI** - Phases 1-4 (shipped 2026-02-07)
 - ✅ **v2.0 Android Client App** - Phases 5-10 (shipped 2026-02-13)
-- 🚧 **v3.0 mediasoup Library Integration** - Phases 11-15 (in progress)
+- ✅ **v3.0 mediasoup Library Integration** - Phases 11-15 (shipped 2026-02-15)
 
 ## Phases
 
@@ -70,90 +70,38 @@ See: `.planning/milestones/v2.0-ROADMAP.md` for full details.
 
 </details>
 
-### 🚧 v3.0 mediasoup Library Integration (In Progress)
+<details>
+<summary>✅ v3.0 mediasoup Library Integration (Phases 11-15) - SHIPPED 2026-02-15</summary>
 
-**Milestone Goal:** Wire the actual libmediasoup-android library into the existing MediasoupClient skeleton to enable real bidirectional WebRTC voice audio on Android.
+**Delivered:** Real WebRTC audio on Android — replaced MediasoupClient stubs with libmediasoup-android 0.21.0 for bidirectional voice communication, validated on physical hardware.
 
-#### Phase 11: Library Upgrade and WebRTC Foundation
-**Goal**: Establish WebRTC subsystem and resolve AudioManager ownership before audio integration
-**Depends on**: Phase 10 (v2.0 complete)
-**Requirements**: WEBRTC-01, WEBRTC-02, WEBRTC-03, WEBRTC-04
-**Success Criteria** (what must be TRUE):
-  1. App compiles with libmediasoup-android 0.21.0 dependency
-  2. PeerConnectionFactory initializes with echo cancellation and noise suppression enabled
-  3. AudioRouter coordinates with WebRTC's AudioDeviceModule without MODE_IN_COMMUNICATION conflicts
-  4. Device loads server RTP capabilities and returns its own RTP capabilities
-**Plans**: 2 plans
+**Stats:** 5 phases (11-15), 10 plans, 38 commits, +1,102/-526 LOC Kotlin
 
-Plans:
-- [x] 11-01-PLAN.md -- Dependency upgrade, WebRTC init, AudioRouter coordination flag
-- [x] 11-02-PLAN.md -- PeerConnectionFactory with AudioDeviceModule, Device RTP capabilities
+### Phase 11: Library Upgrade and WebRTC Foundation
+**Goal**: Establish WebRTC subsystem and resolve AudioManager ownership
+**Plans**: 2 plans (complete)
 
-#### Phase 12: Device and RecvTransport Integration
-**Goal**: Wire RecvTransport and Consumer creation for receiving remote audio producers
-**Depends on**: Phase 11 (WebRTC foundation established)
-**Requirements**: RECV-01, RECV-02, RECV-03, RECV-04, RECV-05
-**Success Criteria** (what must be TRUE):
-  1. RecvTransport created with server parameters and onConnect callback bridges DTLS to signaling
-  2. Consumer created from remote producer and audio playback begins automatically
-  3. Per-consumer volume control adjusts playback level (user can change channel volume, audio level changes)
-  4. Consumer closes cleanly when user leaves channel (no orphaned resources)
-  5. Consumer statistics available for network quality indicator (packet loss and jitter displayed)
-**Plans**: 2 plans
+### Phase 12: Device and RecvTransport Integration
+**Goal**: Wire RecvTransport and Consumer creation for receiving remote audio
+**Plans**: 2 plans (complete)
 
-Plans:
-- [x] 12-01-PLAN.md -- RecvTransport creation, Consumer lifecycle, volume control, cleanup
-- [x] 12-02-PLAN.md -- Consumer statistics for network quality indicator
+### Phase 13: SendTransport and Producer Integration
+**Goal**: Wire SendTransport and Producer creation for PTT audio transmission
+**Plans**: 2 plans (complete)
 
-#### Phase 13: SendTransport and Producer Integration
-**Goal**: Wire SendTransport and Producer creation for transmitting local microphone audio via PTT
-**Depends on**: Phase 12 (RecvTransport validated)
-**Requirements**: SEND-01, SEND-02, SEND-03, SEND-04, SEND-05
-**Success Criteria** (what must be TRUE):
-  1. SendTransport created with server parameters, onConnect and onProduce callbacks bridge to signaling
-  2. AudioTrack created via PeerConnectionFactory for microphone capture
-  3. Producer created with Opus PTT config when user presses PTT button (audio transmitted)
-  4. Producer closed and audio capture stopped when user releases PTT button (audio stops)
-  5. AudioCaptureManager removed from codebase (library handles audio capture)
-**Plans**: 2 plans
+### Phase 14: Cleanup Lifecycle and Reconnection Resilience
+**Goal**: Ordered disposal and Mutex state machine for production-ready lifecycle
+**Plans**: 2 plans (complete)
 
-Plans:
-- [x] 13-01-PLAN.md -- SendTransport creation, Producer lifecycle with AudioSource/AudioTrack and Opus config
-- [x] 13-02-PLAN.md -- PttManager refactor and AudioCaptureManager deletion
+### Phase 15: Release Build Validation and Device Testing
+**Goal**: ProGuard rules and physical device end-to-end audio validation
+**Plans**: 2 plans (complete)
 
-#### Phase 14: Cleanup Lifecycle and Reconnection Resilience
-**Goal**: Implement ordered disposal and state machine for production-ready lifecycle management
-**Depends on**: Phase 13 (Producer/Consumer working)
-**Requirements**: LIFE-01, LIFE-02, LIFE-03, LIFE-04
-**Success Criteria** (what must be TRUE):
-  1. Resources disposed in correct order on disconnect (producers → consumers → transports, no crashes)
-  2. transportclose events handled for both send and recv transports (reconnection triggered)
-  3. Reconnection uses Mutex-based state machine (no duplicate transports during network flapping)
-  4. Rapid PTT press/release doesn't cause duplicate producers (state transitions atomic)
-**Plans**: 2 plans
+See: `.planning/milestones/v3.0-ROADMAP.md` for full details.
 
-Plans:
-- [x] 14-01-PLAN.md -- Mutex-protected transport lifecycle and correct disposal ordering
-- [x] 14-02-PLAN.md -- Transport error recovery handlers and ChannelRepository disconnect cleanup
-
-#### Phase 15: Release Build Validation and Device Testing
-**Goal**: Verify ProGuard rules and validate end-to-end audio on physical Android device
-**Depends on**: Phase 14 (Lifecycle complete)
-**Requirements**: VALID-01, VALID-02, VALID-03
-**Success Criteria** (what must be TRUE):
-  1. ProGuard/R8 rules verified — release APK built successfully without JNI class stripping errors
-  2. Release APK tested on physical Android device with end-to-end audio (user can transmit and receive)
-  3. Battery profiling shows no excessive drain from WebRTC threads (under 10%/hour with screen off)
-**Plans**: 2 plans
-
-Plans:
-- [x] 15-01-PLAN.md -- ProGuard/R8 rule update and release APK build verification
-- [x] 15-02-PLAN.md -- Physical device end-to-end audio testing and battery profiling
+</details>
 
 ## Progress
-
-**Execution Order:**
-Phases execute in numeric order: 11 → 12 → 13 → 14 → 15
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -175,4 +123,4 @@ Phases execute in numeric order: 11 → 12 → 13 → 14 → 15
 
 ---
 *Roadmap created: 2026-02-06*
-*Last updated: 2026-02-15 after Phase 15 complete (v3.0 milestone complete)*
+*Last updated: 2026-02-15 after v3.0 milestone shipped*

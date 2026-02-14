@@ -2,7 +2,7 @@
 
 ## What This Is
 
-An enterprise-grade push-to-talk (PTT) communications system enabling distributed teams to coordinate during large-scale events. Field workers carry Android devices as two-way radios with hardware PTT buttons and multi-channel scan mode, while dispatch users monitor channels from a browser-based console. Role-based access (Admin, Dispatch, General) and hierarchical organization (Events → Teams → Channels) provide structure for coordinating 1000+ team members.
+An enterprise-grade push-to-talk (PTT) communications system enabling distributed teams to coordinate during large-scale events. Field workers carry Android devices as two-way radios with real WebRTC audio via mediasoup, hardware PTT buttons, and multi-channel scan mode. Dispatch users monitor channels from a browser-based console. Role-based access (Admin, Dispatch, General) and hierarchical organization (Events → Teams → Channels) provide structure for coordinating 1000+ team members.
 
 ## Core Value
 
@@ -49,21 +49,17 @@ Reliable, secure real-time audio communication for coordinating 1000+ distribute
 - ✓ Network quality indicator and transmission history — v2.0
 - ✓ Consolidated settings screen — v2.0
 - ✓ Per-channel volume control — v2.0
+- ✓ libmediasoup-android 0.21.0 with real WebRTC audio (PeerConnectionFactory, AEC, NS) — v3.0
+- ✓ RecvTransport per-channel with Consumer lifecycle and audio playback — v3.0
+- ✓ SendTransport with Producer lifecycle for PTT microphone transmission — v3.0
+- ✓ Mutex-protected transport lifecycle with error recovery — v3.0
+- ✓ ProGuard/R8 rules for JNI class preservation in release builds — v3.0
+- ✓ Physical device testing: end-to-end audio verified on Samsung Galaxy S21 (Android 16) — v3.0
+- ✓ Battery profiling: 5%/hour with screen off and foreground service — v3.0
 
 ### Active
 
-## Current Milestone: v3.0 mediasoup Library Integration
-
-**Goal:** Wire the actual libmediasoup-android library into the existing MediasoupClient skeleton to enable real bidirectional WebRTC voice audio on Android.
-
-**Target features:**
-- Add libmediasoup-android library dependency to Gradle
-- Initialize mediasoup Device with server RTP capabilities
-- Create real RecvTransport and SendTransport with WebRTC DTLS/ICE
-- Consume remote audio producers (hear other users)
-- Produce local audio from microphone (transmit via PTT)
-- Per-channel volume control on real consumers
-- Cleanup and resource disposal
+(No active requirements — planning next milestone)
 
 ### Out of Scope
 
@@ -82,18 +78,19 @@ Reliable, secure real-time audio communication for coordinating 1000+ distribute
 
 ### Current State
 
-Two milestones shipped. Server-side WebRTC audio subsystem with mediasoup SFU, React web UI for general and dispatch users, and native Android PTT client app. 10 phases, 50 plans executed across both milestones.
+Three milestones shipped. Full-stack PTT communications platform with server-side mediasoup SFU, React web UI, and native Android client with real WebRTC audio. 15 phases, 60 plans executed across all milestones.
 
 **Server:** ~8,000 LOC TypeScript — Node.js v24, mediasoup 3.19, Redis, PostgreSQL/Prisma, Docker deployment
-**Android:** ~9,200 LOC Kotlin — Jetpack Compose, Hilt DI, Room database, Media3, 88 source files
+**Android:** ~9,800 LOC Kotlin — Jetpack Compose, Hilt DI, Room database, Media3, libmediasoup-android 0.21.0, 88 source files
 **Web:** React 18, Vite, mediasoup-client
 
 ### Known Issues
 
-- On-device testing not yet performed for Android app (development done without physical device)
-- MediasoupClient contains TODO placeholders for libmediasoup-android library integration
+- Consumer.getStats() returns stub "Good" quality (crow-misia API undocumented)
+- No automated integration tests for mediasoup audio pipeline (requires physical device + server)
 - Multi-server state consistency needs research for distributed Redis pub/sub
 - Self-signed certificates need replacement with real TLS for production
+- HW-02 rugged phone PTT deferred (hardware unavailable)
 
 ## Constraints
 
@@ -122,6 +119,16 @@ Two milestones shipped. Server-side WebRTC audio subsystem with mediasoup SFU, R
 | Media3 MediaSession for Bluetooth PTT | Modern API, only active when service running (doesn't steal media buttons) | ✓ Good — clean integration |
 | Exponential backoff with 30s cap, 5min max | Prevents server storms while staying responsive to network changes | ✓ Good — handles WiFi/cellular handoff |
 | Room database for offline caching | Cache-first loading pattern, 3 entities (Event, Channel, Team) | ✓ Good — seamless offline experience |
+| crow-misia libmediasoup-android 0.21.0 | Best maintained fork, Kotlin-first, WebRTC M130 | ✓ Good — real audio working on device |
+| PeerConnectionFactory.initialize() pattern | crow-misia API differs from haiyangwu wrapper | ✓ Good — correct for library version |
+| runBlocking bridge for Transport callbacks | Native JNI threads need blocking bridge to suspend signaling | ✓ Good — works for one-time DTLS handshake |
+| Per-channel RecvTransport map | Multi-channel monitoring requires independent transport lifecycle | ✓ Good — clean per-channel isolation |
+| SendTransport singleton | PTT is mutually exclusive, one transport per device | ✓ Good — simpler than per-channel |
+| WebRTC AudioSource for PTT capture | Library handles audio capture internally | ✓ Good — eliminated 168 LOC AudioCaptureManager |
+| Kotlin Mutex for transport lifecycle | Suspend functions can't use synchronized blocks | ✓ Good — prevents race conditions |
+| @Volatile flag for produce/stop race | JNI blocking call prevents Mutex/cancel solutions | ✓ Good — fixes audio-only-transmits-once |
+| try-catch telephonyManager.callState | Android 16 requires READ_PHONE_STATE, less invasive than permission | ✓ Good — prevents crash |
+| Full R8 optimization (no -dontobfuscate) | Production builds need code shrinking and obfuscation | ✓ Good — 42.8 MB release APK |
 
 ---
-*Last updated: 2026-02-13 after v3.0 milestone start*
+*Last updated: 2026-02-15 after v3.0 milestone*

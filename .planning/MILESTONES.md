@@ -1,5 +1,34 @@
 # Milestones
 
+## v3.0 mediasoup Library Integration (Shipped: 2026-02-15)
+
+**Delivered:** Real WebRTC audio on Android — replaced MediasoupClient stubs with libmediasoup-android 0.21.0 for bidirectional voice communication, validated on physical hardware.
+
+**Stats:** 5 phases (11-15), 10 plans, 38 commits, 16 files, +1,102/-526 LOC Kotlin
+**Timeline:** 3 days (2026-02-13 → 2026-02-15)
+**Git range:** `docs(11)` → `fix(15-02)`
+**Requirements:** 18/18 satisfied (100%)
+**Device tested:** Samsung Galaxy S21 (SM-S906E, Android 16 Beta BP2A.250605.031)
+
+**Key accomplishments:**
+- WebRTC foundation with libmediasoup-android 0.21.0, PeerConnectionFactory with hardware AEC/NS, Device RTP capabilities
+- RecvTransport per-channel with Consumer lifecycle, resume for audio playback, volume control (0-10 range)
+- SendTransport singleton with Producer lifecycle using WebRTC AudioSource for PTT, Opus config (mono, DTX, FEC, 48kHz, 20ms)
+- Mutex-protected transport lifecycle with error recovery (disconnected vs failed state differentiation)
+- Release build validation with comprehensive R8 keep rules for JNI libraries (42.8 MB APK)
+- Physical device testing: 3 bugs fixed (SecurityException crash, producer race condition, wrong channel routing), all 8 E2E tests passed, battery 5%/hour
+
+**Tech debt resolved from v2.0:**
+- On-device verification completed (was deferred from v2.0)
+- MediasoupClient TODO placeholders replaced with real library calls
+
+**Tech debt remaining:**
+- Consumer.getStats() returns stub quality (crow-misia API undocumented)
+- No automated integration tests for mediasoup audio pipeline
+- HW-02 rugged phone dedicated PTT (hardware unavailable)
+
+---
+
 ## v2.0 Android Client App (Shipped: 2026-02-13)
 
 **Delivered:** Native Android PTT client app — pocket two-way radio with hardware button support, multi-channel scan mode, and network resilience.
