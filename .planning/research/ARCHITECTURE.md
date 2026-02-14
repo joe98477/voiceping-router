@@ -1,751 +1,1043 @@
-# Architecture Patterns: libmediasoup-android Integration
+# Architecture Patterns: v4.0 Production Hardening & Location
 
-**Domain:** Android PTT app with mediasoup WebRTC library integration
-**Researched:** 2026-02-13
-**Confidence:** MEDIUM (Official docs + WebRTC patterns verified, specific threading details require source inspection)
+**Domain:** Enterprise PTT communications platform (production hardening phase)
+**Researched:** 2026-02-15
+**Focus:** Integration of location tracking, audio reliability fixes, permission management, and power optimization into existing architecture
 
 ## Executive Summary
 
-libmediasoup-android (crow-misia wrapper) integrates WebRTC's native threading model with Android's Kotlin/coroutine architecture. The library manages its own PeerConnectionFactory with dedicated worker/network/signaling threads, while Transport listener callbacks execute synchronously on **WebRTC's signaling thread** — requiring careful coroutine bridging to avoid blocking. AudioTrack instances are created and managed by the library's internal PeerConnectionFactory, not externally provided. The existing singleton pattern (MediasoupClient, ChannelRepository, PttManager) requires minimal changes, but Transport.Listener callbacks need `runBlocking` or suspendCoroutine wrappers to call SignalingClient's suspend functions.
+v4.0 adds production-critical features to the existing singleton-based Hilt DI architecture without major structural changes. Location tracking, permission management, and power optimization slot cleanly into the established patterns. Audio reliability improvements target the existing MediasoupClient/PttManager pipeline with buffer tuning and state machine hardening.
 
-**Critical Integration Points:**
-1. **PeerConnectionFactory initialization** - Library creates internally, requires ApplicationContext
-2. **Transport.Listener callbacks** - Run on WebRTC signaling thread, must bridge to coroutines
-3. **AudioTrack lifecycle** - Library-managed, tied to Producer/Consumer lifecycle
-4. **Threading model** - WebRTC's 3-thread model (worker/network/signaling) coexists with Kotlin coroutines
+**Key Integration Points:**
+- LocationManager fits as a new @Singleton alongside existing managers (AudioRouter, AudioDeviceManager, PttManager)
+- Location data flows: LocationManager → SignalingClient → Server → Redis pub/sub → Dispatch web UI (existing pattern)
+- Audio reliability: WebRTC jitter buffer tuning + MediasoupClient state machine hardening (no new components)
+- Permission management: New PermissionManager @Singleton with Activity/ViewModel delegation
+- Power optimization: Leverage existing foreground service + WorkManager for location batching
 
-## Recommended Architecture
+**Architectural Philosophy:**
+Maintain the v2.0/v3.0 clean architecture: presentation → data → domain layers with @Singleton providers in the data layer. No circular dependencies. New features add singletons, not new layers.
 
-### Component Overview
+## Existing Architecture Overview (v3.0 Baseline)
+
+### Component Map
+
+| Layer | Component | Type | Responsibility |
+|-------|-----------|------|----------------|
+| **Data** | MediasoupClient | @Singleton | WebRTC Device, transports (RecvTransport map, SendTransport singleton), consumers/producers, lifecycle |
+| **Data** | SignalingClient | @Singleton | WebSocket connection, request/response correlation, heartbeat, reconnect logic |
+| **Data** | PttManager | @Singleton | PTT state machine (Idle/Requesting/Transmitting/Denied), audio production lifecycle |
+| **Data** | ChannelRepository | @Singleton | Multi-channel monitoring, speaker tracking, primary channel concept, consumer management |
+| **Data** | AudioRouter | @Singleton | Audio focus, mode control (earpiece/speaker/BT), phone call handling |
+| **Data** | AudioDeviceManager | @Singleton | BT device enumeration, output device selection, BT disconnect detection |
+| **Data** | AuthRepository | @Singleton | Login, JWT token refresh, router token acquisition |
+| **Data** | SettingsRepository | @Singleton | DataStore preferences (6 groups), Flow-based settings observation |
+| **Data** | NetworkMonitor | @Singleton | Network connectivity state, WiFi/cellular transitions |
+| **Data** | HapticFeedback | @Singleton | Vibration patterns (PTT press/release/busy) |
+| **Data** | TonePlayer | @Singleton | Audio cues (PTT start, roger beep, error, connection/disconnection) |
+| **Data** | MediaButtonHandler | @Singleton | Bluetooth media button PTT integration via MediaSession |
+| **Presentation** | ViewModels | @HiltViewModel | UI state, user actions → repository calls |
+| **Service** | ChannelMonitoringService | ForegroundService | Persistent notification, pocket radio mode, wake lock |
+| **Service** | AudioCaptureService | ForegroundService | Microphone permission foreground indicator (PTT transmission) |
+
+### Dependency Flow (No Circular Dependencies)
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ Android Application Layer (Kotlin + Coroutines)             │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  ┌──────────────────┐      ┌─────────────────┐             │
-│  │ ChannelRepository│◄─────┤ PttManager      │             │
-│  │  (@Singleton)    │      │  (@Singleton)   │             │
-│  └────────┬─────────┘      └────────┬────────┘             │
-│           │                         │                       │
-│           │ calls                   │ calls                 │
-│           ▼                         ▼                       │
-│  ┌──────────────────────────────────────────┐              │
-│  │ MediasoupClient (@Singleton)             │              │
-│  │ ┌──────────────────────────────────────┐ │              │
-│  │ │ Device (singleton, holds RTP caps)   │ │              │
-│  │ ├──────────────────────────────────────┤ │              │
-│  │ │ RecvTransport                        │ │              │
-│  │ │  - Listener callbacks                │ │              │
-│  │ │  - Consumers Map<String, Consumer>   │ │              │
-│  │ ├──────────────────────────────────────┤ │              │
-│  │ │ SendTransport                        │ │              │
-│  │ │  - Listener callbacks                │ │              │
-│  │ │  - Producer (audio)                  │ │              │
-│  │ └──────────────────────────────────────┘ │              │
-│  └────────────┬─────────────────────────────┘              │
-│               │ listener callbacks                         │
-│               │ (signaling thread)                         │
-│               ▼                                             │
-│  ┌──────────────────────────────────────────┐              │
-│  │ SignalingClient (@Singleton)             │              │
-│  │  - suspend fun request()                 │              │
-│  │  - WebSocket coroutines (Dispatchers.IO) │              │
-│  └──────────────────────────────────────────┘              │
-│                                                              │
-├─────────────────────────────────────────────────────────────┤
-│ libmediasoup-android (Native Bridge)                        │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  ┌──────────────────────────────────────────┐              │
-│  │ PeerConnectionFactory (library-created)  │              │
-│  │  - network_thread (write packets)        │              │
-│  │  - worker_thread (codec, processing)     │              │
-│  │  - signaling_thread (API calls, events)  │              │
-│  ├──────────────────────────────────────────┤              │
-│  │ AudioTrack (library-managed)             │              │
-│  │  - Created by Consumer.resume()          │              │
-│  │  - Plays audio via AudioManager          │              │
-│  ├──────────────────────────────────────────┤              │
-│  │ AudioSource (library-managed)            │              │
-│  │  - Created for Producer                  │              │
-│  │  - Reads from AudioRecord                │              │
-│  └──────────────────────────────────────────┘              │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
+ViewModels
+  ↓
+Repositories (ChannelRepository, AuthRepository, EventRepository)
+  ↓
+Managers (PttManager, AudioRouter, AudioDeviceManager, MediaButtonHandler)
+  ↓
+Clients (MediasoupClient, SignalingClient, NetworkMonitor)
+  ↓
+Infrastructure (OkHttpClient, Gson, Room Database, DataStore)
 ```
 
-## Integration Points
+**Critical Pattern:** Callbacks for cross-layer communication without circular deps
+- Example: `PttManager.onPttGranted` callback wired by `ChannelRepository` to trigger `TonePlayer.playPttStartTone()`
+- Example: `AudioRouter.onPhoneCallStarted` callback wired by `ChannelRepository` to force-release PTT
 
-### 1. Library Initialization
+### Data Flow: Existing WebRTC Audio
 
-**What:** One-time global initialization of WebRTC subsystem
-**Where:** `MediasoupClient.init()` or `VoicePingApplication.onCreate()`
-**Thread:** Main thread (called before any mediasoup operations)
+**Receive Path (Multi-channel):**
+```
+Server producer → SignalingClient (SPEAKER_CHANGED event)
+  → ChannelRepository.observeSpeakerChanges()
+  → MediasoupClient.createRecvTransport(channelId) [per-channel map]
+  → MediasoupClient.consumeAudio(channelId, producerId, peerId)
+  → Consumer.resume() → AudioTrack playback (volume 0-10)
+  → AudioRouter (earpiece/speaker/BT routing)
+```
 
+**Transmit Path (PTT):**
+```
+User PTT press → PttManager.requestPtt(channelId)
+  → SignalingClient.request(PTT_START) [wait for server grant]
+  → MediasoupClient.createSendTransport(channelId) [singleton]
+  → MediasoupClient.startProducing()
+  → AudioSource (WebRTC mic capture) → AudioTrack → Producer (Opus CBR, DTX, FEC)
+  → SendTransport → RTP packets to server
+User PTT release → PttManager.releasePtt()
+  → MediasoupClient.stopProducing() [dispose AudioSource, AudioTrack, Producer]
+  → SignalingClient.send(PTT_STOP)
+```
+
+## v4.0 Architecture Integration
+
+### 1. Location Tracking Architecture
+
+#### Component: LocationManager (@Singleton)
+
+**Placement:** Data layer, peer to PttManager/AudioRouter/AudioDeviceManager
+
+**Responsibilities:**
+- FusedLocationProviderClient initialization and lifecycle
+- Adaptive location update strategy (precise/general/throttled modes)
+- Motion-aware throttling using activity recognition
+- Location batching for power efficiency
+- Permission state coordination with PermissionManager
+
+**DI Wiring:**
+```kotlin
+@Module
+@InstallIn(SingletonComponent::class)
+object LocationModule {
+    @Provides
+    @Singleton
+    fun provideLocationManager(
+        @ApplicationContext context: Context,
+        signalingClient: SignalingClient,
+        settingsRepository: SettingsRepository,
+        permissionManager: PermissionManager
+    ): LocationManager
+}
+```
+
+**Why FusedLocationProvider:**
+- Battery-optimized (batches location requests from multiple apps)
+- Adaptive fused strategy (GPS, WiFi, cellular based on accuracy needs)
+- PRIORITY_BALANCED_POWER_ACCURACY default (sufficient for dispatch tracking)
+- Official Google recommendation for 2026+ (getCurrentLocation() pattern)
+
+Source: [Android FusedLocationProvider Documentation](https://developers.google.com/location-context/fused-location-provider)
+
+#### Data Flow: Android → Server → Dispatch
+
+```
+LocationManager.startTracking(mode: LocationTrackingMode)
+  ↓
+FusedLocationProviderClient.getCurrentLocation() [batched every 5-60s based on mode]
+  ↓
+LocationManager processes location fix (lat/lon/accuracy/timestamp)
+  ↓
+SignalingClient.send(LOCATION_UPDATE, { channelId, location: { lat, lon, accuracy, timestamp } })
+  ↓
+Server: channelRouter receives location update
+  ↓
+Server: Redis pub/sub broadcasts to dispatch console subscribers
+  ↓
+Web UI: React dispatch console updates marker on map
+```
+
+**Server Changes (Minimal):**
+- New signaling type: `LOCATION_UPDATE` (send-only from Android, no response)
+- channelRouter handler: validate user is in channel, broadcast to dispatch subscribers
+- Redis pub/sub pattern: reuse existing `channel:${channelId}:events` pattern
+- Database persistence: optional (store last known location per user for dispatch history)
+
+#### Location Tracking Modes
+
+| Mode | Update Interval | Accuracy | Use Case | Battery Impact |
+|------|----------------|----------|----------|----------------|
+| PRECISE | 5s | PRIORITY_HIGH_ACCURACY | Active PTT transmission | High (5-8%/hour) |
+| GENERAL | 60s | PRIORITY_BALANCED_POWER_ACCURACY | Monitoring (idle) | Low (1-2%/hour) |
+| MOTION_AWARE | Variable | Dynamic (high when moving, low when stationary) | Auto-detect motion | Medium (2-4%/hour) |
+| OFF | - | - | User disabled location | None |
+
+**Implementation Strategy:**
 ```kotlin
 @Singleton
-class MediasoupClient @Inject constructor(
+class LocationManager @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val signalingClient: SignalingClient
+    private val signalingClient: SignalingClient,
+    private val settingsRepository: SettingsRepository,
+    private val permissionManager: PermissionManager
 ) {
+    private val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
+    private var currentMode: LocationTrackingMode = LocationTrackingMode.OFF
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // Motion detection for adaptive throttling
+    private val activityRecognitionClient = ActivityRecognition.getClient(context)
+
+    suspend fun startTracking(mode: LocationTrackingMode) {
+        if (!permissionManager.hasLocationPermission()) {
+            Log.w(TAG, "Location permission not granted, cannot start tracking")
+            return
+        }
+
+        currentMode = mode
+        val interval = when (mode) {
+            LocationTrackingMode.PRECISE -> 5_000L
+            LocationTrackingMode.GENERAL -> 60_000L
+            LocationTrackingMode.MOTION_AWARE -> 15_000L // Base interval, adjusted by motion
+            LocationTrackingMode.OFF -> return
+        }
+
+        val priority = when (mode) {
+            LocationTrackingMode.PRECISE -> Priority.PRIORITY_HIGH_ACCURACY
+            else -> Priority.PRIORITY_BALANCED_POWER_ACCURACY
+        }
+
+        val request = LocationRequest.Builder(priority, interval)
+            .setMaxUpdateDelayMillis(interval * 3) // Batch up to 3 intervals for power efficiency
+            .build()
+
+        fusedLocationClient.requestLocationUpdates(request, locationCallback, Looper.getMainLooper())
+    }
+
+    private val locationCallback = object : LocationCallback() {
+        override fun onLocationResult(locationResult: LocationResult) {
+            locationResult.lastLocation?.let { location ->
+                sendLocationUpdate(location)
+            }
+        }
+    }
+
+    private fun sendLocationUpdate(location: Location) {
+        scope.launch {
+            // Send to server via existing SignalingClient
+            val channelId = getCurrentChannelId() ?: return@launch
+            signalingClient.send(
+                SignalingType.LOCATION_UPDATE,
+                mapOf(
+                    "channelId" to channelId,
+                    "location" to mapOf(
+                        "latitude" to location.latitude,
+                        "longitude" to location.longitude,
+                        "accuracy" to location.accuracy,
+                        "timestamp" to location.time
+                    )
+                )
+            )
+        }
+    }
+}
+```
+
+**ViewModel Integration:**
+```kotlin
+@HiltViewModel
+class ChannelListViewModel @Inject constructor(
+    private val channelRepository: ChannelRepository,
+    private val locationManager: LocationManager,
+    private val settingsRepository: SettingsRepository
+) : ViewModel() {
+
     init {
-        // Initialize WebRTC native libraries (call once per app lifecycle)
-        MediasoupClient.initialize(context)
-    }
-
-    private val device: Device by lazy {
-        Device()
-    }
-}
-```
-
-**Why:** WebRTC requires context-based initialization for Android-specific audio/video subsystems.
-
-**Consequences:** Initialization failure will crash app; must happen before Device creation.
-
-**Evidence:** [haiyangwu/mediasoup-client-android](https://github.com/haiyangwu/mediasoup-client-android) shows `MediasoupClient.initialize(getApplicationContext())` pattern.
-
----
-
-### 2. Device and RTP Capabilities Loading
-
-**What:** Load router's RTP capabilities into Device (codecs, extensions, header extensions)
-**Where:** `MediasoupClient.initialize()` suspend function
-**Thread:** Caller thread (blocks until complete, marked @async)
-
-```kotlin
-suspend fun initialize() = withContext(Dispatchers.IO) {
-    try {
-        // Step 1: Request router capabilities from server
-        val capsResponse = signalingClient.request(SignalingType.GET_ROUTER_CAPABILITIES)
-        val rtpCapabilities = toJsonString(capsResponse.data?.get("routerRtpCapabilities")
-            ?: throw IllegalStateException("No routerRtpCapabilities"))
-
-        // Step 2: Load capabilities (BLOCKS current thread until complete)
-        device.load(rtpCapabilities, null)
-
-        _isInitialized.value = true
-        Log.d(TAG, "Device loaded with RTP capabilities")
-    } catch (e: Exception) {
-        Log.e(TAG, "Failed to initialize Device", e)
-        throw e
+        // Start location tracking when monitoring channels
+        viewModelScope.launch {
+            combine(
+                monitoredChannels,
+                settingsRepository.getLocationTrackingMode()
+            ) { channels, mode ->
+                if (channels.isNotEmpty() && mode != LocationTrackingMode.OFF) {
+                    locationManager.startTracking(mode)
+                } else {
+                    locationManager.stopTracking()
+                }
+            }.collect()
+        }
     }
 }
 ```
 
-**Why:** Device.load() is marked @async and **blocks the calling thread** until WebRTC initialization completes (typically 50-200ms). Running on Dispatchers.IO prevents main thread blocking.
+**Foreground Service Integration:**
 
-**Threading Model:** `Device.load()` is synchronous from caller perspective despite internal async WebRTC operations.
+Location tracking requires `ACCESS_BACKGROUND_LOCATION` permission and background location access is subject to strict Google Play Store policy. The existing `ChannelMonitoringService` (foreground service type `mediaPlayback`) provides user-visible justification.
 
-**Evidence:** [mediasoup API docs](https://mediasoup.org/documentation/v3/libmediasoupclient/api/) state "@async methods block current thread until operation completes."
+Add to service:
+```kotlin
+// ChannelMonitoringService.kt
+@Inject lateinit var locationManager: LocationManager
 
----
+override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    when (intent?.action) {
+        ACTION_START -> {
+            // ... existing notification code ...
 
-### 3. Transport.Listener Callbacks with Coroutine Bridging
+            // Start location tracking if enabled
+            scope.launch {
+                settingsRepository.getLocationTrackingMode().first().let { mode ->
+                    if (mode != LocationTrackingMode.OFF) {
+                        locationManager.startTracking(mode)
+                    }
+                }
+            }
+        }
+        ACTION_STOP -> {
+            locationManager.stopTracking()
+            // ... existing cleanup ...
+        }
+    }
+}
+```
 
-**CRITICAL:** Transport listener callbacks execute on **WebRTC's signaling thread**, not Kotlin coroutine context. Calling suspend functions requires bridging via `runBlocking` or `suspendCoroutine`.
+**Permission Requirements:**
+- `ACCESS_FINE_LOCATION`: For precise GPS location (required)
+- `ACCESS_COARSE_LOCATION`: Fallback for network-based location (optional but recommended)
+- `ACCESS_BACKGROUND_LOCATION`: For location updates when app in background (required for foreground service location)
 
-#### Pattern 1: RecvTransport.Listener (Receive Audio)
+Source: [Android Location Permissions](https://developer.android.com/develop/sensors-and-location/location/permissions)
+
+#### Dispatch Web UI Integration
+
+Server-side changes are minimal:
+
+```typescript
+// server/src/signaling/channelRouter.ts (NEW handler)
+case 'location-update': {
+    const { channelId, location } = data;
+
+    // Validate user is in channel
+    const channelState = channelStates.get(channelId);
+    if (!channelState?.members.has(ws)) {
+        return { error: 'Not a member of channel' };
+    }
+
+    // Broadcast to dispatch console subscribers (existing pattern)
+    const locationEvent = {
+        type: 'location-update',
+        userId: ws.userId,
+        userName: ws.userName,
+        location: {
+            latitude: location.latitude,
+            longitude: location.longitude,
+            accuracy: location.accuracy,
+            timestamp: location.timestamp
+        }
+    };
+
+    // Use existing Redis pub/sub for dispatch updates
+    await redisPublisher.publish(
+        `channel:${channelId}:events`,
+        JSON.stringify(locationEvent)
+    );
+
+    // Optional: persist to database for dispatch history
+    await prisma.locationHistory.create({
+        data: {
+            userId: ws.userId,
+            channelId,
+            latitude: location.latitude,
+            longitude: location.longitude,
+            accuracy: location.accuracy,
+            timestamp: new Date(location.timestamp)
+        }
+    });
+
+    break;
+}
+```
+
+Web dispatch console subscribes to location updates via existing Redis subscription:
+
+```typescript
+// web/src/components/DispatchConsole.tsx (NEW map overlay)
+const [userLocations, setUserLocations] = useState<Map<string, Location>>(new Map());
+
+useEffect(() => {
+    socket.on('location-update', (event: LocationUpdateEvent) => {
+        setUserLocations(prev => new Map(prev).set(event.userId, event.location));
+    });
+}, []);
+
+return (
+    <MapContainer>
+        {Array.from(userLocations.entries()).map(([userId, location]) => (
+            <Marker
+                key={userId}
+                position={[location.latitude, location.longitude]}
+                icon={userMarkerIcon}
+            >
+                <Popup>{userName} - Accuracy: {location.accuracy}m</Popup>
+            </Marker>
+        ))}
+    </MapContainer>
+);
+```
+
+### 2. Audio Reliability Fixes
+
+**Problem:** Intermittent PTT silence, choppy audio, late arrivals
+
+**Root Causes (from research):**
+1. WebRTC jitter buffer too small for mobile networks ([WebRTC NetEQ Jitter Buffer](https://webrtchacks.com/how-webrtcs-neteq-jitter-buffer-provides-smooth-audio/))
+2. Producer/Consumer state race conditions (already fixed in Phase 15-02 with `@Volatile producingRequested` flag)
+3. Network flapping causing transport disconnection before auto-recovery window
+
+**Architecture Changes:** No new components, tune existing MediasoupClient
+
+#### Jitter Buffer Tuning
+
+WebRTC's NetEQ adaptive jitter buffer defaults to 40ms initial, can grow to 120ms. For mobile PTT with cellular packet variance, increase target:
 
 ```kotlin
-suspend fun createRecvTransport(channelId: String) = withContext(Dispatchers.IO) {
-    val transportResponse = signalingClient.request(
-        SignalingType.CREATE_TRANSPORT,
-        mapOf("channelId" to channelId, "direction" to "recv")
-    )
+// MediasoupClient.kt
+private fun createConsumerWithJitterBuffer(transport: RecvTransport, ...): Consumer {
+    val consumer = transport.consume(...)
 
-    val transportData = transportResponse.data ?: throw IllegalStateException("No transport data")
-    val transportId = transportData["id"] as String
-    val iceParameters = toJsonString(transportData["iceParameters"])
-    val iceCandidates = toJsonString(transportData["iceCandidates"])
-    val dtlsParameters = toJsonString(transportData["dtlsParameters"])
+    // Increase jitter buffer target for mobile networks
+    // Note: crow-misia library exposes jitterBufferTarget via Consumer.setJitterBufferTarget()
+    // if available in libmediasoup-android 0.21.0 bindings
+    consumer.setJitterBufferTarget(80) // 80ms target (vs default 40ms)
 
-    // Create transport with listener
-    recvTransport = device.createRecvTransport(
-        object : RecvTransport.Listener {
-            override fun onConnect(transport: Transport, dtlsParameters: String): Future<String> {
-                // RUNS ON WEBRTC SIGNALING THREAD - must bridge to coroutines
-                return runBlocking {
-                    try {
-                        signalingClient.request(
-                            SignalingType.CONNECT_TRANSPORT,
-                            mapOf(
-                                "transportId" to transportId,
-                                "dtlsParameters" to dtlsParameters
-                            )
-                        )
-                        "" // Return empty string on success
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to connect recv transport", e)
-                        throw e
+    consumer.resume()
+    return consumer
+}
+```
+
+**Caveat:** Check crow-misia 0.21.0 API documentation for actual jitter buffer control. If not exposed, this becomes server-side mediasoup configuration:
+
+```typescript
+// server/src/mediasoup/worker.ts
+const rtpCapabilities = router.rtpCapabilities;
+
+// Enable Opus in-band FEC (forward error correction) for packet loss recovery
+rtpCapabilities.codecs.find(c => c.mimeType === 'audio/opus')?.parameters = {
+    ...existingParams,
+    useinbandfec: 1, // Enable FEC
+    maxaveragebitrate: 48000, // Higher bitrate for better quality
+};
+```
+
+Source: [mediasoup Opus FEC](https://github.com/versatica/mediasoup/issues/234)
+
+#### State Machine Hardening
+
+Already addressed in v3.0 Phase 14-15:
+- Mutex-protected transport lifecycle (prevents concurrent creation/destruction)
+- `@Volatile producingRequested` flag (prevents orphaned producer on PTT release during `produce()` blocking call)
+- Connection state differentiation (disconnected vs failed for auto-recovery window)
+
+**Additional Hardening (v4.0):**
+
+```kotlin
+// MediasoupClient.kt
+private val transportHealthMonitor = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+fun startTransportHealthMonitoring() {
+    transportHealthMonitor.launch {
+        while (isActive) {
+            delay(5_000L) // Check every 5 seconds
+
+            // Monitor SendTransport health
+            sendTransport?.let { transport ->
+                val state = transport.connectionState
+                if (state == "disconnected") {
+                    val disconnectedDuration = System.currentTimeMillis() - disconnectedSince
+                    if (disconnectedDuration > 15_000L) {
+                        // Auto-recovery failed, force cleanup
+                        Log.w(TAG, "SendTransport disconnected >15s, forcing cleanup")
+                        audioProducer?.close()
+                        audioProducer = null
+                        sendTransport = null
                     }
                 }
             }
 
-            override fun onConnectionStateChange(
-                transport: Transport,
-                connectionState: TransportState
-            ) {
-                // RUNS ON WEBRTC SIGNALING THREAD
-                Log.d(TAG, "RecvTransport state: $connectionState")
-                // Can update StateFlow here (thread-safe)
-                // DO NOT call suspend functions directly
-            }
-        },
-        id = transportId,
-        iceParameters = iceParameters,
-        iceCandidates = iceCandidates,
-        dtlsParameters = dtlsParameters
-    )
-}
-```
-
-**Why runBlocking:** Callback executes on WebRTC's signaling thread (not coroutine dispatcher). SignalingClient.request() is suspend function requiring coroutine context. runBlocking creates coroutine context on current thread.
-
-**Consequence:** Blocks signaling thread during request (typically 10-50ms for CONNECT_TRANSPORT). Alternative: Use `GlobalScope.launch` + CompletableFuture, but adds complexity.
-
-**Evidence:** [WebRTC threading model](https://dyte.io/blog/understanding-libwebrtc/) confirms "all external callbacks run on signaling_thread."
-
-#### Pattern 2: SendTransport.Listener (Send Audio)
-
-```kotlin
-suspend fun createSendTransport(channelId: String) = withContext(Dispatchers.IO) {
-    val transportResponse = signalingClient.request(
-        SignalingType.CREATE_TRANSPORT,
-        mapOf("channelId" to channelId, "direction" to "send")
-    )
-
-    val transportData = transportResponse.data ?: throw IllegalStateException("No transport data")
-    val transportId = transportData["id"] as String
-    val iceParameters = toJsonString(transportData["iceParameters"])
-    val iceCandidates = toJsonString(transportData["iceCandidates"])
-    val dtlsParameters = toJsonString(transportData["dtlsParameters"])
-
-    sendTransport = device.createSendTransport(
-        object : SendTransport.Listener {
-            override fun onConnect(transport: Transport, dtlsParameters: String): Future<String> {
-                // RUNS ON WEBRTC SIGNALING THREAD
-                return runBlocking {
-                    signalingClient.request(
-                        SignalingType.CONNECT_TRANSPORT,
-                        mapOf(
-                            "transportId" to transportId,
-                            "dtlsParameters" to dtlsParameters
-                        )
-                    )
-                    ""
+            // Monitor RecvTransport health per channel
+            recvTransports.forEach { (channelId, transport) ->
+                val state = transport.connectionState
+                if (state == "disconnected") {
+                    // Similar auto-recovery monitoring
                 }
             }
-
-            override fun onProduce(
-                transport: Transport,
-                kind: String,
-                rtpParameters: String,
-                appData: String
-            ): Future<String> {
-                // RUNS ON WEBRTC SIGNALING THREAD
-                return runBlocking {
-                    val produceResponse = signalingClient.request(
-                        SignalingType.PRODUCE,
-                        mapOf(
-                            "kind" to kind,
-                            "rtpParameters" to rtpParameters
-                        )
-                    )
-                    produceResponse.data?.get("id") as? String
-                        ?: throw IllegalStateException("No producer id in response")
-                }
-            }
-
-            override fun onConnectionStateChange(
-                transport: Transport,
-                connectionState: TransportState
-            ) {
-                Log.d(TAG, "SendTransport state: $connectionState")
-            }
-        },
-        id = transportId,
-        iceParameters = iceParameters,
-        iceCandidates = iceCandidates,
-        dtlsParameters = dtlsParameters
-    )
-}
-```
-
-**onProduce Timing:** Called when `transport.produce()` is invoked. Must return server-assigned producer ID synchronously (from callback perspective). runBlocking waits for server response before returning.
-
-**Error Handling:** Exceptions thrown in callbacks propagate to WebRTC layer, which may close transport. Catch and log critical failures.
-
----
-
-### 4. AudioTrack Creation and Management
-
-**IMPORTANT:** The library creates and manages AudioTrack internally. You **do not** provide AudioTrack instances.
-
-#### Receive Side (Consumer → AudioTrack)
-
-```kotlin
-suspend fun consumeAudio(producerId: String, peerId: String) = withContext(Dispatchers.IO) {
-    val consumeResponse = signalingClient.request(
-        SignalingType.CONSUME,
-        mapOf("producerId" to producerId, "peerId" to peerId)
-    )
-
-    val consumeData = consumeResponse.data ?: throw IllegalStateException("No consume data")
-    val consumerId = consumeData["id"] as String
-    val kind = consumeData["kind"] as String
-    val rtpParameters = toJsonString(consumeData["rtpParameters"])
-
-    // Create consumer (library creates AudioTrack internally)
-    val consumer = recvTransport?.consume(
-        object : Consumer.Listener {
-            override fun onTransportClose(consumer: Consumer) {
-                consumers.remove(consumerId)
-                Log.d(TAG, "Consumer closed: $consumerId")
-            }
-        },
-        id = consumerId,
-        producerId = producerId,
-        kind = kind,
-        rtpParameters = rtpParameters,
-        appData = ""
-    )
-
-    consumer?.let {
-        consumers[consumerId] = it
-        it.resume() // START audio playback (AudioTrack.play() called internally)
-        Log.d(TAG, "Consumer resumed, audio playing")
-    }
-}
-```
-
-**AudioTrack Creation:** Happens inside `consumer.resume()`. Library creates `org.webrtc.AudioTrack` with default audio routing (system AudioManager).
-
-**Audio Routing:** AudioTrack routes to current Android audio output (earpiece/speaker/Bluetooth) based on `AudioManager.mode` and `isSpeakerphoneOn` settings (managed by AudioRouter).
-
-**Threading:** AudioTrack creation and playback occur on WebRTC's worker thread. Consumer.resume() is synchronous but triggers async audio pipeline startup.
-
-**Evidence:** [WebRTC Android patterns](https://www.videosdk.live/blog/webrtc-android) show PeerConnectionFactory creates tracks internally.
-
-#### Send Side (AudioSource → Producer)
-
-```kotlin
-suspend fun startProducing() = withContext(Dispatchers.IO) {
-    // Create audio source (library creates AudioRecord internally)
-    val audioSource = peerConnectionFactory.createAudioSource(MediaConstraints())
-
-    // Create local audio track
-    val audioTrack = peerConnectionFactory.createAudioTrack("audio", audioSource)
-
-    // Produce (no codec options in Kotlin API, configured server-side)
-    audioProducer = sendTransport?.produce(
-        object : Producer.Listener {
-            override fun onTransportClose(producer: Producer) {
-                audioProducer = null
-                Log.d(TAG, "Producer closed")
-            }
-        },
-        audioTrack,
-        null, // encodings (use server defaults)
-        null  // codecOptions (use server defaults)
-    )
-
-    Log.d(TAG, "Audio producer started")
-}
-```
-
-**PeerConnectionFactory Access:** Library may expose factory via `Device.getPeerConnectionFactory()` or require separate initialization. Check crow-misia API.
-
-**AudioSource:** Wraps Android AudioRecord. Opus encoding happens in WebRTC worker thread (native code).
-
-**Codec Configuration:** Opus settings (DTX, FEC, ptime, stereo) may be configured via codecOptions parameter (JSON string) or server-side in mediasoup router settings.
-
-**Alternative Pattern (if factory not exposed):** Use library's built-in audio track creation (check crow-misia docs for `Device.createAudioTrack()` equivalent).
-
----
-
-### 5. Data Flow: PTT Audio Capture
-
-Current code shows `AudioCaptureManager → MediasoupClient.sendAudioData()` pattern. This **changes** with library integration:
-
-#### Before (Placeholder Code)
-```kotlin
-// PttManager
-audioCaptureManager.onAudioData = { buffer, length ->
-    mediasoupClient.sendAudioData(buffer, length)
-}
-```
-
-#### After (Library Integration)
-```kotlin
-// AudioCaptureManager is REPLACED by WebRTC AudioSource
-// Producer automatically captures from AudioRecord
-
-suspend fun startProducing() = withContext(Dispatchers.IO) {
-    val audioSource = createAudioSource() // Library creates AudioRecord
-    val audioTrack = createAudioTrack(audioSource)
-
-    audioProducer = sendTransport?.produce(
-        producerListener,
-        audioTrack,
-        null,
-        null
-    )
-    // Audio flows automatically: AudioRecord → AudioSource → Producer → RTP
-}
-
-fun stopProducing() {
-    audioProducer?.close() // Stops AudioRecord, releases resources
-    audioProducer = null
-}
-```
-
-**Impact on PttManager:**
-- Remove `audioCaptureManager.onAudioData` callback
-- Remove `mediasoupClient.sendAudioData()` calls
-- Simplify to: `startProducing()` on PTT press, `stopProducing()` on release
-- AudioCaptureManager may be removed entirely (library handles capture)
-
-**AudioCaptureService:** May still be needed for foreground service notification (mic permission), but audio capture logic moves to library.
-
----
-
-## Threading Model Deep Dive
-
-### WebRTC's 3-Thread Architecture
-
-| Thread | Purpose | What Runs Here | Blocking Allowed? |
-|--------|---------|----------------|-------------------|
-| **signaling_thread** | API calls and callbacks | Device.load(), Transport.Listener callbacks, Consumer/Producer listeners | NO - callbacks must return quickly |
-| **worker_thread** | Media processing | Opus encoding/decoding, RTP packetization, audio effects (AEC, NS) | N/A (internal) |
-| **network_thread** | Network I/O | ICE negotiation, DTLS handshake, RTP/RTCP packet send/receive | N/A (internal) |
-
-**Key Rule:** **Never block signaling_thread** in callbacks. Long operations (network requests, database queries) must run on separate threads/coroutines.
-
-### Coroutine Integration Strategy
-
-#### Strategy 1: runBlocking (Current Recommendation)
-
-**Pros:**
-- Simple, matches synchronous callback signature
-- Waits for server response before returning
-
-**Cons:**
-- Blocks signaling thread (10-50ms per request)
-- Can cause deadlocks if WebRTC waits on callback return while holding locks
-
-**When to Use:** Short network requests (CONNECT_TRANSPORT, PRODUCE) where blocking is acceptable.
-
-```kotlin
-override fun onConnect(transport: Transport, dtlsParameters: String): Future<String> {
-    return runBlocking {
-        signalingClient.request(SignalingType.CONNECT_TRANSPORT, ...)
-        ""
-    }
-}
-```
-
-#### Strategy 2: suspendCoroutine + GlobalScope (Advanced)
-
-**Pros:**
-- Non-blocking on signaling thread
-- Better for long operations
-
-**Cons:**
-- More complex, requires CompletableFuture
-- Callback returns immediately, transport may time out if async operation is slow
-
-**When to Use:** Long operations (>100ms) or if experiencing deadlocks.
-
-```kotlin
-override fun onConnect(transport: Transport, dtlsParameters: String): Future<String> {
-    val future = CompletableFuture<String>()
-    GlobalScope.launch(Dispatchers.IO) {
-        try {
-            signalingClient.request(SignalingType.CONNECT_TRANSPORT, ...)
-            future.complete("")
-        } catch (e: Exception) {
-            future.completeExceptionally(e)
         }
     }
-    return future
 }
 ```
 
-**Recommendation:** Start with runBlocking. Only move to suspendCoroutine if profiling shows signaling thread stalls.
+#### Retry Logic for Produce Failures
 
----
+```kotlin
+// PttManager.kt
+suspend fun requestPtt(channelId: String) {
+    // ... existing PTT_START request ...
+
+    // Step 5: Start producing with retry
+    var produceAttempts = 0
+    while (produceAttempts < 3) {
+        try {
+            mediasoupClient.startProducing()
+            break // Success
+        } catch (e: Exception) {
+            produceAttempts++
+            Log.w(TAG, "Produce failed (attempt $produceAttempts/3): ${e.message}")
+            if (produceAttempts >= 3) {
+                // Give up, release PTT
+                _pttState.value = PttState.Idle
+                onPttDenied?.invoke()
+                signalingClient.send(SignalingType.PTT_STOP, mapOf("channelId" to channelId))
+                throw e
+            }
+            delay(500L * produceAttempts) // Exponential backoff
+        }
+    }
+}
+```
+
+### 3. Permission Management Architecture
+
+**Problem:** Android 6+ runtime permissions require request-at-usage pattern. Currently implicit (crash on permission denial).
+
+**Solution:** Centralized PermissionManager @Singleton with Activity/ViewModel delegation
+
+#### Component: PermissionManager (@Singleton)
+
+**Placement:** Data layer (peer to SettingsRepository, AuthRepository)
+
+**Responsibilities:**
+- Permission state checking (granted/denied/never-ask-again)
+- Permission request coordination with Activity via callback
+- Rationale display logic (when to show explanation before request)
+- Settings redirect for "never ask again" state
+
+**DI Wiring:**
+```kotlin
+@Module
+@InstallIn(SingletonComponent::class)
+object PermissionModule {
+    @Provides
+    @Singleton
+    fun providePermissionManager(
+        @ApplicationContext context: Context
+    ): PermissionManager
+}
+```
+
+**Implementation Pattern:**
+
+```kotlin
+@Singleton
+class PermissionManager @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
+    // Callback for Activity to handle permission request UI
+    var requestPermissionCallback: ((Array<String>, (Map<String, Boolean>) -> Unit) -> Unit)? = null
+
+    fun hasAudioPermissions(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    fun hasLocationPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    fun hasBackgroundLocationPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_BACKGROUND_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true // Not required on Android 9 and below
+        }
+    }
+
+    suspend fun requestAudioPermission(): Boolean = suspendCancellableCoroutine { continuation ->
+        val callback = requestPermissionCallback
+        if (callback == null) {
+            Log.e(TAG, "Permission request callback not set (Activity not ready)")
+            continuation.resume(false)
+            return@suspendCancellableCoroutine
+        }
+
+        callback(arrayOf(Manifest.permission.RECORD_AUDIO)) { results ->
+            continuation.resume(results[Manifest.permission.RECORD_AUDIO] == true)
+        }
+    }
+
+    suspend fun requestLocationPermissions(): Boolean = suspendCancellableCoroutine { continuation ->
+        val callback = requestPermissionCallback
+        if (callback == null) {
+            continuation.resume(false)
+            return@suspendCancellableCoroutine
+        }
+
+        // Incremental request: foreground first, then background
+        callback(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)) { results ->
+            if (results[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
+                // Foreground granted, now request background
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    callback(arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION)) { bgResults ->
+                        continuation.resume(bgResults[Manifest.permission.ACCESS_BACKGROUND_LOCATION] == true)
+                    }
+                } else {
+                    continuation.resume(true)
+                }
+            } else {
+                continuation.resume(false)
+            }
+        }
+    }
+
+    fun openAppSettings() {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.fromParts("package", context.packageName, null)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        context.startActivity(intent)
+    }
+}
+```
+
+Source: [Android Permission Best Practices](https://developer.android.com/training/permissions/usage-notes)
+
+**Activity Integration:**
+
+```kotlin
+// MainActivity.kt
+@AndroidEntryPoint
+class MainActivity : ComponentActivity() {
+
+    @Inject lateinit var permissionManager: PermissionManager
+
+    private val permissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        currentPermissionCallback?.invoke(permissions)
+        currentPermissionCallback = null
+    }
+
+    private var currentPermissionCallback: ((Map<String, Boolean>) -> Unit)? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        // Wire permission request callback
+        permissionManager.requestPermissionCallback = { permissions, callback ->
+            currentPermissionCallback = callback
+            permissionLauncher.launch(permissions)
+        }
+
+        // ... existing Compose setup ...
+    }
+}
+```
+
+**ViewModel Usage:**
+
+```kotlin
+// ChannelListViewModel.kt
+fun onPttButtonPressed() {
+    viewModelScope.launch {
+        if (!permissionManager.hasAudioPermissions()) {
+            val granted = permissionManager.requestAudioPermission()
+            if (!granted) {
+                _uiState.update { it.copy(
+                    errorMessage = "Microphone permission required for PTT"
+                ) }
+                return@launch
+            }
+        }
+
+        // Permission granted, proceed with PTT
+        val targetChannelId = getHardwarePttTargetChannelId()
+        if (targetChannelId != null) {
+            pttManager.requestPtt(targetChannelId)
+        }
+    }
+}
+```
+
+**First Launch Permission Prompt:**
+
+```kotlin
+// LoadingViewModel.kt
+fun checkAndRequestPermissions() {
+    viewModelScope.launch {
+        val missingPermissions = mutableListOf<String>()
+
+        if (!permissionManager.hasAudioPermissions()) {
+            missingPermissions.add("Microphone (for PTT)")
+        }
+        if (!permissionManager.hasLocationPermission()) {
+            missingPermissions.add("Location (for dispatch tracking)")
+        }
+
+        if (missingPermissions.isNotEmpty()) {
+            _uiState.update { it.copy(
+                showPermissionRationale = true,
+                requiredPermissions = missingPermissions
+            ) }
+        } else {
+            proceedToApp()
+        }
+    }
+}
+```
+
+### 4. Power Optimization Architecture
+
+**Goal:** Minimize battery drain for 24/7 pocket radio operation
+
+**Current Baseline (v3.0):** 5%/hour with screen off, foreground service, active WebSocket
+
+**Optimization Targets:**
+- Location tracking: 1-2%/hour additional (GENERAL mode with batching)
+- Network monitoring: Reduce polling frequency
+- Wake lock optimization: Use partial wake lock only when needed
+
+#### Strategy 1: Location Batching with WorkManager
+
+For GENERAL mode (60s updates), batch location updates instead of real-time transmission:
+
+```kotlin
+@Singleton
+class LocationBatchManager @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val locationManager: LocationManager
+) {
+    private val workManager = WorkManager.getInstance(context)
+
+    fun startBatchedTracking() {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        val request = PeriodicWorkRequestBuilder<LocationUploadWorker>(
+            repeatInterval = 15,
+            repeatIntervalTimeUnit = TimeUnit.MINUTES
+        )
+            .setConstraints(constraints)
+            .setBackoffCriteria(
+                BackoffPolicy.EXPONENTIAL,
+                WorkRequest.MIN_BACKOFF_MILLIS,
+                TimeUnit.MILLISECONDS
+            )
+            .build()
+
+        workManager.enqueueUniquePeriodicWork(
+            "location_batch_upload",
+            ExistingPeriodicWorkPolicy.KEEP,
+            request
+        )
+    }
+}
+
+class LocationUploadWorker @Inject constructor(
+    context: Context,
+    params: WorkerParameters,
+    private val signalingClient: SignalingClient,
+    private val locationDatabase: LocationDatabase
+) : CoroutineWorker(context, params) {
+
+    override suspend fun doWork(): Result {
+        // Upload batched location updates
+        val pendingLocations = locationDatabase.getPendingLocations()
+
+        pendingLocations.forEach { location ->
+            try {
+                signalingClient.send(SignalingType.LOCATION_UPDATE, location.toMap())
+                locationDatabase.markUploaded(location.id)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to upload location", e)
+            }
+        }
+
+        return Result.success()
+    }
+}
+```
+
+Source: [Android WorkManager Battery Optimization](https://developer.android.com/develop/background-work/background-tasks/optimize-battery)
+
+#### Strategy 2: Network Quality Polling Reduction
+
+Current: 5-second consumer stats polling (Phase 12-02)
+
+Optimization: Increase to 15 seconds for idle channels, 5 seconds for active speakers
+
+```kotlin
+// ChannelRepository.kt
+private fun startNetworkQualityMonitoring(channelId: String, consumerId: String) {
+    scope.launch {
+        while (isActive) {
+            // Dynamic polling interval based on activity
+            val interval = if (isChannelActivelyTransmitting(channelId)) {
+                5_000L // Active: 5s
+            } else {
+                15_000L // Idle: 15s
+            }
+
+            delay(interval)
+
+            val stats = mediasoupClient.getConsumerStats(consumerId)
+            _networkQuality.update { it + (channelId to stats?.indicator.orEmpty()) }
+        }
+    }
+}
+```
+
+#### Strategy 3: Wake Lock Scoping
+
+Current: Foreground service holds wake lock continuously
+
+Optimization: Release wake lock when no active audio (no speakers for >30s)
+
+```kotlin
+// ChannelMonitoringService.kt
+private var wakeLock: PowerManager.WakeLock? = null
+private var lastSpeakerActivityMs: Long = System.currentTimeMillis()
+private val wakeLockScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+fun startWakeLockMonitoring() {
+    wakeLockScope.launch {
+        while (isActive) {
+            delay(10_000L) // Check every 10s
+
+            val idleDuration = System.currentTimeMillis() - lastSpeakerActivityMs
+            if (idleDuration > 30_000L) {
+                // No speaker activity for 30s, release wake lock
+                wakeLock?.let {
+                    if (it.isHeld) {
+                        it.release()
+                        Log.d(TAG, "Released wake lock (idle for 30s)")
+                    }
+                }
+            }
+        }
+    }
+}
+
+fun onSpeakerActivity() {
+    lastSpeakerActivityMs = System.currentTimeMillis()
+
+    // Acquire wake lock on speaker activity
+    wakeLock?.let {
+        if (!it.isHeld) {
+            it.acquire(10*60*1000L /*10 minutes max*/)
+            Log.d(TAG, "Acquired wake lock (speaker activity)")
+        }
+    }
+}
+```
+
+**Battery Target (v4.0):**
+- Base (screen off, monitoring): 5%/hour (existing)
+- + Location tracking (GENERAL): +1%/hour
+- + Network quality polling reduction: -0.5%/hour
+- + Wake lock optimization: -1%/hour
+- **Total: ~4.5%/hour** (22+ hours of operation)
+
+### 5. Security Hardening Architecture
+
+**Goal:** Production-ready security audit compliance
+
+#### TLS Certificate Validation
+
+**Current:** OkHttpClient uses default TLS with system CA trust
+
+**Hardening:** Add certificate transparency enforcement, optional pinning
+
+```kotlin
+// AppModule.kt
+@Provides
+@Singleton
+fun provideOkHttpClient(cookieJar: SessionCookieJar): OkHttpClient {
+    val certificatePinner = CertificatePinner.Builder()
+        // Optional: Pin server certificate for MITM protection
+        // .add("your-domain.com", "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
+        .build()
+
+    return OkHttpClient.Builder()
+        .cookieJar(cookieJar)
+        .certificatePinner(certificatePinner)
+        .connectionSpecs(listOf(ConnectionSpec.MODERN_TLS))
+        .addInterceptor(loggingInterceptor)
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .build()
+}
+```
+
+**Note:** Certificate pinning NOT recommended for production by Google (operational risk during certificate rotation). Use only if required by client security policy.
+
+Source: [Android TLS Security](https://developer.android.com/training/articles/security-ssl)
+
+#### WebSocket TLS Enforcement
+
+```kotlin
+// SignalingClient.kt
+fun connect(url: String, token: String) {
+    // Enforce wss:// (TLS WebSocket)
+    if (!url.startsWith("wss://")) {
+        throw IllegalArgumentException("WebSocket URL must use wss:// (TLS)")
+    }
+
+    // ... existing connection logic ...
+}
+```
+
+#### Secure Token Storage
+
+Current: DataStore (encrypted at rest by Android)
+
+Additional: Use EncryptedSharedPreferences for JWT tokens
+
+```kotlin
+@Singleton
+class SecureTokenManager @Inject constructor(
+    @ApplicationContext private val context: Context
+) {
+    private val masterKey = MasterKey.Builder(context)
+        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+        .build()
+
+    private val encryptedPrefs = EncryptedSharedPreferences.create(
+        context,
+        "secure_tokens",
+        masterKey,
+        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+    )
+
+    fun saveToken(token: String) {
+        encryptedPrefs.edit().putString("jwt_token", token).apply()
+    }
+
+    fun getToken(): String? {
+        return encryptedPrefs.getString("jwt_token", null)
+    }
+}
+```
+
+## Build Order and Dependencies
+
+### Dependency Graph
+
+```
+Phase 16: Permission Management (no dependencies)
+  ↓
+Phase 17: Location Tracking (depends on PermissionManager)
+  ↓
+Phase 18: Audio Reliability (independent, can run parallel with 17)
+  ↓
+Phase 19: Power Optimization (depends on LocationManager, audio fixes)
+  ↓
+Phase 20: Security Hardening (independent, can run parallel with 18-19)
+```
+
+### Suggested Phase Structure
+
+**Phase 16: Permission Management Foundation**
+- Plan 1: PermissionManager @Singleton, MainActivity integration, first-launch flow
+- Plan 2: Permission rationale dialogs, settings redirect for denied permissions
+
+**Phase 17: Location Tracking**
+- Plan 1: LocationManager @Singleton, FusedLocationProviderClient, adaptive modes
+- Plan 2: Server signaling type LOCATION_UPDATE, Redis pub/sub, dispatch web UI map overlay
+
+**Phase 18: Audio Reliability Fixes**
+- Plan 1: WebRTC jitter buffer tuning, Opus FEC configuration, state machine hardening
+- Plan 2: Produce retry logic, transport health monitoring, error recovery
+
+**Phase 19: Power Optimization**
+- Plan 1: Location batching with WorkManager, network quality polling reduction
+- Plan 2: Wake lock scoping, battery profiling validation
+
+**Phase 20: Security Audit and Hardening**
+- Plan 1: TLS enforcement, secure token storage, certificate transparency
+- Plan 2: Full security audit (penetration testing, dependency scan), documentation
 
 ## Component Boundaries
 
-### Existing Components (Minimal Changes)
-
-| Component | Current Role | Library Integration Impact |
-|-----------|--------------|---------------------------|
-| **MediasoupClient** | Holds Device/Transport/Consumer/Producer refs, placeholder methods | Replace placeholder TODOs with actual library calls, add PeerConnectionFactory initialization |
-| **ChannelRepository** | Orchestrates join/consume flow | No change (continues calling MediasoupClient) |
-| **PttManager** | PTT state machine, AudioCaptureManager integration | Remove AudioCaptureManager dependency, simplify to startProducing()/stopProducing() |
-| **SignalingClient** | WebSocket request/response | No change (continues being called from Transport listeners) |
-| **AudioRouter** | AudioManager mode/routing | No change (library's AudioTrack respects system routing) |
-
-### New Components
-
-| Component | Purpose | Implementation |
-|-----------|---------|----------------|
-| **PeerConnectionFactory** | WebRTC subsystem initialization | Created by library during `MediasoupClient.initialize(context)`, may be accessible via `Device.getPeerConnectionFactory()` |
-| **AudioSource** | Microphone audio capture | Created via `factory.createAudioSource(MediaConstraints())`, replaces AudioCaptureManager |
-| **AudioTrack** | Audio playback | Created by library during `consumer.resume()`, destroyed on `consumer.close()` |
-
-### Components to Remove/Refactor
-
-| Component | Current Role | Action |
-|-----------|--------------|--------|
-| **AudioCaptureManager** | AudioRecord wrapper for PTT audio | **REMOVE** - AudioSource replaces this functionality |
-| **AudioCaptureService** | Foreground service for mic permission | **KEEP** but simplify - still needed for notification, but audio capture logic removed |
-
----
-
-## Data Flow Changes
-
-### Before Library Integration (Placeholder)
-
-```
-PTT Press → PttManager.requestPtt()
-         → SignalingClient.request(PTT_START)
-         → MediasoupClient.createSendTransport() [placeholder]
-         → MediasoupClient.startProducing() [placeholder]
-         → AudioCaptureManager.startCapture()
-         → AudioCaptureManager.onAudioData callback
-         → MediasoupClient.sendAudioData() [no-op]
-```
-
-### After Library Integration
-
-```
-PTT Press → PttManager.requestPtt()
-         → SignalingClient.request(PTT_START)
-         → MediasoupClient.createSendTransport()
-            → device.createSendTransport()
-            → SendTransport.Listener.onConnect()
-               → runBlocking { signalingClient.request(CONNECT_TRANSPORT) }
-         → MediasoupClient.startProducing()
-            → factory.createAudioSource()
-            → factory.createAudioTrack(audioSource)
-            → sendTransport.produce(audioTrack)
-               → SendTransport.Listener.onProduce()
-                  → runBlocking { signalingClient.request(PRODUCE) }
-            → [Library AudioRecord captures audio automatically]
-            → [Worker thread: Opus encode → RTP packets]
-            → [Network thread: Send RTP via ICE/DTLS]
-```
-
-**Key Difference:** No manual audio buffer forwarding. Library's AudioSource manages AudioRecord lifecycle.
-
----
-
-### Receive Flow
-
-```
-Server Broadcast (SPEAKER_CHANGED) → SignalingClient.messages flow
-                                   → ChannelRepository.observeSpeakerChanges
-                                   → MediasoupClient.consumeAudio(producerId)
-                                      → SignalingClient.request(CONSUME)
-                                      → recvTransport.consume()
-                                         → consumer.resume()
-                                            → [Library creates AudioTrack]
-                                            → [Worker thread: RTP receive → Opus decode]
-                                            → [AudioTrack plays via AudioManager routing]
-```
-
-**AudioRouter Integration:** AudioTrack respects system routing set by `AudioRouter.setEarpieceMode()` / `setSpeakerMode()` / `setBluetoothMode()`. No direct coupling needed.
-
----
-
-## Scalability Considerations
-
-| Concern | At 1 Channel | At 5 Channels (Scan Mode) | At 10+ Channels (Future) |
-|---------|--------------|---------------------------|--------------------------|
-| **Device instances** | 1 (singleton) | 1 (shared across transports) | 1 (Device is app-global) |
-| **RecvTransport instances** | 1 | 1 (shared for all receive consumers) | Consider 1 per channel if latency issues |
-| **SendTransport instances** | 1 (created on PTT) | 1 (reused for all PTT transmissions) | 1 (PTT is exclusive across channels) |
-| **Consumer instances** | 1-5 per channel | 5-25 total (1 per active speaker * channels) | May hit WebRTC limits (50-100 consumers) |
-| **Memory overhead** | ~10-20 MB (WebRTC baseline) | ~20-40 MB (additional consumers) | ~50-100 MB (track buffers, decoders) |
-| **CPU (worker thread)** | 5-10% (1 Opus stream) | 15-30% (5 Opus streams) | 40-60% (10+ streams) |
-
-**Optimization Strategies:**
-- **Mute = Close Consumer:** Bandwidth and CPU savings (already implemented in ChannelRepository)
-- **Reuse Transports:** One RecvTransport for all channels (already planned)
-- **Consumer Pooling:** Reuse consumers for same producer (if speaker re-transmits)
-
----
-
-## Architectural Decisions
-
-### Decision 1: Singleton Device vs Per-Channel Devices
-
-**Decision:** Use single Device singleton shared across all transports
-**Rationale:** Device.load() is expensive (50-200ms), RTP capabilities identical for all channels, mediasoup design assumes one Device per client
-**Alternative Rejected:** Per-channel Devices would waste memory (duplicate codec instances) and complicate capability management
-**Consequence:** Device initialization must complete before any channel join
-
-### Decision 2: runBlocking vs suspendCoroutine in Transport Callbacks
-
-**Decision:** Use runBlocking for Transport.Listener callbacks (initial implementation)
-**Rationale:** Simpler code, acceptable blocking duration (10-50ms), matches synchronous callback signature
-**Alternative:** suspendCoroutine + CompletableFuture for non-blocking (use if profiling shows issues)
-**Consequence:** Signaling thread blocks during server requests, may need tuning if deadlocks occur
-
-### Decision 3: Remove AudioCaptureManager
-
-**Decision:** Remove AudioCaptureManager, use library's AudioSource
-**Rationale:** Duplicate functionality, library's AudioSource handles AudioRecord lifecycle correctly, native Opus encoding more efficient
-**Alternative Rejected:** Keep AudioCaptureManager and manually feed AudioSource (adds complexity, no benefit)
-**Consequence:** AudioCaptureService becomes minimal wrapper for foreground notification
-
-### Decision 4: Shared RecvTransport for All Channels
-
-**Decision:** One RecvTransport for all receive consumers across channels
-**Rationale:** Mediasoup design allows multiple consumers per transport, reduces ICE negotiation overhead
-**Alternative:** Per-channel transports (wasteful, more network overhead)
-**Consequence:** Consumer management tracks channelId mapping explicitly
-
----
+| Component | What It Owns | What It Delegates |
+|-----------|--------------|-------------------|
+| **LocationManager** | FusedLocationProviderClient lifecycle, location update batching, mode switching | Permission checks (to PermissionManager), server transmission (to SignalingClient) |
+| **PermissionManager** | Permission state checking, request coordination, rationale display | Actual request UI (to Activity via callback) |
+| **MediasoupClient** | WebRTC Device, transports, producers/consumers, jitter buffer tuning | Permission checks (implicit via Android), network state (to NetworkMonitor) |
+| **PttManager** | PTT state machine, produce retry logic, duration tracking | Audio feedback (to TonePlayer/HapticFeedback via callbacks), permissions (to PermissionManager) |
+| **ChannelRepository** | Multi-channel state, speaker tracking, consumer management | PTT logic (to PttManager), audio routing (to AudioRouter), location (to LocationManager) |
 
 ## Anti-Patterns to Avoid
 
-### Anti-Pattern 1: Calling Suspend Functions Directly from Transport Callbacks
+### Anti-Pattern 1: Permission Requests in @Singleton Constructors
+**What goes wrong:** Singletons initialize before Activity exists, permission dialogs crash
+**Prevention:** Use lazy permission checks with PermissionManager callback pattern
+**Detection:** App crashes with "Can't request permissions before Activity created"
 
-**What goes wrong:**
-```kotlin
-override fun onConnect(transport: Transport, dtlsParameters: String): Future<String> {
-    // WRONG - suspend function can't be called from non-coroutine context
-    signalingClient.request(SignalingType.CONNECT_TRANSPORT, ...)
-}
-```
+### Anti-Pattern 2: Location Updates on Main Thread
+**What goes wrong:** ANR (application not responding) during location fix
+**Prevention:** Always use Dispatchers.IO for FusedLocationProviderClient calls
+**Detection:** StrictMode warnings, ANR crashes
 
-**Why bad:** Compiler error: "suspend function can only be called from coroutine or another suspend function"
-**Instead:** Wrap with runBlocking or suspendCoroutine
+### Anti-Pattern 3: Circular Dependencies Between LocationManager and ChannelRepository
+**What goes wrong:** Hilt DI fails with cycle detection
+**Prevention:** LocationManager depends on SignalingClient (NOT ChannelRepository), ChannelRepository depends on LocationManager
+**Detection:** Hilt compilation error: "Dependency cycle detected"
 
-### Anti-Pattern 2: Providing External AudioTrack to Producer
+### Anti-Pattern 4: Synchronous Permission Requests in Suspend Functions
+**What goes wrong:** Coroutine blocks indefinitely waiting for user action
+**Prevention:** Use suspendCancellableCoroutine for permission callbacks
+**Detection:** App freezes on permission request, no timeout
 
-**What goes wrong:**
-```kotlin
-// WRONG - manually creating AudioTrack
-val audioTrack = AudioTrack(...)
-sendTransport.produce(producerListener, audioTrack, null, null)
-```
+### Anti-Pattern 5: Certificate Pinning Without Backup Pins
+**What goes wrong:** Certificate rotation breaks app, requires APK redeployment
+**Prevention:** Include backup pins, use certificate transparency instead
+**Detection:** All API calls fail after certificate rotation
 
-**Why bad:** Library expects `org.webrtc.AudioTrack` (WebRTC type), not `android.media.AudioTrack` (Android type). AudioTrack must come from PeerConnectionFactory.
-**Instead:** Use `factory.createAudioTrack(audioSource)`
+## Scalability Considerations
 
-### Anti-Pattern 3: Blocking Main Thread with Device.load()
-
-**What goes wrong:**
-```kotlin
-// WRONG - blocks UI thread
-fun initialize() {
-    device.load(rtpCapabilities, null) // Blocks 50-200ms
-}
-```
-
-**Why bad:** Causes UI jank, potential ANR on slow devices
-**Instead:** Run in `withContext(Dispatchers.IO)`
-
-### Anti-Pattern 4: Creating Multiple Devices
-
-**What goes wrong:**
-```kotlin
-// WRONG - creating Device per channel
-fun joinChannel(channelId: String) {
-    val device = Device()
-    device.load(rtpCapabilities, null)
-    // ...
-}
-```
-
-**Why bad:** Device.load() is expensive, wastes memory, RTP capabilities are router-wide
-**Instead:** Use singleton Device, create only transports per channel
-
----
-
-## Integration Checklist
-
-### Phase 1: Library Setup
-- [ ] Add libmediasoup-android dependency to build.gradle.kts (already done: 0.7.0)
-- [ ] Call `MediasoupClient.initialize(context)` in VoicePingApplication.onCreate()
-- [ ] Verify library loads without crashing (test on physical device)
-
-### Phase 2: Device Initialization
-- [ ] Implement `MediasoupClient.initialize()` with Device.load()
-- [ ] Run on Dispatchers.IO to avoid main thread blocking
-- [ ] Expose `isInitialized` StateFlow for UI
-- [ ] Handle load failures gracefully (retry, error screen)
-
-### Phase 3: RecvTransport Integration
-- [ ] Implement `createRecvTransport()` with actual library calls
-- [ ] Add RecvTransport.Listener with onConnect callback using runBlocking
-- [ ] Test transport creation succeeds (check logs for ICE/DTLS state)
-
-### Phase 4: Consumer Integration
-- [ ] Implement `consumeAudio()` with actual recvTransport.consume()
-- [ ] Add Consumer.Listener for onTransportClose
-- [ ] Call consumer.resume() to start playback
-- [ ] Verify audio plays through device speaker/earpiece
-
-### Phase 5: SendTransport Integration
-- [ ] Implement `createSendTransport()` with SendTransport.Listener
-- [ ] Add onConnect and onProduce callbacks using runBlocking
-- [ ] Test transport creation and DTLS connection
-
-### Phase 6: Producer Integration
-- [ ] Remove AudioCaptureManager dependency from PttManager
-- [ ] Implement `startProducing()` with factory.createAudioSource()
-- [ ] Create AudioTrack and call sendTransport.produce()
-- [ ] Verify audio transmits to server (test with another client)
-
-### Phase 7: Cleanup & Edge Cases
-- [ ] Implement proper disposal order (producers → consumers → transports)
-- [ ] Test rapid PTT press/release (no memory leaks)
-- [ ] Test multi-channel switching (consumers close correctly)
-- [ ] Profile signaling thread usage (ensure no deadlocks)
-
----
-
-## Open Questions
-
-1. **PeerConnectionFactory Access:** Does crow-misia expose `Device.getPeerConnectionFactory()` or require separate initialization? Check API docs or source code.
-
-2. **Codec Options in Kotlin:** Java API shows codecOptions as String (JSON). Verify crow-misia supports Opus DTX/FEC configuration or if it's server-side only.
-
-3. **AudioRecord Permissions:** Does AudioSource creation trigger mic permission prompt or rely on AudioCaptureService's foreground service? Test on API 31+.
-
-4. **Threading Deadlock Risk:** If WebRTC holds locks while waiting for callback return, runBlocking could deadlock. Monitor signaling thread (Android Profiler).
-
-5. **Consumer Volume Control:** Does crow-misia expose `consumer.setVolume()` or is volume managed via AudioTrack? Check for per-channel volume support.
-
-6. **Bluetooth SCO Interaction:** How does library's AudioTrack interact with AudioRouter's Bluetooth SCO setup? Test audio routing with BT headset.
-
----
+| Concern | At 100 users | At 10K users | At 1M users |
+|---------|--------------|--------------|-------------|
+| Location updates | 100 updates/min, trivial server load | 10K updates/min, batch to Redis every 5s | 1M updates/min, use time-series DB (InfluxDB), WebSocket broadcast only to active dispatch consoles |
+| Audio jitter buffer | 40ms default sufficient | 80ms target for mobile variance | Consider dedicated edge servers per region to reduce RTT |
+| Permission state | In-memory per device | In-memory per device | In-memory per device (no server-side permission state) |
+| Battery consumption | 4.5%/hour acceptable | Same (per-device concern) | Same (per-device concern) |
 
 ## Sources
 
-**HIGH Confidence:**
-- [mediasoup libmediasoupclient API](https://mediasoup.org/documentation/v3/libmediasoupclient/api/) - Official API documentation for Device, Transport, Producer, Consumer classes
-- [libmediasoup Design](https://mediasoup.org/documentation/v3/libmediasoupclient/design/) - Threading model and @async behavior documentation
-- [WebRTC Threading Model](https://dyte.io/blog/understanding-libwebrtc/) - WebRTC's 3-thread architecture (signaling/worker/network)
+### Location Tracking
+- [About background location and battery life](https://developer.android.com/develop/sensors-and-location/location/battery)
+- [Optimize location use for real-world scenarios](https://developer.android.com/develop/sensors-and-location/location/battery/scenarios)
+- [Fused Location Provider API](https://developers.google.com/location-context/fused-location-provider)
+- [Request location permissions](https://developer.android.com/develop/sensors-and-location/location/permissions)
+- [Request background location](https://developer.android.com/develop/sensors-and-location/location/permissions/background)
 
-**MEDIUM Confidence:**
-- [crow-misia libmediasoup-android GitHub](https://github.com/crow-misia/libmediasoup-android) - Kotlin wrapper repository
-- [haiyangwu mediasoup-client-android](https://github.com/haiyangwu/mediasoup-client-android) - Alternative Android wrapper with example code
-- [WebRTC Android Guide](https://www.videosdk.live/blog/webrtc-android) - PeerConnectionFactory initialization patterns
+### Audio Reliability
+- [How WebRTC's NetEQ Jitter Buffer Provides Smooth Audio](https://webrtchacks.com/how-webrtcs-neteq-jitter-buffer-provides-smooth-audio/)
+- [WebRTC and Buffers](https://getstream.io/resources/projects/webrtc/advanced/buffers/)
+- [mediasoup Opus FEC Issue](https://github.com/versatica/mediasoup/issues/234)
+- [mediasoup API Documentation](https://mediasoup.org/documentation/v3/mediasoup/api/)
 
-**LOW Confidence (Needs Verification):**
-- Codec options format for Kotlin API (assumed JSON string, verify with source)
-- PeerConnectionFactory exposure in crow-misia (assumed accessible, verify API)
-- Consumer volume control API (assumed exists, verify method signature)
+### Permission Management
+- [App permissions best practices](https://developer.android.com/training/permissions/usage-notes)
+- [Request runtime permissions](https://developer.android.com/training/permissions/requesting)
+- [Permissions on Android](https://developer.android.com/guide/topics/permissions/overview)
 
-**WebSearch Evidence:**
-- [Building WebRTC with MediaSoup](https://webrtc.ventures/2022/05/webrtc-with-mediasoup/) - Architecture patterns
-- [runBlocking Caution on Android](https://getstream.io/blog/caution-runblocking-android/) - Threading best practices
-- [AudioTrack Threading Issues](https://groups.google.com/g/discuss-webrtc/c/ExMEMjyERIc) - WebRTC thread requirements
+### Power Optimization
+- [Optimize battery use for task scheduling APIs](https://developer.android.com/develop/background-work/background-tasks/optimize-battery)
+- [Android Performance Optimization & Battery Efficiency Guide](https://www.oneclickitsolution.com/centerofexcellence/android/android-performance-optimization-battery-efficiency-guide)
+- [Battery Optimization for Android Apps](https://blog.mindorks.com/battery-optimization-for-android-apps-f4ef6170ff70)
+
+### Security
+- [Security with network protocols](https://developer.android.com/training/articles/security-ssl)
+- [Android SSL Certificate Pinning](https://nextnative.dev/blog/android-ssl-certificate-pinning)
+- [Secure Android Apps with TLS/SSL Pinning](https://proandroiddev.com/secure-android-apps-with-tls-ssl-pinning-c087fc7ef828)
+
+### Dispatch Integration
+- [Real-Time Location Tracking APIs](https://www.pubnub.com/how-to/explore-real-time-geolocation-solutions/)
+- [Implementing Real-Time Location Tracking with WebSockets](https://slaptijack.com/programming/implementing-real-time-location-tracking-with-websockets.html)
+
+---
+*Last updated: 2026-02-15*

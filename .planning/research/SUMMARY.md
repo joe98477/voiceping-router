@@ -1,235 +1,316 @@
 # Project Research Summary
 
-**Project:** VoicePing Router - libmediasoup-android Integration
-**Domain:** Real-time WebRTC Push-to-Talk (PTT) Communication
-**Researched:** 2026-02-13
-**Confidence:** HIGH
+**Project:** VoicePing Router v4.0 - Production Hardening
+**Domain:** Enterprise PTT (Push-to-Talk) Communications Platform - Android Client
+**Researched:** 2026-02-15
+**Confidence:** MEDIUM-HIGH
 
 ## Executive Summary
 
-VoicePing Router is an existing Android PTT app undergoing library integration to replace stub methods with real WebRTC audio functionality. The app already has functional UI, authentication, WebSocket signaling, Room database, and Hilt dependency injection. The current milestone (v3.0) focuses on replacing MediasoupClient.kt stub code (// TODO comments) with actual crow-misia libmediasoup-android library calls.
+VoicePing v4.0 transforms a working PTT prototype into a production-ready enterprise solution by adding five critical capabilities: adaptive location tracking with motion-aware throttling, audio reliability guarantees, power/bandwidth optimization, security hardening, and polished permission flows. The research reveals a mature Android ecosystem where most needed capabilities exist in Google Play Services and established libraries — the challenge is proper configuration and lifecycle management, not finding new dependencies.
 
-The recommended approach is a straightforward dependency upgrade from libmediasoup-android 0.7.0 to 0.21.0 (latest stable, released 2026-02-10). This library bundles WebRTC M130, libmediasoupclient 3.5.0, and native binaries for all Android ABIs. The integration is drop-in compatible with the existing AGP 9.0.0 + Gradle 9.3.1 + Kotlin 2.2.0 stack. The architecture uses a singleton Device shared across channels, one RecvTransport for all incoming audio consumers, and one SendTransport created per PTT transmission. No external AudioRecord management is needed — the library handles audio capture, Opus encoding, and RTP packetization internally.
+The recommended approach leverages existing architectural patterns (singleton-based Hilt DI, data/presentation separation) by adding new @Singleton managers (LocationManager, PermissionManager) that slot cleanly alongside existing components. Location tracking flows through the established SignalingClient → Server → Redis pattern used for audio. Audio reliability improvements target WebRTC jitter buffer tuning and state machine hardening within the existing MediasoupClient, not library replacements. Power optimization focuses on adaptive strategies (location throttling, wake lock scoping) rather than battery exemptions, which create more problems than they solve.
 
-Critical risks center on AudioManager ownership conflicts (app's AudioRouter vs WebRTC's internal AudioDeviceModule), JNI threading in Transport.Listener callbacks (require runBlocking bridges to call suspend functions), and cleanup sequence discipline (producers before consumers before transports). These are well-documented patterns with clear prevention strategies. The existing codebase structure (singleton MediasoupClient, ordered cleanup stubs, PTT state machine) already follows correct patterns, requiring implementation rather than redesign.
+The primary risks are integration pitfalls, not technical unknowns. Location tracking on Android 14+ requires explicit foreground service type declarations that crash if missing. WebRTC audio device changes during transmission cause silent failures unless Producer lifecycle coordinates with AudioManager. Permission denial loops create hostile UX if rationale tracking isn't implemented from day one. Each pitfall has a known prevention strategy — the key is addressing them during initial implementation rather than post-launch firefighting.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The stack requires only a single dependency upgrade. The library is crow-misia/libmediasoup-android 0.21.0, which wraps libmediasoupclient 3.5.0 and WebRTC M130 (130.6723.2.0). All other project dependencies (Hilt 2.59.1, Coroutines 1.10.1, OkHttp 4.12.0, Room 2.8.4) remain unchanged and are already correctly configured.
+The v4.0 stack additions are minimal and strategic. Google Play Services provides battle-tested location APIs (FusedLocationProviderClient for GPS fusion, ActivityRecognitionClient for motion detection) that handle the complexity of adaptive tracking. WorkManager enables power-efficient background location batching with 15-minute intervals. OkHttp 5.3.0 upgrade brings TLS 1.3 and improved Android optimizations. Accompanist Permissions (experimental but stable) provides Compose-native permission flows.
 
-**Core technology:**
-- **libmediasoup-android 0.21.0**: WebRTC client for mediasoup SFU — Latest stable (2026-02-10), prebuilt native binaries, automatic ProGuard rules, backward compatible with AGP 9.0.0
+**Core technologies (NEW for v4.0):**
+- com.google.android.gms:play-services-location 21.3.0 — FusedLocationProviderClient + ActivityRecognitionClient for motion-aware location tracking, industry standard with adaptive throttling built-in
+- androidx.work:work-runtime-ktx 2.10.1 — Periodic location batching (15min minimum), survives app restarts
+- com.google.accompanist:accompanist-permissions 0.37.0 — Compose permission UI with rationale flows
+- OkHttp 5.3.0 (upgrade from 4.12.0) — TLS 1.3, DNS over HTTPS, platform-specific optimizations
 
-**What's bundled in library:**
-- libmediasoupclient 3.5.0 (C++ client)
-- WebRTC M130 with Opus codec
-- Native .so files for armeabi-v7a, arm64-v8a, x86_64 (~28MB total)
-- ProGuard consumer rules (automatic)
-
-**Build requirements met:**
-- Android SDK 35 (installed)
-- Java 17 runtime (configured)
-- Gradle 9.3.1 (wrapper)
-- NDK/CMake NOT required (library ships prebuilt binaries)
-
-**Server compatibility:**
-- Project uses mediasoup 3.19 (Node.js SFU)
-- Library uses libmediasoupclient 3.5.0
-- Protocol compatible (3.x series)
+**Critical finding:** Do NOT add new audio libraries. Work within existing libmediasoup-android 0.21.0 by tuning WebRTC jitter buffers and enabling Opus FEC (Forward Error Correction). Intermittent silence is typically caused by network issues (TURN server needed for mobile), AEC ducking (audio processing settings), or buffer underruns (increase AudioTrack buffer size), not library deficiencies.
 
 ### Expected Features
 
-**Must have (table stakes):**
-- Device initialization with RTP capabilities — Core mediasoup pattern, server determines codec support
-- Send/Recv transport creation — Bidirectional audio (PTT send + listen receive)
-- Producer creation for PTT audio — Send audio when PTT pressed
-- Consumer creation for incoming audio — Receive audio from other participants
-- AudioTrack creation via PeerConnectionFactory — WebRTC audio source for Producer
-- Transport listener callbacks (onConnect, onProduce) — mediasoup signaling protocol requirement
-- Consumer pause/resume for listening control — Start/stop receiving audio
-- Producer close on PTT release — Stop sending audio when PTT released
-- Ordered resource disposal — Prevent memory leaks and crashes (producers → consumers → transports)
+Users expect location tracking, stationary detection, and background monitoring as table stakes for enterprise PTT. Missing these makes the product feel incomplete compared to competitors. Permission education screens are mandatory for Android 14+ Play Store review compliance. TLS/WSS encryption is non-negotiable for enterprise deployments.
 
-**Should have (competitive):**
-- Per-consumer volume control — Individual channel volume (already in UI via ChannelVolumeDialog.kt), wire to `audioTrack.setVolume(0.0-10.0)` API
-- Opus codec PTT optimization — Already configured in MediasoupClient.kt: opusDtx=true, opusFec=true, mono, 48kHz
-- Audio device switching (earpiece/speaker/BT) — Already implemented in AudioRouter.kt, needs WebRTC integration coordination
-- Consumer statistics monitoring — Network quality indicators via `consumer.getStats()` for packet loss, jitter, bitrate
-- Echo cancellation + noise suppression — MediaConstraints: googEchoCancellation=true, googNoiseSuppression=true
+**Must have (table stakes):**
+- Location tracking with stationary detection — Battery life expectation, GPS can't drain when workers idle
+- Permission education UI before requests — Android 14+ enforcement, explain why location/mic needed
+- TLS/WSS encryption — Enterprise security baseline, production apps cannot use self-signed certs
+- Audio retry queue with acknowledgment — Mission-critical expectation, every PTT transmission must arrive or user notified
+- Network quality feedback — Users need to know if poor connection will impact reliability
+- Battery optimization whitelist prompt — Android Doze kills background apps, PTT must request exemption
+
+**Should have (competitive differentiators):**
+- Adaptive location throttling (motion-aware) — Industry-leading battery life, competitors use fixed intervals
+- Transmission acknowledgment with recipient count — Visual confirmation PTT was heard by N recipients (vs. just "sent")
+- Bandwidth-aware codec switching — Auto-switch Opus bitrate based on cellular vs. WiFi
+- Permission recovery flow — If user revokes mic/location later, graceful degradation + re-prompt UI (not crash)
+- Security audit log — Compliance requirement for some enterprises (who accessed what channel, when)
 
 **Defer (v2+):**
-- Simulcast for bandwidth adaptation — Enable `encodings` parameter in `produce()` for multi-bitrate streams
-- Data channel support — Use DataProducer/DataConsumer for text chat or metadata
-- Video track support — Extend to video producers/consumers for future video PTT
+- Geofence automation workflows — "Arrived at site" auto-joins channel, high complexity
+- End-to-End Encryption (E2EE) — 3GPP MCPTT KMS implementation, requires security audit
+- Offline audio queueing — Queue transmissions during network outage, complex storage/sync
 
 ### Architecture Approach
 
-The existing singleton-based architecture (MediasoupClient, ChannelRepository, PttManager) requires minimal structural changes. The library manages its own PeerConnectionFactory with dedicated WebRTC threads (signaling, worker, network). Transport listener callbacks execute synchronously on WebRTC's signaling thread, not Android's main thread or coroutine dispatchers, requiring runBlocking bridges to call SignalingClient's suspend functions.
+v4.0 maintains the v3.0 clean architecture by adding new @Singleton components in the data layer without introducing circular dependencies. LocationManager becomes a peer to PttManager/AudioRouter, handling FusedLocationProviderClient lifecycle and adaptive throttling. Location data flows through the existing SignalingClient → Server → Redis pub/sub pattern used for speaker changes. Audio reliability improvements target the existing MediasoupClient/PttManager pipeline with buffer tuning and state machine hardening, not new components.
 
-**Major components:**
+**Major components (NEW for v4.0):**
+1. **LocationManager (@Singleton)** — FusedLocationProviderClient lifecycle, adaptive mode switching (PRECISE/GENERAL/MOTION_AWARE), motion detection via ActivityRecognitionClient, batching for power efficiency. Delegates permission checks to PermissionManager, server transmission to SignalingClient.
 
-1. **Device (singleton)** — Holds RTP capabilities, shared across all transports and channels. Initialize once with `device.load(routerRtpCapabilities)`, reuse for all channels. Never dispose (singleton pattern).
+2. **PermissionManager (@Singleton)** — Centralized permission state checking (granted/denied/never-ask-again), request coordination with Activity via callback pattern, rationale display logic, settings redirect. Prevents circular dependencies by using callback delegation instead of direct Activity references.
 
-2. **RecvTransport (singleton)** — One receive transport shared across all channels for incoming audio consumers. Create on first channel join, reuse for all subsequent consumers. Close only on app disconnect.
+3. **MediasoupClient hardening** — WebRTC jitter buffer tuning (increase to 80ms for mobile variance), Opus FEC enablement, transport health monitoring, Producer retry logic on failures. No new libraries, configuration changes only.
 
-3. **SendTransport (per-PTT)** — One send transport created when PTT is pressed, closed when released. Produces audio via Producer. Transport.Listener.onConnect signals DTLS params to server, onProduce returns server-assigned producer ID.
+4. **ChannelMonitoringService extension** — Add location tracking to existing foreground service (requires android:foregroundServiceType="location|microphone" declaration), wake lock scoping (release after 30s of silence), notification enhancement (show current channel status).
 
-4. **AudioSource/AudioTrack (library-managed)** — Library creates AudioRecord and AudioTrack internally. No external AudioCaptureManager needed. Opus encoding happens in WebRTC worker thread (native code).
+5. **Server-side minimal changes** — New signaling type LOCATION_UPDATE (send-only, no response), Redis pub/sub broadcast to dispatch console, optional database persistence for location history.
 
-5. **AudioRouter (refactor required)** — Existing component controls AudioManager mode and device routing. Must coordinate with WebRTC's AudioDeviceModule to avoid dual AudioManager control (MODE_IN_COMMUNICATION conflicts).
-
-**Key architectural patterns:**
-- **Threading bridge:** Transport callbacks run on WebRTC signaling thread → use `runBlocking { signalingClient.request(...) }` to bridge to suspend functions
-- **Cleanup hierarchy:** producers.close() → consumers.close() → sendTransport.close() → recvTransport.close() → device never disposed
-- **State synchronization:** Use Mutex for atomic state transitions during reconnection to prevent race conditions
-
-**Components to remove/refactor:**
-- **AudioCaptureManager** — REMOVE, replaced by library's AudioSource
-- **AudioCaptureService** — KEEP but simplify (still needed for foreground notification, but audio capture logic removed)
-- **MediasoupClient.sendAudioData()** — REMOVE, Producer sends audio automatically from AudioTrack's internal capture
+**Critical pattern:** Callback-based communication for cross-layer coordination without circular dependencies. Example: PttManager → ChannelRepository → TonePlayer callbacks preserve unidirectional dependency flow while enabling complex interactions.
 
 ### Critical Pitfalls
 
-1. **Dual AudioManager Control (WebRTC vs Application)** — WebRTC's PeerConnectionFactory internally manages AudioManager (sets MODE_IN_COMMUNICATION, controls hardware echo cancellation). Your existing AudioRouter also controls AudioManager. Both systems fighting simultaneously causes AUDIO_RECORD_START_STATE_MISMATCH errors, recording failures ("Can only have one active PC/ADM in WebRTC"), echo issues, speakerphone routing conflicts. **Prevention:** Let WebRTC own AudioManager via custom AudioDeviceModule builder, refactor AudioRouter to only set routing AFTER WebRTC initializes, remove AudioRouter's MODE_IN_COMMUNICATION management.
+Research identified 10 critical pitfalls with proven prevention strategies. The top 5 must be addressed during initial implementation to avoid production outages and emergency releases.
 
-2. **Native Callbacks on Wrong Thread (JNI Threading)** — mediasoup-android uses JNI, callbacks execute from native threads (WebRTC signaling thread), not main/UI thread or coroutine dispatchers. Direct UI updates crash with CalledFromWrongThreadException, race conditions when accessing shared state, memory leaks if storing Activity/Fragment refs in listeners. **Prevention:** Never access UI from listeners, use `scope.launch(Dispatchers.Main)` for UI updates, use `runBlocking` or `suspendCoroutine` to bridge to suspend functions, avoid storing context refs in listener lambdas.
+1. **Android 14+ Location Permission Crash** — SecurityException when starting foreground service without explicit type declaration. Must add android:foregroundServiceType="location|microphone" to manifest AND FOREGROUND_SERVICE_LOCATION permission. Test on Android 14+ specifically, earlier versions won't catch this.
 
-3. **Incomplete Cleanup Causes Memory Leaks** — mediasoup objects hold native memory via JNI. Without explicit close() in correct order, leak ~30MB per unclosed transport/producer/consumer, native WebRTC threads keep running, microphone stays captured, event listeners accumulate. **Prevention:** Follow cleanup hierarchy (consumers → producers → transports → device never disposed), listen for transportclose events, use try-finally for cleanup, track object lifecycle in collections, don't rely on GC.
+2. **GPS Battery Drain Without Adaptive Strategy** — Battery jumps from 5%/hour to 15-25%/hour with continuous GPS lock. Use PRIORITY_BALANCED_POWER_ACCURACY (not HIGH_ACCURACY) by default, switch to HIGH only during active PTT, implement stationary detection to reduce update frequency. Monitor with Battery Historian during development.
 
-4. **Race Conditions During Reconnection** — Network disconnects while PTT active. Reconnect attempts overlap with disconnect cleanup. Results in duplicate producers (old not closed, new created), Transport.connect() called on closed transport, state inconsistency between PttManager and transport state. **Prevention:** Use state machine with atomic transitions (Mutex), cancel ongoing operations before reconnect (Job.cancelAndJoin), wait for cleanup to complete (cleanupJob?.join()), handle transportclose events with exponential backoff.
+3. **WebRTC Audio Device Change Race Condition** — Audio cuts out when Bluetooth connects/disconnects during PTT transmission. Producer becomes detached from audio source. Must register AudioDeviceCallback, pause/resume Producer on device changes, implement "audio heartbeat" monitoring to detect silent transmissions. Test by toggling Bluetooth during active PTT hold.
 
-5. **AGP 9.0 Breaks NDK in Library Modules** — AGP 9.0 disallows NDK execution in library modules. If mediasoup code placed in separate `:mediasoup` library module, build fails with "NDK execution in library modules... not supported". **Prevention:** Keep mediasoup in application module (`:app`), not separate library module. Project already structured correctly (MediasoupClient in app/src/main/kotlin/com/voiceping/android/data/network/).
+4. **Wake Lock + Doze Mode Exemption Breaking Battery** — Requesting REQUEST_IGNORE_BATTERY_OPTIMIZATIONS disables ALL battery optimization, causing 2-3x drain even when idle. Audio wake locks are ALREADY exempt from Doze. Never request battery optimization exemption for PTT apps, design for Doze windows instead.
+
+5. **Certificate Pinning Breaking Production Updates** — Pinning leaf certificate creates ticking time bomb (90-day expiry). When cert rotates, all installations lose connectivity, requiring emergency release. Modern 2026 recommendation: don't pin at all, use Certificate Transparency enforcement instead. If pinning mandatory, pin to CA root (not leaf) with backup pins.
+
+**Additional critical pitfalls:**
+- Permission denial loop without rationale tracking (infinite prompts, hostile UX)
+- Network security config allowing cleartext in production (security vulnerability)
+- WebSocket reconnection orphaning Producer during network switch (silent audio failures)
+- Foreground notification importance too low (service killed when notification dismissed)
+- AudioRecord not restarted after app resume (mic captures silence after backgrounding)
 
 ## Implications for Roadmap
 
-Based on research, the milestone v3.0 "mediasoup Library Integration" should be structured around integration risks, not feature delivery. The existing app already has UI, auth, signaling, and state management. The goal is to replace stub code with real library calls while avoiding the five critical pitfalls.
+Based on combined research, v4.0 should proceed in five phases with clear dependency ordering. Location and permission management are foundational, audio reliability and power optimization build on that base, security hardening runs in parallel.
 
-### Phase 1: Library Upgrade and WebRTC Foundation
-**Rationale:** Establish WebRTC subsystem and resolve AudioManager ownership before any audio integration. This prevents Pitfall 1 (dual AudioManager control) and Pitfall 2 (JNI threading) from blocking all subsequent phases.
-**Delivers:** Updated dependency (0.21.0), PeerConnectionFactory initialized, AudioDeviceModule configured, AudioRouter refactored to coordinate with WebRTC
-**Addresses:** Device initialization (table stakes feature), echo cancellation + noise suppression (competitive feature)
-**Avoids:** Pitfall 1 (AudioManager conflicts), Pitfall 2 (JNI threading patterns established), Pitfall 5 (AGP 9.0 verified)
-**Research needed:** No — patterns well-documented in official WebRTC AudioDeviceModule guides
+### Phase 16: Permission Management Foundation
+**Rationale:** No dependencies, enables all subsequent permission-requiring features. Must come first because location, mic, and notifications all need proper permission flows. Android 14+ requires permission education before requests, not after-the-fact fixes.
 
-### Phase 2: Device and RecvTransport Integration
-**Rationale:** Device.load() must complete before any transport creation (dependency). RecvTransport is simpler than SendTransport (no onProduce callback), making it better for proving JNI threading patterns work.
-**Delivers:** Device.load(routerRtpCapabilities), RecvTransport with onConnect callback, Consumer creation and resume(), per-consumer volume control
-**Uses:** libmediasoup-android Device/RecvTransport APIs, Kotlin coroutines with runBlocking bridge
-**Implements:** Singleton Device, singleton RecvTransport shared across channels
-**Avoids:** Pitfall 3 (cleanup hierarchy tested with consumers), Pitfall 2 (JNI threading bridge validated)
-**Research needed:** No — standard mediasoup patterns
+**Delivers:** PermissionManager @Singleton with Activity callback delegation, first-launch permission flow with rationale screens, denial tracking to prevent infinite loops, graceful degradation when permissions denied.
 
-### Phase 3: SendTransport and Producer Integration
-**Rationale:** Builds on validated Device/RecvTransport patterns. More complex due to onProduce callback and AudioSource creation. Allows end-to-end PTT testing.
-**Delivers:** SendTransport with onConnect and onProduce callbacks, AudioSource + AudioTrack creation, Producer with Opus config, PTT transmission working
-**Addresses:** Producer creation (table stakes), Opus codec optimization (competitive), AudioCaptureManager removal
-**Avoids:** Pitfall 2 (onProduce callback threading), Pitfall 3 (producer cleanup)
-**Research needed:** No — standard patterns, AudioCaptureManager removal is refactor not research
+**Addresses (FEATURES.md):** Permission education UI (table stakes), permission recovery flow (differentiator)
 
-### Phase 4: Cleanup Lifecycle and Reconnection Resilience
-**Rationale:** Once producers/consumers/transports working, focus shifts to lifecycle management. This is where most production bugs emerge (reconnection, network flapping, rapid PTT press/release).
-**Delivers:** Ordered disposal (producers → consumers → transports), transportclose event handlers, state machine with Mutex for reconnection, exponential backoff
-**Addresses:** Ordered resource disposal (table stakes feature)
-**Avoids:** Pitfall 3 (memory leaks), Pitfall 4 (race conditions during reconnection)
-**Research needed:** No — mediasoup reconnection patterns documented in discourse
+**Avoids (PITFALLS.md):** Permission denial loop (#6), helps prevent Android 14+ location crash (#1) by ensuring permissions granted before service starts
 
-### Phase 5: Release Build Validation and Device Testing
-**Rationale:** ProGuard/R8 obfuscation can break JNI even if debug builds work. Device-specific codec issues (Huawei, Samsung) only surface on real hardware.
-**Delivers:** ProGuard rules verified (consumer-rules.pro in AAR), release APK tested on physical device, RTP capabilities validated after Device.load(), battery/wake lock profiling
-**Addresses:** N/A (validation phase)
-**Avoids:** Pitfall 6 (ProGuard strips JNI), Pitfall 7 (Device.load() codec compatibility), Pitfall 8 (wake lock conflicts)
-**Research needed:** No — standard Android release testing
+**Plans:** 2 plans (PermissionManager + MainActivity integration, rationale dialogs + settings redirect)
+
+**Research flag:** Skip phase research — standard Android permission patterns, well-documented
+
+---
+
+### Phase 17: Location Tracking Infrastructure
+**Rationale:** Depends on Phase 16 for permission handling. Table stakes feature for enterprise PTT, differentiates VoicePing with adaptive throttling. Must implement battery-efficient strategy from day 1, not optimize later.
+
+**Delivers:** LocationManager @Singleton with FusedLocationProviderClient integration, adaptive tracking modes (PRECISE/GENERAL/MOTION_AWARE), motion detection via ActivityRecognitionClient, foreground service type declaration for Android 14+, server signaling LOCATION_UPDATE, dispatch web UI map overlay.
+
+**Addresses (FEATURES.md):** Location tracking (table stakes), stationary detection (table stakes), adaptive location throttling (differentiator)
+
+**Avoids (PITFALLS.md):** Android 14+ location crash (#1), GPS battery drain (#2)
+
+**Uses (STACK.md):** play-services-location 21.3.0, WorkManager 2.10.1
+
+**Implements (ARCHITECTURE.md):** LocationManager @Singleton in data layer, SignalingClient extension for LOCATION_UPDATE type, ChannelMonitoringService location integration
+
+**Plans:** 2 plans (LocationManager + adaptive modes, server signaling + dispatch UI)
+
+**Research flag:** Skip phase research — Google Play Services APIs well-documented, standard location patterns
+
+---
+
+### Phase 18: Audio Reliability Hardening
+**Rationale:** Independent of location (can run in parallel with Phase 17). Addresses known "intermittent silence" bug from v3.0. Mission-critical for PTT, audio must be reliable before production.
+
+**Delivers:** WebRTC jitter buffer tuning (80ms target for mobile), Opus FEC enablement, Producer retry logic (3 attempts with exponential backoff), audio device change handling (Bluetooth connect/disconnect during PTT), transport health monitoring, AudioRecord lifecycle fixes (restart after app resume), WebSocket reconnection coordination with MediasoupClient.
+
+**Addresses (FEATURES.md):** Audio retry queue (table stakes), network quality feedback enhancement (table stakes)
+
+**Avoids (PITFALLS.md):** Audio device change race condition (#3), WebSocket reconnection orphaning Producer (#8), AudioRecord not restarted (#10)
+
+**Uses (STACK.md):** Existing libmediasoup-android 0.21.0 (no new libraries), WebRTC jitter buffer configuration, MediasoupClient state machine hardening
+
+**Implements (ARCHITECTURE.md):** MediasoupClient hardening, PttManager retry logic, ConnectionStateObserver pattern
+
+**Plans:** 2 plans (jitter buffer + FEC + device change handling, retry logic + health monitoring + reconnection coordination)
+
+**Research flag:** Consider phase research for WebRTC jitter buffer API specifics — crow-misia library may not expose all controls, might need server-side mediasoup configuration instead
+
+---
+
+### Phase 19: Power Optimization
+**Rationale:** Depends on Phase 17 (location batching) and Phase 18 (audio fixes) to measure baseline battery consumption. Must validate <5%/hour total target. Critical for 24/7 pocket radio operation.
+
+**Delivers:** Location batching with WorkManager (15-minute intervals for GENERAL mode), network quality polling reduction (15s idle vs. 5s active), wake lock scoping (release after 30s silence), battery optimization whitelist prompt (during onboarding), battery profiling validation on physical devices.
+
+**Addresses (FEATURES.md):** Battery optimization whitelist (table stakes), power profiling dashboard (differentiator, deferred to server-side implementation)
+
+**Avoids (PITFALLS.md):** Wake lock + Doze exemption breaking battery (#4), ensures GPS battery drain optimization from Phase 17 (#2)
+
+**Uses (STACK.md):** WorkManager for location batching, existing foreground service wake lock management
+
+**Implements (ARCHITECTURE.md):** LocationBatchManager, ChannelMonitoringService wake lock scoping, network quality polling optimization
+
+**Plans:** 2 plans (location batching + polling reduction, wake lock scoping + battery validation)
+
+**Research flag:** Skip phase research — WorkManager patterns well-documented, battery optimization is configuration not new APIs
+
+---
+
+### Phase 20: Security Audit and Hardening
+**Rationale:** Independent of other phases (can run in parallel with 18-19). Required for enterprise deployments. Must be complete before production launch, not added post-launch.
+
+**Delivers:** TLS/WSS enforcement (reject ws:// connections), network security config (build-variant-specific, no cleartext in production), OkHttp 5.3.0 upgrade (TLS 1.3 support), Certificate Transparency enforcement (Android 16+ native, <16 via appmattus interceptor), secure token storage (EncryptedSharedPreferences), server-side audit logging (user/channel/action/timestamp/IP).
+
+**Addresses (FEATURES.md):** TLS/WSS encryption (table stakes), security audit log (differentiator)
+
+**Avoids (PITFALLS.md):** Certificate pinning breaking updates (#5), cleartext traffic in production (#7)
+
+**Uses (STACK.md):** OkHttp 5.3.0, network security config XML, appmattus/certificatetransparency (optional for Android <16)
+
+**Implements (ARCHITECTURE.md):** SignalingClient WSS enforcement, SecureTokenManager, server-side audit log table
+
+**Plans:** 2 plans (TLS enforcement + secure storage, Certificate Transparency + audit logging)
+
+**Research flag:** Skip phase research for TLS/WSS (standard patterns). Consider phase research if E2EE (End-to-End Encryption) is added — 3GPP MCPTT KMS is complex, requires security audit consultation.
+
+---
 
 ### Phase Ordering Rationale
 
-- **Phase 1 first:** AudioManager ownership must be resolved before any audio operations. Attempting audio integration with conflicting AudioManager control causes AUDIO_RECORD_START_STATE_MISMATCH failures that block all development.
+**Why this order:**
+1. **Phase 16 first:** Permission management has no dependencies and unblocks everything else (location, mic, notifications). Must establish permission flows before adding permission-requiring features.
 
-- **RecvTransport before SendTransport (Phases 2 & 3):** RecvTransport.Listener has fewer callbacks (no onProduce), making it simpler for validating JNI threading bridge pattern. Success here proves pattern works before tackling more complex SendTransport.
+2. **Phase 17 location:** Depends on Phase 16 for permissions. Table stakes feature that users expect, differentiates with adaptive throttling. Battery optimization from day 1 prevents user complaints.
 
-- **Cleanup after basic integration (Phase 4):** Cleanup logic can't be tested until producers/consumers/transports exist. Attempting to design cleanup sequences in abstract leads to missing edge cases (transportclose events, reconnection races).
+3. **Phase 18 audio in parallel:** Independent of location, can run simultaneously with Phase 17. Addresses known v3.0 bug, mission-critical for PTT reliability. Must be production-ready before launch.
 
-- **Release validation last (Phase 5):** ProGuard issues only surface in release builds. Testing release builds too early wastes time (code still changing). Deferring to Phase 5 ensures stable codebase before release testing investment.
+4. **Phase 19 power after 17+18:** Needs baseline from location + audio to measure battery consumption accurately. Validates <5%/hour target with all features active.
+
+5. **Phase 20 security in parallel:** Independent of other phases, can run with 18-19. Enterprise requirement, must be complete for production but doesn't block feature development.
+
+**Grouping logic:**
+- Foundation (16): Enables all permission-requiring features
+- Core features (17-18): Location and audio reliability, both user-facing
+- Optimization (19): Power management after features complete
+- Hardening (20): Security audit before production
+
+**Pitfall avoidance:**
+- Phase 16 prevents permission denial loops before they occur
+- Phase 17 prevents location battery drain by implementing adaptive strategy from start
+- Phase 18 prevents audio reliability issues from reaching production
+- Phase 19 prevents battery optimization exemption mistakes
+- Phase 20 prevents security vulnerabilities in production builds
 
 ### Research Flags
 
-Phases with standard patterns (skip /gsd:research-phase):
-- **Phase 1:** WebRTC AudioDeviceModule configuration well-documented in official guides
-- **Phase 2:** Device.load() and RecvTransport patterns standard mediasoup usage
-- **Phase 3:** SendTransport and Producer patterns standard mediasoup usage
-- **Phase 4:** Reconnection patterns documented in mediasoup discourse
-- **Phase 5:** Standard Android release testing, no domain-specific research needed
+**Phases likely needing deeper research during planning:**
 
-**No phases need deeper research.** All integration patterns are well-documented in mediasoup official docs, WebRTC guides, and Android NDK documentation. Research gaps identified (ProGuard rules verification, exact threading model) are validation tasks during implementation, not research blockers.
+- **Phase 18 (Audio Reliability):** WebRTC jitter buffer configuration may require server-side mediasoup changes if crow-misia libmediasoup-android 0.21.0 doesn't expose jitter buffer controls. Research WebRTC NetEQ API surface and mediasoup Opus FEC configuration patterns.
+
+- **Phase 20 (Security) IF E2EE added:** 3GPP MCPTT End-to-End Encryption is complex, requires Key Management Service (KMS) implementation. Research shows sparse open-source implementations, may require commercial MCPTT SDK or security consulting. Recommend deferring to v5.0 unless enterprise client mandates.
+
+**Phases with standard patterns (skip research-phase):**
+
+- **Phase 16 (Permissions):** Well-documented Android permission patterns, Accompanist library documentation comprehensive
+- **Phase 17 (Location):** Google Play Services FusedLocationProvider is mature, official Android documentation extensive
+- **Phase 19 (Power):** WorkManager and Doze mode optimization patterns well-established, Android Vitals metrics documented
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | Library version verified in Maven Central, compatibility matrix confirmed in source code (buildSrc/Maven.kt, gradle/libs.versions.toml), all build requirements already met |
-| Features | MEDIUM | API patterns verified in official mediasoup docs, implementation details from community sources (haiyangwu/mediasoup-client-android examples), volume control and stats APIs assumed to exist (verify method signatures in crow-misia source) |
-| Architecture | MEDIUM | Threading model documented in WebRTC guides, singleton Device pattern verified in mediasoup design docs, PeerConnectionFactory exposure in crow-misia assumed but not confirmed (check API), runBlocking bridge pattern standard Kotlin-JNI integration |
-| Pitfalls | HIGH | AudioManager conflicts documented in multiple WebRTC official discussions, JNI threading from Android NDK official docs, memory leaks from mediasoup iOS reports (~30MB) and garbage collection docs, AGP 9.0 restrictions in official migration guide, race conditions from mediasoup discourse examples |
+| Stack | MEDIUM | Official APIs verified (FusedLocationProvider, WorkManager, OkHttp), but implementation patterns need testing. WebRTC jitter buffer control uncertain (crow-misia library API surface unknown). |
+| Features | HIGH | Feature expectations grounded in industry research (PeakPTT specs, Viasat SLAs) and Android official guidelines. Table stakes vs. differentiators clearly delineated. |
+| Architecture | MEDIUM-HIGH | Integration points fit cleanly into existing v3.0 architecture (singleton pattern, Hilt DI). LocationManager/PermissionManager follow established patterns. Audio reliability fixes target known components. |
+| Pitfalls | HIGH | All 10 critical pitfalls sourced from official Android documentation, verified bug reports, and production postmortems. Prevention strategies proven. |
 
-**Overall confidence:** HIGH
+**Overall confidence:** MEDIUM-HIGH
 
-All critical integration requirements verified from official sources (mediasoup.org API docs, Android NDK docs, WebRTC guides). Medium confidence areas (feature implementation details, architecture specifics) are tactical code-level questions answerable during implementation via source code inspection, not strategic blockers.
+Confidence is high for features (user expectations) and pitfalls (known failure modes), medium-high for architecture (fits existing patterns but needs validation), medium for stack (official APIs but implementation details need testing). The research provides a solid foundation for roadmap planning, with clear identification of areas needing phase-specific research (WebRTC jitter buffer, potential E2EE).
 
 ### Gaps to Address
 
-**During Phase 1 (verify during implementation):**
-- **PeerConnectionFactory access:** Does crow-misia expose `Device.getPeerConnectionFactory()` or require separate initialization? Check crow-misia API docs or source code in io.github.crow_misia.mediasoup.* packages.
-- **AudioDeviceModule builder API:** Verify crow-misia supports custom AudioDeviceModule configuration (needed for AudioRouter coordination). If not, may need to use library's default and refactor AudioRouter differently.
+**Areas where research was inconclusive or needs validation during implementation:**
 
-**During Phase 2 (verify during implementation):**
-- **Consumer volume control API:** Assumed `consumer.track.setVolume()` exists based on WebRTC AudioTrack API. Verify method signature in crow-misia Consumer class.
-- **Codec options format:** Java API shows codecOptions as String (JSON). Verify crow-misia Kotlin API supports Opus DTX/FEC configuration or if it's server-side only.
+1. **WebRTC Jitter Buffer Control:** Research shows jitter buffer tuning is critical for mobile PTT reliability, but crow-misia libmediasoup-android 0.21.0 API documentation doesn't clearly expose jitter buffer configuration. May require server-side mediasoup configuration instead of client-side. Validate during Phase 18 planning.
 
-**During Phase 4 (monitor during testing):**
-- **Threading deadlock risk:** If WebRTC holds locks while waiting for callback return, runBlocking could deadlock. Monitor signaling thread with Android Profiler during reconnection testing. If deadlocks occur, switch to suspendCoroutine + CompletableFuture pattern.
+2. **Stationary Detection Thresholds:** Motion detection via ActivityRecognitionClient provides STILL/WALKING/IN_VEHICLE states, but optimal thresholds for location throttling (e.g., "STILL for >30min = reduce frequency") are application-specific. Industry patterns suggest starting points, but need field validation with actual battery profiling.
 
-**During Phase 5 (verify in AAR):**
-- **ProGuard consumer rules:** Research assumes libmediasoup-android AAR includes consumer-proguard-rules.pro. Verify by inspecting AAR: `unzip -l libmediasoup-android-0.21.0.aar | grep proguard`. If missing, manually add ProGuard rules from WebRTC AudioDeviceModule docs.
+3. **Transmission Acknowledgment Protocol:** Research identifies need for server ACK messages confirming audio delivery, but doesn't specify optimal acknowledgment threshold. Should "delivered" mean all consumers received audio, majority (>50%), or at least one? Requires product decision, affects server protocol design.
 
-**Non-blocking (defer to post-launch):**
-- **Android-specific memory leak magnitudes:** iOS reports 30MB per unclosed transport, Android numbers unknown. Monitor with Android Profiler during Phase 4 testing. Not critical since cleanup hierarchy prevents leaks.
-- **Bluetooth SCO interaction:** How library's AudioTrack interacts with AudioRouter's Bluetooth SCO setup unknown. Test audio routing with BT headset during Phase 1 integration.
+4. **Geofence Workflow Automation (deferred):** No industry-standard patterns found for "auto-join channel when arriving at site" workflows. If added in v5.0, will require custom implementation research.
+
+5. **MCPTT End-to-End Encryption (deferred):** 3GPP standards are public, but implementation guides scarce. May require commercial MCPTT SDK or security consulting if enterprise clients mandate E2EE.
+
+**How to handle during planning:**
+
+- **Jitter buffer:** Plan Phase 18-01 to include API research on crow-misia library, fallback to server-side mediasoup configuration if needed
+- **Stationary detection:** Use industry starting points (30min STILL threshold), validate with Battery Historian during Phase 17 testing
+- **Transmission ACK:** Make product decision during Phase 18 requirements (recommend "majority of active consumers" threshold)
+- **Geofencing:** Defer to v5.0, flag for future research if enterprise clients request
+- **E2EE:** Defer to v5.0, note security audit requirement if added
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- [mediasoup libmediasoupclient API](https://mediasoup.org/documentation/v3/libmediasoupclient/api/) — Device, Transport, Producer, Consumer lifecycle, @async behavior, threading model
-- [mediasoup libmediasoupclient Design](https://mediasoup.org/documentation/v3/libmediasoupclient/design/) — Threading model documentation, @async method behavior
-- [crow-misia/libmediasoup-android GitHub](https://github.com/crow-misia/libmediasoup-android) — Library repository, verified version 0.21.0 in buildSrc/src/main/java/Maven.kt:5, NDK/CMake versions in core/build.gradle.kts, WebRTC M130 in VERSIONS file
-- [Maven Central: libmediasoup-android 0.21.0](https://mvnrepository.com/artifact/io.github.crow-misia.libmediasoup-android/libmediasoup-android) — Version availability confirmed
-- [versatica/libmediasoupclient GitHub](https://github.com/versatica/libmediasoupclient) — Upstream C++ library, verified commit 5464591 in tag 3.5.0
-- [Android NDK JNI Tips](https://developer.android.com/training/articles/perf-jni) — JNI threading patterns, AttachCurrentThread behavior
-- [WebRTC AudioDeviceModule API](https://github.com/maitrungduc1410/webrtc/blob/master/modules/audio_device/g3doc/audio_device_module.md) — AudioDeviceModule configuration, AudioManager integration
-- [mediasoup Garbage Collection](https://mediasoup.org/documentation/v3/mediasoup/garbage-collection/) — Cleanup hierarchy, lifecycle management
-- [AGP 9.0.0 Release Notes](https://developer.android.com/build/releases/agp-9-0-0-release-notes) — Compatibility verification
-- [AGP 9.0 Migration Guide (NDK restrictions)](https://nek12.dev/blog/en/agp-9-0-migration-guide-android-gradle-plugin-9-kmp-migration-kotlin) — NDK execution in library modules restriction
-- [Android Wake Lock Best Practices](https://developer.android.com/develop/background-work/background-tasks/scheduling/wakelock) — Wake lock coordination patterns
+
+**Stack & Technology:**
+- [FusedLocationProviderClient API | Google Developers](https://developers.google.com/android/reference/com/google/android/gms/location/FusedLocationProviderClient)
+- [Activity Recognition API | Google Developers](https://developers.google.com/location-context/activity-recognition)
+- [WorkManager Releases | AndroidX](https://developer.android.com/jetpack/androidx/releases/work)
+- [OkHttp Changelog | Square](https://square.github.io/okhttp/changelogs/changelog/)
+- [Network Security Config | Android Developers](https://developer.android.com/privacy-and-security/security-config)
+- [Accompanist Permissions | Google](https://google.github.io/accompanist/permissions/)
+
+**Features & Best Practices:**
+- [About background location and battery life | Android Developers](https://developer.android.com/develop/sensors-and-location/location/battery)
+- [Request Runtime Permissions | Android Developers](https://developer.android.com/training/permissions/requesting)
+- [Optimize for Doze and App Standby | Android Developers](https://developer.android.com/training/monitoring-device-state/doze-standby)
+- [Foreground Service Types Required | Android 14](https://developer.android.com/about/versions/14/changes/fgs-types-required)
+- [WebRTC Security Architecture | IETF](https://rtcweb-wg.github.io/security-arch/)
+
+**Pitfalls & Production Issues:**
+- [Restrictions on starting foreground services from background | Android Developers](https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start)
+- [Excessive partial wake locks | Android Vitals](https://developer.android.com/topic/performance/vitals/excessive-wakelock)
+- [Security with network protocols | Android Developers](https://developer.android.com/privacy-and-security/security-ssl)
 
 ### Secondary (MEDIUM confidence)
-- [haiyangwu/mediasoup-client-android GitHub](https://github.com/haiyangwu/mediasoup-client-android) — Alternative Android wrapper with example implementations, MediasoupClient.initialize(context) pattern
-- [WebRTC Threading Model (Dyte)](https://dyte.io/blog/understanding-libwebrtc/) — WebRTC's 3-thread architecture (signaling/worker/network)
-- [WebRTC Android Guide (VideoSDK)](https://www.videosdk.live/blog/webrtc-android) — PeerConnectionFactory initialization patterns
-- [WebRTC AudioManager Conflicts (Google Groups)](https://groups.google.com/g/discuss-webrtc/c/Pqag6R7QV2c) — Multiple AudioDeviceModule issue discussions
-- [Multiple ADM Issue (Chromium bugs)](https://bugs.chromium.org/p/webrtc/issues/detail?id=2498) — Audio record state mismatch errors
-- [JNI Callbacks Guide (Medium)](https://clintpaul.medium.com/jni-on-android-how-callbacks-work-c350bf08157f) — JNI multithreading patterns
-- [mediasoup iOS Memory Leak Report](https://github.com/ethand91/mediasoup-ios-client/issues/55) — 30MB leak magnitude
-- [mediasoup Reconnection Handling (Discourse)](https://mediasoup.discourse.group/t/recording-reconnection-handling/4907) — Reconnection patterns
-- [ProGuard Consumer Rules Guide (Medium)](https://drjansari.medium.com/mastering-proguard-in-android-multi-module-projects-agp-8-4-r8-and-consumable-rules-ae28074b6f1f) — Consumer rules in AAR
-- [WebRTC Wake Lock Discussion (Google Groups)](https://groups.google.com/g/discuss-webrtc/c/CHG9ndvMN7M) — Wake lock behavior
 
-### Tertiary (LOW confidence, needs verification)
-- [Building WebRTC with MediaSoup (WebRTC.ventures)](https://webrtc.ventures/2022/05/webrtc-with-mediasoup/) — Architecture patterns (general, not Android-specific)
-- [runBlocking Caution on Android (GetStream)](https://getstream.io/blog/caution-runblocking-android/) — Threading best practices (general, not mediasoup-specific)
-- [Device.load() Codec Issues (GitHub)](https://github.com/haiyangwu/mediasoup-client-android/issues/9) — Anecdotal device-specific failures
-- [Chrome Android RTP Capabilities Bug (Discourse)](https://mediasoup.discourse.group/t/weird-issue-with-chrome-android-and-rtpcapabilities-after-device-load/1537) — WebView issue, not native Android
-- [Huawei H.264 Encode Limitation (GitHub)](https://github.com/versatica/mediasoup-client/issues/141) — Not applicable to audio-only app
+**Architecture & Implementation Patterns:**
+- [How WebRTC's NetEQ Jitter Buffer Provides Smooth Audio | WebRTC Hacks](https://webrtchacks.com/how-webrtcs-neteq-jitter-buffer-provides-smooth-audio/)
+- [mediasoup Opus FEC Issue #234 | GitHub](https://github.com/versatica/mediasoup/issues/234)
+- [Crystal Clear Certificates - Certificate Transparency | Android GDE](https://www.spght.dev/articles/21-04-2025/crystal-clear-certs)
+- [OkHttp 5.0 Migration Guide | Medium](https://medium.com/@hiren6997/okhttp-5-0-what-changed-and-how-to-upgrade-without-breaking-everything-1e2dfb255848)
+- [Advanced Location Tracking Battery Efficiency | OneClick IT](https://www.oneclickitsolution.com/centerofexcellence/android/advanced-location-tracking-with-battery-efficiency-in-android-app)
+
+**Industry Benchmarks:**
+- [PeakPTT Latency Specifications](https://www.peakptt.com/) — <300ms PTT latency target
+- [Viasat PTT Select Availability](https://www.viasat.com/enterprise/services/ptt-select/) — 99.9% SLA
+- [NN/g Permission UX Research](https://www.nngroup.com/articles/permission-requests/) — Permission request patterns
+
+**Known Issues & Workarounds:**
+- [Flutter WebRTC Android 15 Audio Issue #1759 | GitHub](https://github.com/flutter-webrtc/flutter-webrtc/issues/1759) — Audio capture stops periodically
+- [Audio device handling is poor with WebRTC | Mozilla Fenix #16653](https://github.com/mozilla-mobile/fenix/issues/16653)
+- [Intermittent WebRTC audio fade out | discuss-webrtc](https://groups.google.com/g/discuss-webrtc/c/fgJEv_Ziy_g)
+
+### Tertiary (LOW confidence, needs validation)
+
+- [Why WebRTC Calls Fail on Mobile Data | softpagecms](https://www.softpagecms.com/2026/01/06/why-webrtc-calls-fail-mobile-data-fix-2026/) — TURN server required for mobile reliability (validate with production testing)
+- Google Play 2026 battery policy (2hr wake lock threshold) — Policy documentation incomplete, verify with official source during Phase 19
 
 ---
-*Research completed: 2026-02-13*
-*Ready for roadmap: yes*
+
+**Research completed:** 2026-02-15
+
+**Ready for roadmap:** YES
+
+All four research files (STACK.md, FEATURES.md, ARCHITECTURE.md, PITFALLS.md) provide comprehensive foundation for roadmap planning. Phase structure suggestions are grounded in dependency analysis and pitfall avoidance. Research flags clearly identify areas needing deeper investigation during plan execution (WebRTC jitter buffer API, potential E2EE complexity).

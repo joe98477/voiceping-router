@@ -1,877 +1,500 @@
-# Domain Pitfalls: mediasoup-android Integration
+# Pitfalls Research: v4.0 Production Hardening
 
-**Domain:** Real-time WebRTC audio communication (PTT) on Android
-**Context:** Adding libmediasoup-android to existing app with custom AudioManager controls
-**Researched:** 2026-02-13
+**Domain:** Android PTT app production hardening (location, audio reliability, power, security)
+**Researched:** 2026-02-15
+**Confidence:** HIGH
 
 ## Critical Pitfalls
 
-These mistakes cause app crashes, audio failures, or require complete rewrites.
-
-### Pitfall 1: Dual AudioManager Control (WebRTC vs Application)
+### Pitfall 1: Android 14+ Location Permission Without Foreground Service Type Declaration
 
 **What goes wrong:**
-WebRTC's `PeerConnectionFactory` internally manages `AudioManager` (sets MODE_IN_COMMUNICATION, controls hardware echo cancellation, manages AudioRecord/AudioTrack). Your existing `AudioRouter` also controls `AudioManager` (sets MODE_IN_COMMUNICATION, manages speakerphone, Bluetooth SCO). When both systems try to control audio simultaneously, you get:
-- AUDIO_RECORD_START_STATE_MISMATCH errors
-- Recording failures: "Can only have one active PC/ADM in WebRTC on Android"
-- Echo issues when hardware AEC is disabled/enabled by conflicting settings
-- Speakerphone routing ignored or fighting between WebRTC and app code
+App crashes with SecurityException when starting foreground service for location tracking, even though ACCESS_FINE_LOCATION is granted. Android 14 introduced strict requirements where foreground services MUST declare specific service types in the manifest AND request matching runtime permissions. Simply having a foreground service is no longer sufficient to access location in the background.
 
 **Why it happens:**
-WebRTC creates `JavaAudioDeviceModule` which wraps `android.media.AudioRecord` and `android.media.AudioTrack`. This ADM automatically sets MODE_IN_COMMUNICATION when starting. If your `AudioRouter.requestAudioFocus()` or `setEarpieceMode()` also sets MODE_IN_COMMUNICATION, you have two systems fighting for the same AudioManager state.
+Developers assume that existing foreground services automatically grant location access, not realizing Android 14+ treats location as a privileged operation requiring explicit foreground service type declaration. The app may already have a foreground service for audio, but location requires adding `android:foregroundServiceType="location"` and the `FOREGROUND_SERVICE_LOCATION` permission.
 
-**Consequences:**
-- Microphone access fails (only one AudioRecord allowed)
-- Audio routing becomes unpredictable
-- Bluetooth SCO conflicts between WebRTC's internal management and your `AudioRouter.setBluetoothMode()`
-- Silent failures where audio appears to work but is routed incorrectly
+**How to avoid:**
+1. Add foreground service type to AndroidManifest.xml:
+   ```xml
+   <service android:name=".YourService"
+            android:foregroundServiceType="location|microphone"
+            android:exported="false" />
+   ```
+2. Declare permission: `<uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />`
+3. Request ACCESS_BACKGROUND_LOCATION separately from ACCESS_FINE_LOCATION on Android 10+
+4. Only access location AFTER foreground service is started with proper notification
+5. Test on Android 14+ devices specifically — earlier versions won't catch this
 
-**Prevention:**
+**Warning signs:**
+- SecurityException with message "Permission Denial: startForeground from background requires foreground service type"
+- Crashes only on Android 14+ devices during location initialization
+- Location works in foreground but fails when screen turns off
+- Google Play pre-launch report flags foreground service type issues
 
-**Option A: Let WebRTC own AudioManager (RECOMMENDED)**
-1. **Remove AudioRouter's MODE_IN_COMMUNICATION management** - WebRTC's PeerConnectionFactory will handle this
-2. **Keep AudioRouter for routing only** - Use it to set speakerphone/Bluetooth routing AFTER WebRTC initializes
-3. **Use AudioDeviceModule builder for configuration**:
-```kotlin
-val audioDeviceModule = JavaAudioDeviceModule.builder(context)
-    .setUseHardwareAcousticEchoCanceler(true)
-    .setUseHardwareNoiseSuppressor(true)
-    .setAudioRecordErrorCallback(object : JavaAudioDeviceModule.AudioRecordErrorCallback {
-        override fun onWebRtcAudioRecordInitError(errorMessage: String) {
-            Log.e(TAG, "AudioRecord init error: $errorMessage")
-        }
-        override fun onWebRtcAudioRecordStartError(
-            errorCode: JavaAudioDeviceModule.AudioRecordStartErrorCode,
-            errorMessage: String
-        ) {
-            Log.e(TAG, "AudioRecord start error: $errorCode - $errorMessage")
-        }
-        override fun onWebRtcAudioRecordError(errorMessage: String) {
-            Log.e(TAG, "AudioRecord error: $errorMessage")
-        }
-    })
-    .setAudioTrackErrorCallback(object : JavaAudioDeviceModule.AudioTrackErrorCallback {
-        override fun onWebRtcAudioTrackInitError(errorMessage: String) {
-            Log.e(TAG, "AudioTrack init error: $errorMessage")
-        }
-        override fun onWebRtcAudioTrackStartError(
-            errorCode: JavaAudioDeviceModule.AudioTrackStartErrorCode,
-            errorMessage: String
-        ) {
-            Log.e(TAG, "AudioTrack start error: $errorCode - $errorMessage")
-        }
-        override fun onWebRtcAudioTrackError(errorMessage: String) {
-            Log.e(TAG, "AudioTrack error: $errorMessage")
-        }
-    })
-    .createAudioDeviceModule()
-
-val peerConnectionFactory = PeerConnectionFactory.builder()
-    .setAudioDeviceModule(audioDeviceModule)
-    .createPeerConnectionFactory()
-```
-
-4. **Coordinate wake lock management** - WebRTC sets wake locks during audio playout. Your `ChannelMonitoringService` wake lock should be for service lifecycle, not audio.
-
-**Option B: Disable WebRTC's internal audio management**
-- Create custom AudioDeviceModule that doesn't touch AudioManager
-- Let your AudioRouter fully control AudioManager
-- More complex, requires deep WebRTC knowledge
-
-**Detection:**
-- Log messages: "AUDIO_RECORD_START_STATE_MISMATCH"
-- AudioRecord.startRecording() throws IllegalStateException
-- Speakerphone state flips unexpectedly during calls
-- Bluetooth SCO starts/stops erratically
-
-**Which phase addresses this:**
-Phase 1 (WebRTC Integration Setup) - Must design AudioManager ownership upfront. Refactor AudioRouter to delegate MODE_IN_COMMUNICATION to WebRTC.
-
-**Sources:**
-- [WebRTC AudioManager conflicts (Google Groups)](https://groups.google.com/g/discuss-webrtc/c/Pqag6R7QV2c)
-- [Multiple AudioDeviceModule issue (Chromium bugs)](https://bugs.chromium.org/p/webrtc/issues/detail?id=2498)
-- [AudioDeviceModule API guidance](https://github.com/maitrungduc1410/webrtc/blob/master/modules/audio_device/g3doc/audio_device_module.md)
+**Phase to address:**
+Phase 16 (Location Infrastructure) — must be first step before any location code
 
 ---
 
-### Pitfall 2: Native Callbacks on Wrong Thread (JNI Threading)
+### Pitfall 2: GPS Lock Battery Drain Without Provider Strategy
 
 **What goes wrong:**
-mediasoup-android uses JNI to bridge C++ libmediasoupclient to Kotlin. Native callbacks (Transport.Listener, Producer.Listener, Consumer.Listener) are invoked from native threads, NOT the main/UI thread. If you:
-- Update UI directly from callbacks → crashes with "Only the original thread that created a view hierarchy can touch its views"
-- Access Kotlin coroutines without proper dispatcher → race conditions
-- Hold references to Activity/Fragment in listeners → memory leaks (JNI global refs not released)
+Battery consumption jumps from 5%/hour to 15-25%/hour after adding location tracking. GPS stays locked continuously even when high accuracy isn't needed, draining battery 3-5x faster than necessary. Users complain about excessive battery drain and disable the feature or uninstall the app.
 
 **Why it happens:**
-JNI threads don't have a Looper and can't interact with Android UI. The native code calls Java methods via `AttachCurrentThread()`, executes the callback, then may `DetachCurrentThread()`. Your Kotlin code runs in this native thread context.
+Developers use `PRIORITY_HIGH_ACCURACY` universally without understanding the battery cost. GPS alone can consume 38% of battery when signal is weak (indoors, urban canyons). The fused location provider defaults to continuous GPS if not explicitly configured, and developers don't implement adaptive location strategies based on movement, signal strength, or time-of-day.
 
-**Consequences:**
-- UI updates crash: `CalledFromWrongThreadException`
-- Race conditions accessing shared state (e.g., `_pttState.value` in PttManager)
-- Memory leaks if you store global refs to contexts/activities in listener lambdas
-- Deadlocks if callback tries to acquire locks held by main thread
+**How to avoid:**
+1. Start with `PRIORITY_BALANCED_POWER_ACCURACY` (cell tower + WiFi, ~100m accuracy)
+2. Only use `PRIORITY_HIGH_ACCURACY` when user is actively transmitting PTT (real-time need)
+3. Switch to `PRIORITY_LOW_POWER` when idle for >5 minutes
+4. Increase update interval based on movement detection (stationary = slower updates)
+5. Stop location updates entirely if user hasn't interacted in 30+ minutes
+6. Use geofencing instead of continuous tracking when monitoring fixed areas
+7. Monitor battery drain with Battery Historian during development
 
-**Prevention:**
+**Warning signs:**
+- Battery usage shows GPS constantly active in Android battery stats
+- Location icon in status bar never disappears
+- Device gets warm during normal use
+- Battery Historian shows uninterrupted GPS wake locks
+- User reviews mention "battery killer" within first week
 
-1. **Never access UI from listeners**:
-```kotlin
-// BAD
-transport.on("connect") { callback ->
-    // This runs on native thread!
-    textView.text = "Connected" // CRASHES
-}
-
-// GOOD
-transport.on("connect") { callback ->
-    scope.launch(Dispatchers.Main) {
-        textView.text = "Connected"
-    }
-}
-```
-
-2. **Use appropriate coroutine dispatchers**:
-```kotlin
-class MediasoupManager {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
-    private val sendTransportListener = object : SendTransport.Listener {
-        override fun onConnect(transport: Transport, dtlsParameters: String) {
-            // Native thread - dispatch immediately to IO for network calls
-            scope.launch(Dispatchers.IO) {
-                val response = signalingClient.request(
-                    SignalingType.CONNECT_SEND_TRANSPORT,
-                    mapOf("dtlsParameters" to dtlsParameters)
-                )
-                // Callback must be called on same thread as listener
-                if (response.error == null) {
-                    callback.onSuccess()
-                } else {
-                    callback.onFailure(response.error)
-                }
-            }
-        }
-
-        override fun onProduce(
-            transport: Transport,
-            kind: String,
-            rtpParameters: String,
-            appData: String,
-            callback: SendTransport.ProduceCallback
-        ) {
-            scope.launch(Dispatchers.IO) {
-                val response = signalingClient.request(
-                    SignalingType.PRODUCE,
-                    mapOf("kind" to kind, "rtpParameters" to rtpParameters)
-                )
-                val producerId = response.data?.get("id") as? String
-                if (producerId != null) {
-                    callback.onSuccess(producerId)
-                } else {
-                    callback.onFailure(response.error ?: "No producer ID")
-                }
-            }
-        }
-    }
-}
-```
-
-3. **Avoid storing Activity/Fragment refs in listeners**:
-```kotlin
-// BAD - leaks activity
-class MyActivity : AppCompatActivity() {
-    private val listener = object : Consumer.Listener {
-        override fun onTransportClose(consumer: Consumer) {
-            this@MyActivity.finish() // LEAKS via JNI global ref
-        }
-    }
-}
-
-// GOOD - use weak ref or lifecycle-aware component
-class MediasoupRepository @Inject constructor() {
-    private val listeners = mutableListOf<WeakReference<TransportListener>>()
-}
-```
-
-4. **JNIEnv is thread-local - don't share across threads**:
-- Each native callback gets its own JNIEnv
-- Don't cache JNIEnv pointers
-- If spawning threads from JNI, attach them with AttachCurrentThread
-
-**Detection:**
-- Crashes: `android.view.ViewRootImpl$CalledFromWrongThreadException`
-- Log messages about thread violations
-- Memory leaks detected by LeakCanary showing JNI global refs to Activities
-- Intermittent race conditions that don't reproduce consistently
-
-**Which phase addresses this:**
-Phase 1 (WebRTC Integration Setup) - Establish threading patterns for all listeners upfront.
-
-**Sources:**
-- [JNI threading tips (Android NDK)](https://developer.android.com/training/articles/perf-jni)
-- [JNI multithreading guide](https://clintpaul.medium.com/jni-on-android-how-callbacks-work-c350bf08157f)
-- [mediasoup Transport listener docs](https://mediasoup.discourse.group/t/transport-on-connect-not-triggring-the-event/4497)
+**Phase to address:**
+Phase 16 (Location Infrastructure) — implement adaptive strategy from day 1, don't optimize later
 
 ---
 
-### Pitfall 3: Incomplete Cleanup Causes Memory Leaks
+### Pitfall 3: WebRTC Audio Device Change Race Condition
 
 **What goes wrong:**
-mediasoup objects (Device, Transport, Producer, Consumer) hold native memory via JNI. If you don't explicitly close/dispose them in correct order, you leak:
-- ~30MB per unclosed transport/producer/consumer (iOS reports, likely similar on Android)
-- Native WebRTC threads keep running
-- AudioRecord/AudioTrack remain active → microphone stays captured
-- Event listeners accumulate → multiple callbacks fire for same event
+Audio cuts out (silence) when Bluetooth headset connects/disconnects during active PTT transmission. The audio track is mid-stream when AudioManager switches devices, causing the Producer to become detached from the audio source. User hears silence, but the app still shows transmitting state. This is especially problematic because VoicePing already has a known intermittent silence bug.
 
 **Why it happens:**
-Java GC doesn't know about native memory. Even if Kotlin object is garbage collected, the underlying C++ object persists until you call `.close()`. mediasoup has strict lifecycle rules: must close consumers before transport, producers before transport, transport before device.
+WebRTC's Audio Device Module (ADM) on Android doesn't automatically handle mid-session device changes. When AudioManager routes audio to a different device (e.g., Bluetooth headset connects), the existing MediaStreamTrack becomes stale but doesn't raise an error. The app continues producing audio from a dead source. The native WebRTC implementation expects the application layer to handle device enumeration and switching.
 
-**Consequences:**
-- Out of memory crashes after repeated connect/disconnect cycles
-- Microphone remains captured preventing other apps from using it
-- Battery drain from zombie threads
-- Multiple event handlers fire → duplicate audio playback
+**How to avoid:**
+1. Register AudioManager.OnAudioFocusChangeListener and AudioDeviceCallback
+2. When device change detected during active PTT:
+   - Pause Producer (don't close)
+   - Wait for AudioManager routing to stabilize (50-100ms delay)
+   - Reinitialize audio capture with new device
+   - Resume Producer with new audio track
+3. Implement "audio heartbeat" monitoring: if no audio packets sent for >500ms during transmission, trigger device recheck
+4. Test specifically: connect/disconnect Bluetooth during PTT hold
+5. Add telemetry to track "silent transmission" occurrences in production
 
-**Prevention:**
+**Warning signs:**
+- Silence reports increase when Bluetooth headset usage is common
+- Logs show Producer active but no audio packets being sent
+- Issue reproduces reliably when toggling Bluetooth during PTT
+- WebRTC stats show `bytesSent` stops incrementing during transmission
+- Users report "sounds fine on my end but others hear nothing"
 
-1. **Follow cleanup hierarchy**:
-```kotlin
-// Cleanup order: Consumers → Producers → Transports → Device
-
-// Step 1: Close all consumers
-recvTransport?.consumers?.forEach { consumer ->
-    consumer.close()
-}
-
-// Step 2: Close all producers
-sendTransport?.producer?.close()
-
-// Step 3: Close transports
-recvTransport?.close()
-sendTransport?.close()
-
-// Step 4: ONLY if completely done with mediasoup
-device?.dispose() // Rare - usually keep device for reconnects
-```
-
-2. **Listen for transportclose events**:
-```kotlin
-val consumerListener = object : Consumer.Listener {
-    override fun onTransportClose(consumer: Consumer) {
-        // Transport closed → consumer auto-closed
-        // Remove from collection, don't call close() again
-        consumers.remove(consumer.id)
-    }
-}
-```
-
-3. **Use try-finally for cleanup**:
-```kotlin
-suspend fun disconnect() {
-    try {
-        // Stop producing first (stops audio capture)
-        producer?.close()
-        producer = null
-
-        // Then close transport
-        sendTransport?.close()
-        sendTransport = null
-    } catch (e: Exception) {
-        Log.e(TAG, "Error during cleanup", e)
-    } finally {
-        // Even if close() throws, ensure state is reset
-        isConnected = false
-    }
-}
-```
-
-4. **Track object lifecycle in collections**:
-```kotlin
-class MediasoupClient {
-    private val consumers = ConcurrentHashMap<String, Consumer>()
-
-    fun addConsumer(consumer: Consumer) {
-        consumers[consumer.id] = consumer
-        consumer.on("transportclose") {
-            consumers.remove(consumer.id)
-        }
-    }
-
-    suspend fun cleanup() {
-        consumers.values.forEach { it.close() }
-        consumers.clear()
-    }
-}
-```
-
-5. **Don't rely on finalize() or GC**:
-```kotlin
-// BAD - GC timing is unpredictable
-class TransportWrapper(private val transport: Transport) {
-    protected fun finalize() {
-        transport.close() // May never be called!
-    }
-}
-
-// GOOD - explicit lifecycle
-class TransportWrapper(private val transport: Transport) : Closeable {
-    override fun close() {
-        transport.close()
-    }
-}
-```
-
-**Detection:**
-- Memory profiler shows native heap growing on repeated connect/disconnect
-- LeakCanary reports Transport/Producer/Consumer leaks
-- Microphone stays active after leaving channel (notification LED on)
-- Log messages about multiple listener invocations
-
-**Which phase addresses this:**
-Phase 2 (Transport Lifecycle Management) - Design cleanup sequences for reconnection, disconnection, and error recovery.
-
-**Sources:**
-- [mediasoup garbage collection docs](https://mediasoup.org/documentation/v3/mediasoup/garbage-collection/)
-- [mediasoup iOS memory leak report (30MB)](https://github.com/ethand91/mediasoup-ios-client/issues/55)
-- [Transport/Consumer close events](https://mediasoup.discourse.group/t/observer-events-and-know-if-producers-or-consumers-closed-abruptly/2916)
+**Phase to address:**
+Phase 18 (Audio Reliability Fixes) — must address BEFORE production, not after user reports
 
 ---
 
-### Pitfall 4: AGP 9.0 Breaks NDK in Library Modules
+### Pitfall 4: Wake Lock + Doze Mode Exemption Breaking Battery Optimization
 
 **What goes wrong:**
-Android Gradle Plugin 9.0 **disallows NDK execution in library modules**. If you structure your project with mediasoup code in a separate `:mediasoup` library module, build fails with: "NDK execution in library modules and C++ code execution and JNI will not be supported at all since AGP 9.0".
-
-libmediasoup-android is a native library (C++ with JNI). If integrated incorrectly, builds break on AGP 9.0+.
+App requests battery optimization exemption to ensure real-time delivery, but this PREVENTS Doze mode from ever engaging, causing 2-3x higher battery drain even when idle. Google Play flags the app for excessive battery usage and may display a warning on the store listing. The app gets removed from battery optimization whitelist by aggressive OEM battery managers (Samsung, Xiaomi), breaking functionality unpredictably.
 
 **Why it happens:**
-AGP 9.0 policy: native code (CMake, ndk-build) must live in application module, not library modules. This breaks multi-module architectures where you isolate WebRTC/mediasoup in separate module.
+Developers misunderstand Android power management. Requesting `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` disables ALL battery optimization, not just specific restrictions. This keeps CPU and network running at full power continuously. The existing partial wake lock in VoicePing is already exempt from Doze calculations if used for audio playback, so requesting additional exemptions is redundant and harmful.
 
-**Consequences:**
-- Build fails on AGP 9.0+ if mediasoup code in library module
-- Forced to move all mediasoup code to `:app` module → loss of modularity
-- CI/CD breaks if you upgrade AGP without restructuring
+**How to avoid:**
+1. **DO NOT** use `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` for PTT apps
+2. Audio wake locks are ALREADY exempt from Doze restrictions
+3. Use high-priority FCM messages for time-sensitive notifications instead of exemptions
+4. If background work is needed, use JobScheduler with `setRequiresBatteryNotLow(false)`
+5. Design for Doze windows: buffer audio during maintenance window, resume after
+6. Test with `adb shell dumpsys deviceidle force-idle` to verify Doze behavior
+7. Monitor Android Vitals "Excessive wake lock" metric (threshold: >2 hours/24hrs)
 
-**Prevention:**
+**Warning signs:**
+- Battery usage remains high even when app is idle for hours
+- `dumpsys deviceidle` shows device never enters Doze mode
+- Play Console shows "Excessive battery usage" warning
+- Battery Historian shows continuous wake locks during idle periods
+- App appears in "Battery optimization excluded" list without clear user benefit
 
-1. **Keep mediasoup in application module from day one**:
-```
-android/
-  app/
-    src/main/java/com/voiceping/android/
-      data/
-        network/
-          MediasoupClient.kt  ← Here, not in separate module
-```
-
-2. **If you need modularity, use pure Kotlin wrapper**:
-```
-android/
-  mediasoup-wrapper/  ← Pure Kotlin/Java library module (no NDK)
-    src/main/java/
-      MediasoupRepository.kt
-  app/  ← Contains actual mediasoup-android dependency
-    build.gradle.kts:
-      dependencies {
-        implementation("io.github.crow-misia.libmediasoup-android:libmediasoup-android:0.21.0")
-        implementation(project(":mediasoup-wrapper"))
-      }
-```
-
-3. **Verify AGP compatibility**:
-```kotlin
-// android/gradle/libs.versions.toml
-[versions]
-agp = "9.0.0"  # Confirm compatible with libmediasoup-android
-
-// Check libmediasoup-android release notes for AGP compatibility
-```
-
-4. **NDK version compatibility**:
-- NDK r26: No 16KB page size support
-- NDK r27: Supports flexible page sizes (required for some newer devices)
-- Ensure libmediasoup-android built with compatible NDK version
-
-**Detection:**
-- Build error: "NDK execution in library modules... not supported"
-- Gradle sync fails after AGP upgrade to 9.0+
-
-**Which phase addresses this:**
-Phase 0 (Pre-Integration Planning) - Architecture decisions before writing code.
-
-**Sources:**
-- [AGP 9.0 migration guide (NDK restrictions)](https://nek12.dev/blog/en/agp-9-0-migration-guide-android-gradle-plugin-9-kmp-migration-kotlin)
-- [NDK r27 flexible page sizes](https://github.com/android/ndk/wiki/Changelog-r27)
+**Phase to address:**
+Phase 19 (Power Optimization) — remove any exemption requests, validate Doze compatibility
 
 ---
 
-### Pitfall 5: Race Conditions During Reconnection
+### Pitfall 5: Certificate Pinning Breaking Production Updates
 
 **What goes wrong:**
-Network disconnects while PTT active. Your code tries to reconnect while mediasoup is still tearing down the previous transport. You get:
-- Duplicate producers (old producer not closed, new one created)
-- Transport.connect() called on closed transport
-- State inconsistency: `PttManager` thinks transmitting, but transport is closed
+App pins TLS certificate for router server, then certificate expires or is rotated during routine renewal. All existing app installations immediately lose connectivity and cannot reach the server. Emergency app update is required, but users can't download it because the Play Store connection might also be affected. Service outage lasts hours to days while users gradually update.
 
 **Why it happens:**
-Async operations overlap: disconnect cleanup coroutine still running while reconnect coroutine starts. mediasoup operations like `producer.pause()` don't block, so calling `transport.pipeToRouter()` immediately after can read stale state.
+Developers implement certificate pinning as a security best practice without understanding the operational burden. Leaf certificates expire frequently (90 days is becoming standard), and pinning to a single certificate creates a ticking time bomb. When the certificate rotates, every installed app version becomes non-functional until updated. Third-party services (if any) can rotate certificates without warning, breaking app functionality instantly.
 
-**Consequences:**
-- Producer/consumer count grows on every reconnect → memory leak
-- "Transport already closed" exceptions
-- Audio stops working after reconnect (producer paused but consumer.producerPaused still false)
-- PTT button unresponsive after network recovery
+**How to avoid:**
+1. **Preferred approach for 2026:** Do NOT use certificate pinning for owned infrastructure
+2. Modern alternatives (better security, less operational risk):
+   - Rely on system PKI trust store
+   - Enable Certificate Transparency enforcement
+   - Use network security config with domain config instead of pinning
+3. If pinning is mandatory (compliance requirement):
+   - Pin to intermediate or root CA, NOT leaf certificate
+   - Pin to at least 2 certificates (current + backup)
+   - Implement remote pin update mechanism (don't require app update)
+   - Monitor certificate expiry 30+ days in advance
+   - Test certificate rotation in staging environment
 
-**Prevention:**
+**Warning signs:**
+- All client connections fail simultaneously after server update
+- SSL handshake errors with "Certificate pinning failure" in logs
+- Certificate expiry date approaching in next 30 days
+- Unable to test certificate rotation without pushing app update
+- No backup pinned certificate configured
 
-1. **Use state machine with atomic transitions**:
-```kotlin
-sealed class ConnectionState {
-    object Disconnected : ConnectionState()
-    object Connecting : ConnectionState()
-    object Connected : ConnectionState()
-    object Reconnecting : ConnectionState()  // Key: separate state for reconnect
-}
-
-class MediasoupClient {
-    private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
-    private val stateMutex = Mutex()
-
-    suspend fun reconnect() {
-        stateMutex.withLock {
-            // Prevent concurrent reconnects
-            if (_connectionState.value == ConnectionState.Reconnecting) {
-                Log.w(TAG, "Already reconnecting, ignoring")
-                return
-            }
-            _connectionState.value = ConnectionState.Reconnecting
-        }
-
-        // Cleanup old connection
-        cleanup()
-
-        // Wait for cleanup to complete (join on coroutines)
-        cleanupJob?.join()
-
-        // Now safe to create new transport
-        connect()
-    }
-}
-```
-
-2. **Cancel ongoing operations before reconnect**:
-```kotlin
-class PttManager {
-    private var transmissionJob: Job? = null
-
-    suspend fun handleReconnection() {
-        // Cancel ongoing transmission
-        transmissionJob?.cancelAndJoin()  // Wait for cancellation
-
-        // Force state to Idle
-        _pttState.value = PttState.Idle
-
-        // Now safe to reconnect
-        mediasoupClient.reconnect()
-    }
-}
-```
-
-3. **Wait for producer.pause/resume to complete**:
-```kotlin
-// BAD - race condition
-producer.pause()
-transport.pipeToRouter(...)  // May see stale producer.paused state
-
-// GOOD - documented pattern
-producer.pause()
-// mediasoup operations complete synchronously (blocking current thread)
-// Safe to proceed immediately after call returns
-transport.pipeToRouter(...)
-```
-
-4. **Handle transportclose events**:
-```kotlin
-val producerListener = object : Producer.Listener {
-    override fun onTransportClose(producer: Producer) {
-        // Transport closed unexpectedly (network error, server restart)
-        Log.w(TAG, "Producer's transport closed, triggering reconnect")
-
-        // Clean up immediately
-        _pttState.value = PttState.Idle
-        producer.close()  // Safe even though already closed
-
-        // Trigger reconnect
-        scope.launch {
-            delay(1000)  // Backoff before reconnect
-            reconnect()
-        }
-    }
-}
-```
-
-5. **Implement exponential backoff**:
-```kotlin
-class ReconnectionManager {
-    private var reconnectAttempts = 0
-
-    suspend fun reconnect() {
-        val delay = min(1000L * (2.0.pow(reconnectAttempts).toLong()), 30000L)
-        Log.d(TAG, "Reconnecting in ${delay}ms (attempt ${reconnectAttempts + 1})")
-
-        delay(delay)
-
-        try {
-            mediasoupClient.connect()
-            reconnectAttempts = 0  // Reset on success
-        } catch (e: Exception) {
-            reconnectAttempts++
-            if (reconnectAttempts < 5) {
-                reconnect()  // Retry
-            } else {
-                Log.e(TAG, "Max reconnect attempts reached")
-            }
-        }
-    }
-}
-```
-
-**Detection:**
-- Multiple producers/consumers for same channel in logs
-- IllegalStateException: "Transport is closed"
-- Inconsistent state: UI shows transmitting, but no audio flows
-- Memory growth during network flapping
-
-**Which phase addresses this:**
-Phase 3 (Network Resilience & Reconnection) - Design reconnection state machine with race condition guards.
-
-**Sources:**
-- [mediasoup reconnection handling](https://mediasoup.discourse.group/t/recording-reconnection-handling/4907)
-- [Race condition example (pause/resume + pipeToRouter)](https://mediasoup.discourse.group/t/observer-events-and-know-if-producers-or-consumers-closed-abruptly/2916)
-- [Transport connection state disconnected](https://github.com/Blancduman/mediasoup-client-flutter/issues/36)
+**Phase to address:**
+Phase 20 (Security Hardening) — decide pin strategy BEFORE implementing TLS, or skip pinning entirely
 
 ---
 
-## Moderate Pitfalls
-
-These cause bugs or poor UX, but not catastrophic failures.
-
-### Pitfall 6: ProGuard/R8 Strips JNI Methods
+### Pitfall 6: Permission Denial Loop Without Rationale Tracking
 
 **What goes wrong:**
-Release build crashes with `NoSuchMethodError` or `UnsatisfiedLinkError` when calling mediasoup methods. ProGuard/R8 obfuscates/removes JNI methods because it doesn't detect they're called from native code.
+User denies location permission once, app repeatedly prompts on every screen transition or app launch, creating hostile UX. Android eventually marks permission as "permanently denied," but app doesn't detect this and continues showing broken permission prompts that do nothing. User frustrated, leaves 1-star review citing "constant permission nagging."
 
-**Prevention:**
+**Why it happens:**
+Developers call `requestPermissions()` without checking `shouldShowRequestPermissionRationale()` first. This method returns `true` if user denied permission previously and should see explanation, or `false` if user chose "Don't ask again." Without tracking denial state, app falls into infinite prompt loop. Android 11+ made permission prompts more aggressive, so poor permission UX is amplified.
 
-1. **Add consumer ProGuard rules** (libmediasoup-android should provide these, but verify):
-```proguard
-# Keep all mediasoup classes and JNI methods
--keep class org.mediasoup.droid.** { *; }
--keepclassmembers class org.mediasoup.droid.** {
-    native <methods>;
-}
+**How to avoid:**
+1. Track permission denial count in SharedPreferences
+2. Flow:
+   - First ask: Direct permission request (no rationale needed)
+   - If denied: Show in-app rationale with clear benefit explanation
+   - If denied twice: Stop prompting, show permanent "Enable in Settings" card
+3. Use `shouldShowRequestPermissionRationale()` to detect "Don't ask again" state
+4. For location: Request while-in-use FIRST, then background permission separately
+5. Only request permissions when feature is first used, NOT on app launch
+6. Android 13+: Request notification permission contextually, not on startup
+7. Gracefully degrade features when permission denied (don't block core functionality)
 
-# Keep WebRTC classes used by mediasoup
--keep class org.webrtc.** { *; }
--keepclassmembers class org.webrtc.** {
-    native <methods>;
-}
-```
+**Warning signs:**
+- Permission dialog appears repeatedly on same screen
+- User taps "Deny" but sees prompt again immediately
+- App shows permission rationale after "Don't ask again" selected
+- No fallback UI when permission permanently denied
+- Play Store reviews mention "keeps asking for location"
 
-2. **Check AAR for consumer-rules.pro**:
-```bash
-# Verify libmediasoup-android AAR includes ProGuard rules
-unzip -l libmediasoup-android-0.21.0.aar | grep proguard
-# Should see: META-INF/proguard/consumer-proguard-rules.pro
-```
-
-3. **Test release builds early**:
-```bash
-./gradlew assembleRelease
-adb install android/app/build/outputs/apk/release/app-release.apk
-# Test PTT immediately
-```
-
-**Detection:**
-- Release build crashes, debug build works
-- `NoSuchMethodError` for native methods
-- Logcat: "UnsatisfiedLinkError: No implementation found for..."
-
-**Which phase addresses this:**
-Phase 4 (Release Build Testing) - Test ProGuard configuration with actual release builds.
-
-**Sources:**
-- [ProGuard consumer rules guide](https://drjansari.medium.com/mastering-proguard-in-android-multi-module-projects-agp-8-4-r8-and-consumable-rules-ae28074b6f1f)
-- [ProGuard troubleshooting (Android Developers)](https://medium.com/androiddevelopers/troubleshooting-proguard-issues-on-android-bce9de4f8a74)
+**Phase to address:**
+Phase 21 (Permission Refactoring) — implement denial tracking BEFORE adding new permission requests
 
 ---
 
-### Pitfall 7: Device.load() Codec Compatibility Issues
+### Pitfall 7: Network Security Config Allowing Cleartext in Production
 
 **What goes wrong:**
-`device.load(routerRtpCapabilities)` succeeds on test devices but fails on production devices (Huawei, Samsung). Some devices support H.264 decode but not encode, causing asymmetric codec negotiation. Audio-only apps get video codecs in RTP capabilities, audio codecs missing.
+Developer enables `android:cleartextTrafficPermitted="true"` for local testing, accidentally ships to production. App communicates over HTTP (not HTTPS) for some requests, exposing authentication tokens, audio metadata, and user data to network eavesdropping. Security audit or penetration test discovers cleartext traffic, requiring emergency release to fix.
 
-**Prevention:**
+**Why it happens:**
+Android 9+ disables cleartext by default, forcing developers to explicitly allow it during development. Developers add global cleartext permission to `network_security_config.xml` or manifest, forget to remove it before release, or use same config for debug and release builds. Build variants not properly configured to use environment-specific network security configs.
 
-1. **Validate RTP capabilities after load**:
-```kotlin
-try {
-    device.load(routerRtpCapabilities)
+**How to avoid:**
+1. NEVER use `android:usesCleartextTraffic="true"` in manifest
+2. Use build-variant-specific network security configs:
+   - `res/xml/network_security_config_debug.xml` (allows cleartext for localhost only)
+   - `res/xml/network_security_config_release.xml` (no cleartext allowed)
+3. Configure in `build.gradle`:
+   ```kotlin
+   buildTypes {
+       debug {
+           manifestPlaceholders["networkSecurityConfig"] =
+               "@xml/network_security_config_debug"
+       }
+       release {
+           manifestPlaceholders["networkSecurityConfig"] =
+               "@xml/network_security_config_release"
+       }
+   }
+   ```
+4. Add CI check: `grep -r "cleartextTrafficPermitted=\"true\"" app/src/main/`
+5. Use StrictMode in debug builds to detect cleartext violations early
 
-    val caps = device.getRtpCapabilities()
-    val hasOpus = caps.codecs.any { it.mimeType.equals("audio/opus", ignoreCase = true) }
+**Warning signs:**
+- HTTP URLs in release build logs
+- Security scanner flags cleartext traffic
+- Network traffic inspection shows unencrypted HTTP requests
+- No TLS handshake in packet captures for API calls
+- Build includes network_security_config.xml with `<domain-config cleartextTrafficPermitted="true">`
 
-    if (!hasOpus) {
-        Log.e(TAG, "Device does not support Opus codec")
-        // Fallback: request different codec from server or show error
-    }
-} catch (e: Exception) {
-    Log.e(TAG, "Failed to load device capabilities", e)
-    // Handle: maybe device WebRTC support is broken
-}
-```
-
-2. **Test on wide device range**:
-- Huawei devices (many lack H.264 encode)
-- Samsung Galaxy A series (low-end)
-- Older devices (API 26-28)
-
-3. **Server-side codec fallback**:
-```typescript
-// Server should offer multiple codecs
-router.rtpCapabilities.codecs = [
-  { kind: 'audio', mimeType: 'audio/opus', clockRate: 48000, channels: 2 },
-  { kind: 'audio', mimeType: 'audio/PCMU', clockRate: 8000, channels: 1 },  // Fallback
-]
-```
-
-4. **Handle load() errors gracefully**:
-```kotlin
-suspend fun initializeDevice(): Result<Unit> = withContext(Dispatchers.IO) {
-    try {
-        val response = signalingClient.request(SignalingType.GET_ROUTER_RTP_CAPABILITIES)
-        val capsJson = response.data?.get("rtpCapabilities") as? String
-            ?: return@withContext Result.failure(Exception("No RTP capabilities"))
-
-        device.load(capsJson)
-        Result.success(Unit)
-    } catch (e: Exception) {
-        Log.e(TAG, "Device load failed", e)
-        Result.failure(e)
-    }
-}
-```
-
-**Detection:**
-- TypeError: "caps is not an object" during device.load()
-- RTP capabilities missing expected codecs
-- Crash reports from specific device models (Huawei, Samsung)
-
-**Which phase addresses this:**
-Phase 1 (WebRTC Integration Setup) - Device initialization with error handling.
-Phase 5 (Device Compatibility Testing) - Test on diverse hardware.
-
-**Sources:**
-- [Device.load() codec issues on Android](https://github.com/haiyangwu/mediasoup-client-android/issues/9)
-- [Chrome Android RTP capabilities bug](https://mediasoup.discourse.group/t/weird-issue-with-chrome-android-and-rtpcapabilities-after-device-load/1537)
-- [Huawei H.264 encode limitation](https://github.com/versatica/mediasoup-client/issues/141)
+**Phase to address:**
+Phase 20 (Security Hardening) — verify network config BEFORE security audit, not after
 
 ---
 
-### Pitfall 8: Wake Lock Conflicts with WebRTC
+### Pitfall 8: WebSocket Reconnection During Producer Active State
 
 **What goes wrong:**
-Your `ChannelMonitoringService` holds PARTIAL_WAKE_LOCK. WebRTC's AudioTrack also holds wake lock during playout. Both wake locks active simultaneously drains battery excessively. User reports "app uses 50% battery in 2 hours".
+Network switches from WiFi to cellular (or vice versa) while user is actively transmitting PTT. WebSocket reconnects successfully, but mediasoup Producer is orphaned on the old connection. App thinks it's transmitting (UI shows active), but audio isn't reaching the server. The existing SignalingClient reconnection logic doesn't coordinate with MediasoupClient state, creating silent failure.
 
-**Prevention:**
+**Why it happens:**
+WebSocket reconnection logic in SignalingClient handles transport layer (socket), but doesn't inform MediasoupClient about connection state changes. When WebSocket reconnects, it gets a new socket instance, but the Producer still references the old closed transport. MediasoupClient continues calling producer.send() on a closed peer connection, silently failing. No error propagated because WebRTC doesn't immediately detect closed connections.
 
-1. **Let WebRTC manage audio wake locks**:
-```kotlin
-class ChannelMonitoringService : Service() {
-    private var wakeLock: PowerManager.WakeLock? = null
+**How to avoid:**
+1. Implement connection state observer pattern:
+   ```kotlin
+   interface ConnectionStateObserver {
+       fun onConnecting()
+       fun onConnected()
+       fun onDisconnected()
+       fun onFailed()
+   }
+   ```
+2. MediasoupClient subscribes to SignalingClient state changes
+3. On disconnect while Producer active:
+   - Save PTT state (user still holding button)
+   - Close Producer/Transport cleanly
+   - After reconnection + rejoin, auto-resume PTT transmission
+4. Add connection state to PttState enum:
+   - `Transmitting.Connected`
+   - `Transmitting.Reconnecting` (show different UI)
+5. UI shows "reconnecting" indicator if PTT held during network change
+6. Implement end-to-end transmission monitoring: server ACKs audio packets, client detects missing ACKs
 
-    override fun onCreate() {
-        // ONLY acquire wake lock for non-audio tasks (e.g., keeping service alive)
-        // WebRTC handles audio wake lock automatically
-        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-        wakeLock = powerManager.newWakeLock(
-            PowerManager.PARTIAL_WAKE_LOCK,
-            "VoicePing::ServiceKeepAlive"  // NOT for audio
-        )
-    }
+**Warning signs:**
+- "Sounds fine on my phone but others hear nothing" reports
+- Issue reproduces when switching WiFi/cellular during PTT
+- Logs show WebSocket reconnect but no new Producer created
+- Producer.close() never called during network switch
+- UI shows transmitting but server logs show no audio packets received
 
-    fun onAudioStarted() {
-        // Release our wake lock - let WebRTC handle it
-        wakeLock?.release()
-    }
-
-    fun onAudioStopped() {
-        // Re-acquire if service should stay alive
-        if (shouldKeepServiceAlive()) {
-            wakeLock?.acquire(10 * 60 * 1000L)  // 10 min timeout
-        }
-    }
-}
-```
-
-2. **Monitor wake lock usage**:
-```bash
-# Check wake locks held by app
-adb shell dumpsys power | grep -A 10 "com.voiceping.android"
-
-# Battery stats
-adb shell dumpsys batterystats --charged com.voiceping.android
-```
-
-3. **Use wake lock best practices**:
-- Set timeout: `wakeLock.acquire(timeout)`
-- Release in onDestroy() even if exception thrown
-- Use foreground service + notification (Android 11+ requirement)
-
-**Detection:**
-- Battery drain reports from users
-- Android Vitals: "Excessive wake locks"
-- Multiple wake locks shown in dumpsys power
-
-**Which phase addresses this:**
-Phase 2 (Audio Integration) - Coordinate wake lock strategy with WebRTC.
-
-**Sources:**
-- [WebRTC wake lock behavior](https://groups.google.com/g/discuss-webrtc/c/CHG9ndvMN7M)
-- [Wake lock best practices (Android Developers)](https://developer.android.com/develop/background-work/background-tasks/scheduling/wakelock)
+**Phase to address:**
+Phase 18 (Audio Reliability Fixes) — critical for production, affects core PTT functionality
 
 ---
 
-## Minor Pitfalls
-
-These cause inconvenience but are easily fixed.
-
-### Pitfall 9: Listener Registration Leaks
+### Pitfall 9: Foreground Service Notification Channel Importance Too Low
 
 **What goes wrong:**
-You register Transport.Listener but never unregister. Listener accumulates across reconnects. After 5 reconnects, each transport event triggers 5 callbacks.
+Foreground service notification gets swiped away by user or hidden by system because channel importance is set to LOW or MIN. Android kills the foreground service shortly after, terminating audio playback and location tracking. App appears to be running (in recent apps) but is actually dead, user misses incoming PTT messages.
 
-**Prevention:**
-```kotlin
-class MediasoupClient {
-    private val listeners = mutableMapOf<String, Transport.Listener>()
+**Why it happens:**
+Developers set notification channel importance to LOW to avoid annoying users with sound/vibration. However, Android 8+ ties notification dismissibility to channel importance. LOW importance notifications can be dismissed, which removes foreground service protection. Some OEMs (Samsung, Xiaomi) aggressively hide low-importance notifications, which the system interprets as user dismissal.
 
-    fun createTransport(direction: String) {
-        // Remove old listener if exists
-        listeners[direction]?.let { oldListener ->
-            transport?.removeListener(oldListener)
-        }
+**How to avoid:**
+1. Use `NotificationManager.IMPORTANCE_LOW` (not MIN) for foreground service channel
+2. Set notification as ongoing: `setOngoing(true)` (prevents swipe-to-dismiss)
+3. Make notification useful, not annoying:
+   - Show current channel name and connection status
+   - Add action buttons (mute, disconnect)
+   - Update dynamically when PTT active
+4. Explain notification purpose in first-run tutorial
+5. Android 13+: Request notification permission with contextual rationale
+6. Test on Samsung/Xiaomi devices with aggressive battery optimization
 
-        val listener = object : Transport.Listener {
-            override fun onConnect(...) { ... }
-        }
+**Warning signs:**
+- Service killed shortly after app backgrounded
+- Users report "app stops working when I swipe away notification"
+- Audio playback stops when notification cleared
+- Foreground service killed without `onDestroy()` being called
+- Service restarts frequently due to system killing it
 
-        transport.setListener(listener)
-        listeners[direction] = listener
-    }
-
-    fun cleanup() {
-        listeners.forEach { (_, listener) ->
-            transport?.removeListener(listener)
-        }
-        listeners.clear()
-    }
-}
-```
-
-**Which phase addresses this:**
-Phase 2 (Transport Lifecycle Management)
+**Phase to address:**
+Phase 17 (Production Infrastructure) — validate notification behavior on multiple OEM devices
 
 ---
 
-### Pitfall 10: Missing LibraryLoader.initialize()
+### Pitfall 10: Audio Track Silence Due to Missing AudioRecord Restart on Resume
 
 **What goes wrong:**
-First mediasoup call crashes with `UnsatisfiedLinkError: couldn't find DSO to load: libjingle_peerconnection_so.so`.
+App backgrounds during active monitoring, then returns to foreground. Incoming audio plays fine, but when user tries to transmit PTT, microphone captures silence. AudioRecord is in stopped state or capturing from wrong audio source. Existing VoicePing "intermittent silence bug" may be related to AudioRecord lifecycle not properly synchronized with Producer lifecycle.
 
-**Prevention:**
-```kotlin
-class VoicePingApplication : Application() {
-    override fun onCreate() {
-        super.onCreate()
+**Why it happens:**
+Android releases audio resources when app backgrounds. AudioRecord may transition to stopped state or be reclaimed by system. When app resumes, the MediaStreamTrack is still "live" (enabled=true) but not actually capturing audio. WebRTC doesn't automatically restart audio capture after backgrounding. Producer continues sending packets, but they contain silence because AudioRecord isn't running.
 
-        // Load WebRTC native library BEFORE any mediasoup calls
-        System.loadLibrary("jingle_peerconnection_so")
+**How to avoid:**
+1. Implement LifecycleObserver in MediasoupClient:
+   ```kotlin
+   class MediasoupClient : LifecycleObserver {
+       @OnLifecycleEvent(Lifecycle.Event.ON_PAUSE)
+       fun onAppBackgrounded() {
+           if (!isForegroundServiceActive) {
+               pauseAudioCapture()
+           }
+       }
 
-        // Initialize mediasoup
-        mediasoupclient.Initialize()
-    }
-}
-```
+       @OnLifecycleEvent(Lifecycle.Event.ON_RESUME)
+       fun onAppForegrounded() {
+           resumeAudioCapture()
+       }
+   }
+   ```
+2. Before starting Producer, verify AudioRecord state is RECORDSTATE_RECORDING
+3. Add audio level monitoring: if capture level = 0 for >200ms, restart AudioRecord
+4. Use MediaRecorder.AudioSource.VOICE_COMMUNICATION (optimized for PTT)
+5. Request audio focus before capture: `AudioManager.requestAudioFocus()`
+6. Implement watchdog: if Producer active but no audio samples for 500ms, trigger restart
 
-**Which phase addresses this:**
-Phase 1 (WebRTC Integration Setup) - Application initialization.
+**Warning signs:**
+- Users report "mic doesn't work after putting app in background"
+- Issue reproduces after app pause/resume cycle
+- Waveform visualization shows flat line during transmission
+- WebRTC stats show packets sent but bytesPerSecond = 0
+- AudioRecord.getRecordingState() returns RECORDSTATE_STOPPED during capture
+- Known "intermittent silence" bug reports correlate with app lifecycle events
+
+**Phase to address:**
+Phase 18 (Audio Reliability Fixes) — critical fix for existing known bug, high priority
 
 ---
 
-## Phase-Specific Warnings
+## Technical Debt Patterns
 
-| Phase Topic | Likely Pitfall | Mitigation |
-|-------------|---------------|------------|
-| Phase 1: WebRTC Integration Setup | Pitfall 1 (AudioManager conflicts), Pitfall 2 (JNI threading) | Design AudioManager ownership, establish listener threading patterns |
-| Phase 2: Transport Lifecycle Management | Pitfall 3 (memory leaks), Pitfall 5 (race conditions) | Implement cleanup hierarchy, use state machine with mutex |
-| Phase 2: Audio Integration | Pitfall 1 (AudioManager conflicts), Pitfall 8 (wake lock conflicts) | Refactor AudioRouter, coordinate wake locks |
-| Phase 3: Network Resilience | Pitfall 5 (race conditions during reconnection) | Atomic state transitions, cancel ongoing ops before reconnect |
-| Phase 4: Release Build Testing | Pitfall 6 (ProGuard strips JNI) | Add consumer ProGuard rules, test release builds |
-| Phase 5: Device Compatibility Testing | Pitfall 7 (Device.load() codec issues) | Test on Huawei/Samsung devices, validate RTP caps |
+| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
+|----------|-------------------|----------------|-----------------|
+| Skip battery optimization testing, ship and monitor in production | Faster release, defer optimization | Play Store warnings, user complaints, 1-star reviews, emergency patches | Never — battery is top user complaint for background apps |
+| Use global wake lock exemption instead of FCM high-priority | Simpler implementation, guaranteed delivery | 2-3x battery drain, Play Store flags, user uninstalls | Never — audio wake locks already exempt |
+| Pin leaf certificate instead of CA | Easier to implement (single cert) | Service outage on cert expiry, emergency releases | Never — 90-day cert lifetimes make this non-viable |
+| Request all permissions on first launch | User granted permissions immediately | High denial rate, poor first impression, users skip onboarding | Never — Android 11+ recommends contextual requests |
+| Global cleartext allowed for faster debug iteration | Skip HTTPS setup during development | Security vulnerabilities in production if forgotten | Only in debug builds with build-variant-specific configs |
+| Implement location tracking without adaptive strategy | Simpler code, fewer states to manage | 3-5x battery drain, feature disabled by users | Only for MVP proof-of-concept, must optimize before public release |
+| Skip Doze mode testing on physical devices | Faster test cycles (emulator only) | Unexpected behavior on real devices, late discovery of power bugs | Only in early prototyping, must test on physical devices before beta |
+| Use single network security config for all build types | Less configuration overhead | Cleartext allowed in production accidentally | Never — build variants must have separate configs |
 
----
+## Integration Gotchas
 
-## Research Confidence Assessment
+| Integration | Common Mistake | Correct Approach |
+|-------------|----------------|------------------|
+| Fused Location Provider | Requesting location without checking Play Services availability | Always check `GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable()` before location requests, handle SERVICE_MISSING, SERVICE_VERSION_UPDATE_REQUIRED |
+| Android 14+ Location in Foreground Service | Starting service then requesting location | Request ACCESS_FINE_LOCATION FIRST, then start foreground service with type="location", then access location API |
+| WebRTC AudioManager | Setting audio mode globally without restoring | Save previous audio mode, restore on release: `savedMode = audioManager.mode; audioManager.mode = MODE_IN_COMMUNICATION; /* later */ audioManager.mode = savedMode` |
+| Bluetooth Headset Button | Registering MediaButtonReceiver without priority | Use ordered broadcast with priority > 0, handle in onReceive before system default handler |
+| Notification Permission (Android 13+) | Requesting on app launch before user sees value | Request when user enables first notification-worthy feature (e.g., enable scan mode), show rationale first |
+| Network Security Config | Testing only on Android 10+, shipping to Android 9 | Android 9 introduced cleartext restrictions, test on API 28 specifically, verify TLS handshake in packet capture |
+| Battery Optimization Exemption | Using `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` intent | Use high-priority FCM for time-sensitive work, rely on audio wake lock exemptions, design for Doze windows |
 
-| Area | Confidence | Basis |
-|------|------------|-------|
-| AudioManager conflicts | HIGH | Multiple WebRTC official discussions, documented ADM conflicts, your existing AudioRouter code analysis |
-| JNI threading | HIGH | Android NDK official docs, JNI threading guides, mediasoup architecture (C++ + JNI) |
-| Memory leaks | MEDIUM | mediasoup iOS reports (30MB), mediasoup docs on garbage collection, but Android-specific numbers unverified |
-| AGP 9.0 NDK restrictions | HIGH | Official AGP 9.0 migration guide, your project already on AGP 9.0.0 |
-| Race conditions | MEDIUM | mediasoup discourse examples, general async pattern knowledge, but mediasoup-android specific examples limited |
-| ProGuard issues | MEDIUM | General Android ProGuard knowledge, consumer rules best practices, but no mediasoup-android specific ProGuard rules found |
-| Device.load() issues | MEDIUM | Multiple GitHub issues on mediasoup-client-android, but scattered anecdotal reports |
-| Wake lock conflicts | MEDIUM | WebRTC wake lock behavior documented, Android best practices, but specific interaction with mediasoup unverified |
+## Performance Traps
 
-## Research Gaps
+| Trap | Symptoms | Prevention | When It Breaks |
+|------|----------|------------|----------------|
+| Continuous GPS lock without movement detection | 15-25% battery/hour, device warm, GPS icon always visible | Use Fused Location Provider with `setMaxWaitTime()` to batch updates, switch to LOW_POWER when stationary for >5min | Immediately on first production use, scales linearly with usage time |
+| WebSocket reconnection creating orphaned Producers | Silent audio transmission failures, "sounds fine here but others hear nothing" | Implement connection observer pattern, coordinate WebSocket state with MediasoupClient, close stale Producers | Network switches (WiFi/cellular), intermittent connectivity, affects ~5-10% of transmissions |
+| AudioRecord not restarted after app resume | Mic captures silence after backgrounding, flat waveform | Monitor audio levels, restart AudioRecord if silent for >200ms during capture, verify RECORDSTATE_RECORDING before producing | Every background/foreground cycle, affects all transmissions after first background |
+| Foreground service notification dismissed by user | Service killed, audio stops, location tracking ends | Set notification channel importance to LOW (not MIN), use `setOngoing(true)`, make notification useful not annoying | Varies by OEM (Samsung/Xiaomi more aggressive), affects long-running sessions |
+| Location updates during idle periods | Unnecessary battery drain even when not in use | Stop location updates after 30min of user inactivity, resume on next interaction, use geofencing for area monitoring | After first 30min of idle, cumulative waste over days/weeks |
+| Multiple wake locks held simultaneously | Excessive wake lock metric in Play Console (>2hrs/24hrs) | Audit wake lock acquisition, release when audio stops, use reference counting for nested holds | Threshold: >2 cumulative hours in 24hr period triggers Play Store warning |
 
-**Critical gaps requiring phase-specific research:**
+## Security Mistakes
 
-1. **Phase 1: libmediasoup-android ProGuard rules** - Could not verify if AAR includes consumer-rules.pro. Must inspect AAR before Phase 4.
+| Mistake | Risk | Prevention |
+|---------|------|------------|
+| Cleartext traffic allowed in production build | Authentication tokens, user data exposed to network eavesdropping, MITM attacks | Use build-variant-specific network security configs, CI check for cleartext allowances, test with network traffic inspection |
+| Certificate pinning to single leaf certificate | Service outage on cert rotation (90-day expiry), emergency release required | Don't pin (preferred 2026 approach), or pin to CA root + backup, implement remote pin updates |
+| No TLS hostname verification | MITM with valid certificate for different domain | Verify OkHttp `hostnameVerifier` uses default strict checking, don't override without strong reason |
+| WebSocket over WS instead of WSS in production | All signaling messages (join, PTT state, audio metadata) transmitted in cleartext | Enforce WSS:// URLs in release build, reject WS:// connections, use network security config to block cleartext |
+| Location data logged to crash reporting | Precise user location exposed in crash logs, privacy violation | Strip location from exception messages, use coarse location buckets in analytics, comply with data retention policies |
+| No rate limiting on PTT transmission | Abusive user can DoS channel by holding PTT indefinitely | Server-side max transmission duration (30-60s), client-side transmission timeout, exponential backoff on repeated long transmissions |
+| Audio recordings stored without encryption | Sensitive conversation content accessible if device lost/stolen | Use Android Keystore for encryption keys, encrypt audio files at rest, use FILE_PROVIDER with restricted permissions |
 
-2. **Phase 2: Exact threading model of mediasoup-android listeners** - Docs say methods "block current thread" but don't specify which thread callbacks run on. Needs experimentation.
+## UX Pitfalls
 
-3. **Phase 5: Android-specific memory leak magnitudes** - iOS reports 30MB per leak, but Android numbers unknown. Monitor with Android Profiler.
+| Pitfall | User Impact | Better Approach |
+|---------|-------------|-----------------|
+| Permission rationale shown after user denies | User already said no, seeing explanation after denial feels pushy and annoying | Show rationale BEFORE first request (if `shouldShowRequestPermissionRationale()` == false), or after first denial (if == true) |
+| Generic "Location Permission Required" message | User doesn't understand why PTT app needs location | Explain specific feature benefit: "Share your location with dispatch during emergencies" or "Auto-switch to nearest repeater" |
+| No visual indication during network reconnection | User holds PTT, thinks they're transmitting, but audio not sent during reconnect | Show "Reconnecting..." badge on PTT button, vibrate differently when transmission actually starts |
+| Battery optimization prompt on first launch | User doesn't trust app yet, high denial rate | Request after user successfully uses app for 3-5 sessions, show value first |
+| Foreground notification says "App is running" | Waste of notification space, no useful info | Show current channel, connection status, last speaker, make actionable (mute/disconnect buttons) |
+| App appears running but actually killed | User misses messages, thinks app is monitoring but it's not | Implement heartbeat check, show warning if service not actually running, auto-restart service with WorkManager |
+| Silent audio failures without user feedback | User transmits, thinks others heard, but audio was silent | Implement transmission acknowledgment (server confirms audio received), show warning if no ACK within 2s |
+| No graceful degradation when permissions denied | Core features blocked, user forced to grant or uninstall | Essential features work without location (basic PTT), premium features require permission (location sharing) |
 
-4. **Phase 1: AudioDeviceModule configuration compatibility with existing AudioRouter** - No examples found of WebRTC + custom AudioManager. May need trial-and-error.
+## "Looks Done But Isn't" Checklist
 
-**Non-critical gaps (low priority):**
+- [ ] **Location Tracking:** Often missing background location permission separate from fine location — verify both `ACCESS_FINE_LOCATION` AND `ACCESS_BACKGROUND_LOCATION` requested on Android 10+
+- [ ] **Foreground Service:** Often missing service type declaration for Android 14+ — verify `android:foregroundServiceType="location|microphone"` in manifest AND `FOREGROUND_SERVICE_LOCATION` permission
+- [ ] **Network Security Config:** Often allows cleartext in production accidentally — verify build-variant-specific configs, no `cleartextTrafficPermitted="true"` in release
+- [ ] **Permission Rationale:** Often requests permissions without checking prior denial — verify `shouldShowRequestPermissionRationale()` checked, denial count tracked, no infinite loops
+- [ ] **Battery Optimization:** Often exempts app unnecessarily — verify no `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` used, audio wake locks rely on built-in exemptions
+- [ ] **Doze Mode Compatibility:** Often breaks during Doze windows — verify tested with `adb shell dumpsys deviceidle force-idle`, app functions in idle mode
+- [ ] **Audio Device Changes:** Often doesn't handle Bluetooth connect/disconnect mid-stream — verify tested with headset toggle during PTT, audio recovers gracefully
+- [ ] **WebSocket Reconnection Coordination:** Often reconnects socket but not MediasoupClient — verify Producer/Consumer recreated after reconnect, no orphaned streams
+- [ ] **Notification Channel Importance:** Often set too low, allows dismissal — verify `IMPORTANCE_LOW` (not MIN), notification is ongoing, tested on Samsung/Xiaomi
+- [ ] **Audio Lifecycle:** Often doesn't restart AudioRecord after backgrounding — verify audio capture works after pause/resume cycle, monitor for silent captures
 
-- Performance characteristics of mediasoup-android on low-end devices (API 26, 2GB RAM)
-- Battery consumption benchmarks (WebRTC + foreground service + wake locks)
-- Specific NDK version used by libmediasoup-android 0.21.0
+## Recovery Strategies
+
+| Pitfall | Recovery Cost | Recovery Steps |
+|---------|---------------|----------------|
+| Certificate pinning breaks production | HIGH — emergency release required, 24-48hr user migration | 1. Deploy new certificate to server. 2. Release emergency app update with new pin + old pin. 3. Monitor adoption rate. 4. After 95% updated, rotate server cert. 5. Future: remove pinning entirely |
+| Cleartext traffic in production | MEDIUM — release required, no downtime | 1. Emergency release with network_security_config enforcing TLS. 2. No server changes needed if already using HTTPS. 3. Release within 24hrs to minimize exposure |
+| Location permission missing service type | LOW — app update only | 1. Add foreground service type to manifest. 2. Add FOREGROUND_SERVICE_LOCATION permission. 3. Release update. No server changes needed |
+| Battery optimization exemption granted | MEDIUM — requires user action | 1. Release update removing exemption request. 2. Can't revoke already-granted exemptions programmatically. 3. Educate users to manually disable in Settings > Battery Optimization |
+| GPS battery drain excessive | LOW — app update only | 1. Implement adaptive location strategy (HIGH_ACCURACY → BALANCED_POWER). 2. Add idle detection. 3. Release update. Users see immediate battery improvement |
+| Audio device change causes silence | MEDIUM — requires testing multiple device types | 1. Implement AudioDeviceCallback. 2. Add Producer restart logic. 3. Test on multiple Bluetooth headsets (different manufacturers). 4. Monitor telemetry for silent transmission events |
+| WebSocket reconnect orphans Producer | MEDIUM — coordination logic needed | 1. Implement ConnectionStateObserver pattern. 2. Add Producer/Consumer lifecycle coordination. 3. Test network switch scenarios. 4. Add end-to-end monitoring |
+| Permission denial loop annoys users | LOW — UX improvement only | 1. Track denial count in SharedPreferences. 2. Add "Don't ask again" detection. 3. Show permanent "Enable in Settings" card after 2 denials. 4. Release update |
+| Foreground notification dismissed | LOW — notification configuration change | 1. Set channel importance to LOW (not MIN). 2. Add `setOngoing(true)`. 3. Make notification useful (show status). 4. Release update |
+| AudioRecord not restarted after resume | MEDIUM — lifecycle handling needed | 1. Implement LifecycleObserver in MediasoupClient. 2. Add audio level monitoring. 3. Restart AudioRecord if silent >200ms during capture. 4. Test pause/resume cycles extensively |
+
+## Pitfall-to-Phase Mapping
+
+| Pitfall | Prevention Phase | Verification |
+|---------|------------------|--------------|
+| Android 14+ location permission crash | Phase 16 (Location Infrastructure) | Test on Android 14+ device, verify no SecurityException when service starts, check manifest has foregroundServiceType |
+| GPS battery drain | Phase 16 (Location Infrastructure) | Run Battery Historian for 1hr session, verify <8% battery drain, GPS not constantly locked |
+| Audio device change silence | Phase 18 (Audio Reliability Fixes) | Connect/disconnect Bluetooth during PTT hold, verify audio recovers, remote user hears continuous audio |
+| Wake lock + Doze exemption | Phase 19 (Power Optimization) | Force Doze mode with adb, verify app still functions, check Android Vitals for excessive wake lock warnings |
+| Certificate pinning breaks updates | Phase 20 (Security Hardening) | If pinning implemented: pin to CA not leaf, include backup pin, test cert rotation in staging |
+| Permission denial loop | Phase 21 (Permission Refactoring) | Deny permission 3 times, verify no infinite prompts, "Enable in Settings" card shown after 2nd denial |
+| Cleartext traffic in production | Phase 20 (Security Hardening) | Inspect release APK network_security_config.xml, verify no cleartext allowed, test with packet capture |
+| WebSocket reconnect orphans Producer | Phase 18 (Audio Reliability Fixes) | Switch WiFi/cellular during PTT, verify transmission continues after reconnect, server receives audio |
+| Notification dismissed kills service | Phase 17 (Production Infrastructure) | Swipe notification on Samsung device, verify service stays running, notification reappears as ongoing |
+| AudioRecord not restarted | Phase 18 (Audio Reliability Fixes) | Background app for 30s, return, transmit PTT, verify mic captures audio (not silence), waveform shows activity |
 
 ## Sources
 
-**HIGH confidence (official/authoritative):**
-- [Android NDK JNI Tips](https://developer.android.com/training/articles/perf-jni)
-- [WebRTC AudioDeviceModule docs](https://github.com/maitrungduc1410/webrtc/blob/master/modules/audio_device/g3doc/audio_device_module.md)
-- [mediasoup Garbage Collection](https://mediasoup.org/documentation/v3/mediasoup/garbage-collection/)
-- [mediasoup libmediasoupclient API](https://mediasoup.org/documentation/v3/libmediasoupclient/api/)
-- [AGP 9.0 Migration Guide](https://nek12.dev/blog/en/agp-9-0-migration-guide-android-gradle-plugin-9-kmp-migration-kotlin)
-- [Android Wake Lock Best Practices](https://developer.android.com/develop/background-work/background-tasks/scheduling/wakelock)
-- [ProGuard Consumer Rules (Android Developers)](https://developer.android.com/topic/performance/app-optimization/library-optimization)
+### Location & Battery
+- [About background location and battery life | Android Developers](https://developer.android.com/develop/sensors-and-location/location/battery)
+- [Background location usage best practices | Google Developers](https://developers.google.com/maps/documentation/navigation/android-sdk/background-location-usage)
+- [Background Location Limits Over Different Android Versions | Medium](https://medium.com/@mahbooberezaee68/background-location-limits-over-different-android-versions-df67202250bd)
+- [Restrictions on starting a foreground service from the background | Android Developers](https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start)
+- [Foreground service types are required | Android Developers](https://developer.android.com/about/versions/14/changes/fgs-types-required)
 
-**MEDIUM confidence (community/issue trackers):**
-- [WebRTC AudioManager Conflicts](https://groups.google.com/g/discuss-webrtc/c/Pqag6R7QV2c)
-- [Multiple ADM Issue](https://bugs.chromium.org/p/webrtc/issues/detail?id=2498)
-- [mediasoup-client-android Issues](https://github.com/haiyangwu/mediasoup-client-android/issues)
-- [mediasoup iOS Memory Leak Report](https://github.com/ethand91/mediasoup-ios-client/issues/55)
-- [JNI Callbacks Guide](https://clintpaul.medium.com/jni-on-android-how-callbacks-work-c350bf08157f)
-- [WebRTC Wake Lock Discussion](https://groups.google.com/g/discuss-webrtc/c/CHG9ndvMN7M)
+### Power Management & Doze
+- [Optimize for Doze and App Standby | Android Developers](https://developer.android.com/training/monitoring-device-state/doze-standby)
+- [Excessive partial wake locks | Android Developers](https://developer.android.com/topic/performance/vitals/excessive-wakelock)
+- [Android addressing 'excessive' battery drain with new app wake locks metric](https://9to5google.com/2025/04/15/android-excessive-battery-drain-wake-locks/)
 
-**LOW confidence (needs verification):**
-- mediasoup-android specific ProGuard configuration (no official rules found)
-- Android-specific memory leak magnitudes (extrapolated from iOS)
-- Device.load() failure patterns on specific manufacturers (anecdotal GitHub issues)
+### WebRTC & Audio
+- [What reasons for silent audio tracks from remote streams? | W3C GitHub Issue #2564](https://github.com/w3c/webrtc-pc/issues/2564)
+- [Intermittent WebRTC audio fade out issue | discuss-webrtc](https://groups.google.com/g/discuss-webrtc/c/fgJEv_Ziy_g)
+- [What is the proper way of handling audio device changes mid session? | discuss-webrtc](https://groups.google.com/g/discuss-webrtc/c/v69XTuM3Shw)
+- [Audio device handling is poor with WebRTC | Mozilla Fenix Issue #16653](https://github.com/mozilla-mobile/fenix/issues/16653)
+- [WebRTC Issues and How to Debug Them | CloudBees](https://www.cloudbees.com/blog/webrtc-issues-and-how-to-debug-them)
+
+### Security
+- [Security with network protocols | Android Developers](https://developer.android.com/privacy-and-security/security-ssl)
+- [Network security configuration | Android Developers](https://developer.android.com/privacy-and-security/security-config)
+- [Cleartext communications | Android Developers](https://developer.android.com/privacy-and-security/risks/cleartext-communications)
+- [Android SSL Certificate Pinning A Practical Guide | NextNative](https://nextnative.dev/blog/android-ssl-certificate-pinning)
+- [Avoiding downtime: modern alternatives to outdated certificate pinning practices | Cloudflare](https://blog.cloudflare.com/why-certificate-pinning-is-outdated/)
+- [The Obsolescence of SSL Pinning in Mobile App Security](https://caverav.cl/posts/ssl-pinning/ssl-pinning/)
+
+### Permissions
+- [Request runtime permissions | Android Developers](https://developer.android.com/training/permissions/requesting)
+- [App permissions best practices | Android Developers](https://developer.android.com/training/permissions/usage-notes)
+- [Permission Denials | Android Vitals](https://developer.android.com/topic/performance/vitals/permissions)
+- [Better permissions on Android | Sid Patil](https://siddroid.com/post/post-android-rationale-permission-dialogs-2020/)
+
+### Production & Monitoring
+- [Websocket closes connection with EOF exception | OkHttp Issue #4012](https://github.com/square/okhttp/issues/4012)
+- [Okhttp Websocket client crashes Android application | Ktor Issue #1356](https://github.com/ktorio/ktor/issues/1356)
+- [Build Real-Time Android Apps with WebSockets and Kotlin | Bugfender](https://bugfender.com/blog/android-websockets/)
+- [Foreground Services with Notification Channel | Android Developers](https://medium.com/huawei-developers/foreground-services-with-notification-channel-in-android-7a272f07ad1)
+
+---
+
+*Pitfalls research for: v4.0 Production Hardening (Location, Audio Reliability, Power, Security)*
+*Researched: 2026-02-15*
+*Focus: Integration pitfalls when adding production features to existing Android PTT app*

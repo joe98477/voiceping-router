@@ -1,429 +1,352 @@
-# Feature Research: libmediasoup-android Integration
+# Feature Landscape: v4.0 Production Hardening
 
-**Domain:** WebRTC PTT Audio via mediasoup-android
-**Researched:** 2026-02-13
-**Confidence:** MEDIUM
+**Domain:** Enterprise PTT Communications Platform
+**Researched:** 2026-02-15
+**Confidence:** MEDIUM-HIGH
 
-## Feature Landscape
+## Overview
 
-### Table Stakes (Users Expect These)
+This feature analysis covers production hardening features for a mature Android PTT app. The app already has working audio (mediasoup WebRTC), multi-channel monitoring, hardware PTT buttons, foreground service, and auto-reconnect. v4.0 adds: adaptive location tracking, audio reliability guarantees, power/bandwidth optimization, permission UX flows, and security audit.
 
-Features users assume exist. Missing these = product feels incomplete.
+## Table Stakes
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| Device initialization with RTP capabilities | Core mediasoup pattern, server determines codec support | LOW | `Device()` + `device.load(rtpCapabilities)` - Already stubbed in MediasoupClient.kt |
-| Send/Recv transport creation | Required for bidirectional audio (PTT send + listen receive) | MEDIUM | `device.createSendTransport()` + `device.createRecvTransport()` with ICE/DTLS params from server |
-| Producer creation for PTT audio | Send audio when PTT pressed | MEDIUM | `sendTransport.produce(audioTrack, codecOptions)` with Opus config |
-| Consumer creation for incoming audio | Receive audio from other channel participants | MEDIUM | `recvTransport.consume(consumerId, producerId, kind, rtpParameters)` |
-| AudioTrack creation via PeerConnectionFactory | WebRTC audio source for Producer | MEDIUM | `peerConnectionFactory.createAudioSource(constraints)` + `createAudioTrack(id, source)` |
-| Transport listener callbacks (onConnect, onProduce) | Mediasoup signaling protocol requirement | MEDIUM | Server expects DTLS params via onConnect, producer ID via onProduce |
-| Consumer pause/resume for listening control | User expects to stop/start receiving audio | LOW | `consumer.resume()` starts playback, `consumer.pause()` stops |
-| Producer close on PTT release | Stop sending audio when PTT released | LOW | `producer.close()` - Already stubbed in MediasoupClient.kt |
-| Ordered resource disposal | Prevent memory leaks and crashes | LOW | Order: producers → consumers → transports → device (never dispose device) |
+Features users expect in enterprise PTT apps. Missing = product feels incomplete.
 
-### Differentiators (Competitive Advantage)
+| Feature | Why Expected | Complexity | Depends On |
+|---------|--------------|------------|------------|
+| **Location Tracking** | Dispatch needs to see team positions, industry standard for field coordination | Medium | ACCESS_FINE_LOCATION permission, foreground service (exists) |
+| **Stationary Detection** | Battery life expectation — GPS can't drain when workers are idle | Medium | Motion sensors (accelerometer), location history buffer |
+| **Background Location** | Users expect tracking to work even when screen off (already have foreground service) | Low | ACCESS_BACKGROUND_LOCATION permission, existing foreground service notification |
+| **Permission Education UI** | Android 14+ enforcement — must explain why location/mic needed before requesting | Medium | Upfront onboarding flow, re-prompt dialogs |
+| **TLS/WSS Encryption** | Enterprise security baseline — production apps cannot use self-signed certs | Low | Replace dev certs, enforce wss:// protocol |
+| **Audio Retry Queue** | Mission-critical expectation — every PTT transmission must arrive or user notified | High | Persistent queue, retry logic, failure UI |
+| **Network Quality Feedback** | Users need to know if poor connection will impact transmission reliability | Low | Existing network monitor (exists), consumer stats (exists) |
+| **Battery Optimization Whitelist** | Android Doze kills background apps — PTT must request exemption | Low | REQUEST_IGNORE_BATTERY_OPTIMIZATIONS permission (exists), onboarding prompt |
+| **WiFi/Cellular Transition** | Auto-reconnect already exists, but quality degradation warnings expected | Low | Existing NetworkMonitor, bandwidth detection |
 
-Features that set the product apart. Not required, but valuable.
+## Differentiators
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| Per-consumer volume control | Individual channel volume (already in UI via ChannelVolumeDialog.kt) | LOW | `audioTrack.setVolume(0.0-10.0)` on Consumer's track - WebRTC AudioTrack API |
-| Opus codec PTT optimization | Better voice quality + bandwidth efficiency | LOW | Already configured in MediasoupClient.kt: opusDtx=true, opusFec=true, mono, 48kHz |
-| Audio device switching (earpiece/speaker/BT) | Already implemented in AudioRouter.kt, needs WebRTC integration | MEDIUM | JavaAudioDeviceModule custom config or PeerConnectionFactory.Options |
-| Consumer statistics monitoring | Network quality indicators (already in UI) | MEDIUM | `consumer.getStats()` for packet loss, jitter, bitrate |
-| Echo cancellation + noise suppression | Critical for PTT clarity | LOW | MediaConstraints: googEchoCancellation=true, googNoiseSuppression=true |
+Features that set product apart. Not expected, but valued in enterprise context.
 
-### Anti-Features (Commonly Requested, Often Problematic)
+| Feature | Value Proposition | Complexity | Depends On |
+|---------|-------------------|------------|------------|
+| **Adaptive Location Throttling** | Industry-leading battery life — competitors use fixed intervals, we use motion-aware | High | Geofencing API, accelerometer fusion, ML stationary detection |
+| **Geofence Triggers** | Automated workflows (e.g., "arrived at site" auto-joins channel) | High | Geofencing API (100 geofence limit), WorkManager for background triggers |
+| **Transmission Acknowledgment** | Visual confirmation PTT was heard by N recipients (vs. just "sent") | Medium | Server-side read receipts, client delivery tracking |
+| **Offline Audio Queueing** | Unique for PTT — queue transmissions during network outage, send when reconnected | High | Local audio file storage, Room database queue, WorkManager upload |
+| **Bandwidth-Aware Codec** | Auto-switch Opus bitrate based on cellular vs. WiFi (preserve data caps) | Medium | NetworkMonitor cellular detection, Producer reconfigure |
+| **Power Profiling Dashboard** | Admin view of per-user battery consumption to identify misconfigured devices | Medium | Battery stats API, server-side aggregation |
+| **Security Audit Log** | Compliance requirement for some enterprises (who accessed what channel, when) | Medium | Server-side event logging, encrypted client metadata |
+| **Permission Recovery Flow** | If user revokes mic/location later, graceful degradation + re-prompt UI (not crash) | Medium | Runtime permission checks before PTT/location use |
+| **Audio Jitter Buffer Tuning** | Reduce latency by 50-100ms for PTT (vs. default WebRTC streaming settings) | Low | MediasoupClient jitter buffer config, NetEQ tuning |
 
-Features that seem good but create problems.
+## Anti-Features
 
-| Feature | Why Requested | Why Problematic | Alternative |
-|---------|---------------|-----------------|-------------|
-| Manual AudioRecord integration | Direct PCM buffer control | libmediasoup uses WebRTC's internal audio capture; manual AudioRecord bypasses echo cancellation, requires custom Opus encoding | Use PeerConnectionFactory's AudioSource - handles capture, AEC, Opus encoding automatically |
-| Producer volume control | User wants to adjust "mic gain" | WebRTC Producer doesn't expose volume API; belongs in capture layer | Use AudioSource constraints (googAudioMirroring, googAutoGainControl) or OS mic gain |
-| Consumer audio routing override | Trying to force earpiece/speaker per-consumer | WebRTC audio routing is global (JavaAudioDeviceModule); per-consumer routing creates conflicts | Use AudioRouter.kt for global device switching (already implemented) |
-| Optimistic producer state (start sending before server grants) | Reduce perceived latency | Server may deny PTT (busy channel); optimistic send wastes bandwidth, confuses state machine | Current PttState.Requesting pattern is correct - wait for server grant |
+Features to explicitly NOT build.
+
+| Anti-Feature | Why Avoid | What to Do Instead |
+|--------------|-----------|-------------------|
+| **Continuous GPS (no throttling)** | Battery drain horror stories, app store rejection risk (Google Play 2026 policy) | Motion-aware adaptive throttling with stationary detection |
+| **Location without permission education** | Android 14+ will reject at review, user trust issue | Upfront contextual education flow before permission prompt |
+| **Custom audio codec** | Opus is industry standard for PTT, unnecessary complexity | Stick with Opus, tune bitrate/FEC instead |
+| **Audio compression on retry** | Quality loss unacceptable for mission-critical (workers miss commands) | Store original Opus packets, retry as-is |
+| **Manual network selection** | Users don't understand cellular vs. WiFi technical details | Auto-detect and auto-optimize, show simple "Good/Poor" indicator |
+| **Always-on wake lock** | Google Play 2026 excessive battery policy (2hr+ partial wake lock = warning label) | Use existing foreground service, release wake lock when idle |
+| **Mic/location permission on first launch** | Android best practice violation — request in-context when feature used | Defer mic until first PTT press, location until first tracking enable |
+| **Background location without foreground service** | Android 10+ restriction — background location requires foreground notification | Already have foreground service, just add location to it |
 
 ## Feature Dependencies
 
+### Location Tracking
 ```
-Device Initialization
-    └──requires──> Router RTP Capabilities (from server)
-        └──enables──> Transport Creation
-
-Send Transport
-    ├──requires──> Device loaded
-    ├──requires──> Transport params from server (ICE/DTLS)
-    └──enables──> Producer Creation
-
-Recv Transport
-    ├──requires──> Device loaded
-    ├──requires──> Transport params from server (ICE/DTLS)
-    └──enables──> Consumer Creation
-
-Producer
-    ├──requires──> Send Transport created
-    ├──requires──> AudioTrack from PeerConnectionFactory
-    ├──requires──> onConnect callback fired (DTLS connected)
-    └──triggers──> onProduce callback (server assigns producer ID)
-
-Consumer
-    ├──requires──> Recv Transport created
-    ├──requires──> Server newConsumer event (producerId, rtpParameters)
-    └──requires──> consumer.resume() to start playback
-
-PeerConnectionFactory
-    ├──required-by──> AudioTrack creation
-    └──initializes──> WebRTC native libraries
-
-AudioSource (from PeerConnectionFactory)
-    ├──requires──> MediaConstraints (AEC, NS, AGC)
-    └──feeds──> AudioTrack → Producer
-
-Volume Control
-    ├──requires──> Consumer created
-    └──accesses──> consumer.track.setVolume()
-
-Resource Cleanup
-    ├──requires──> All producers closed FIRST
-    ├──then──> All consumers closed
-    ├──then──> Send transport closed
-    ├──then──> Recv transport closed
-    └──never──> Device disposal (singleton, reused)
+Permission Education Flow
+  ↓
+ACCESS_FINE_LOCATION (runtime permission)
+  ↓
+Foreground Service (exists: ChannelMonitoringService)
+  ↓
+ACCESS_BACKGROUND_LOCATION (runtime permission, requires foreground)
+  ↓
+FusedLocationProviderClient (Google Play Services)
+  ↓
+Adaptive Throttling (motion sensors + geofencing)
 ```
 
-### Dependency Notes
-
-- **Device must load RTP capabilities before any transport creation:** Server's router capabilities determine codec support. Calling `createSendTransport()` before `device.load()` will fail.
-- **AudioTrack requires PeerConnectionFactory initialization:** WebRTC's `PeerConnectionFactory.initialize()` must be called once at app startup. Factory creates AudioSource → AudioTrack pipeline.
-- **Producer requires onConnect AND onProduce callbacks:** Transport's `onConnect()` signals DTLS params to server. Only after DTLS connects will `produce()` trigger `onProduce()` callback, which MUST return server-assigned producer ID.
-- **Consumer requires explicit resume():** Unlike Producer (starts automatically), Consumer is created paused. Must call `consumer.resume()` to start audio playback.
-- **Volume control is per-AudioTrack, not per-Consumer:** Each Consumer has a WebRTC AudioTrack. Call `consumer.track.setVolume(gain)` where gain is 0.0-10.0.
-- **Cleanup order prevents crashes:** Disposing transport before closing producers/consumers causes native crashes. Disposing device breaks singleton pattern (device is reused across channels).
-
-## MVP Definition
-
-### Launch With (v1) - Milestone v3.0
-
-Minimum viable mediasoup integration for PTT audio.
-
-- [ ] **PeerConnectionFactory initialization** — Initialize WebRTC once at app startup, create factory for AudioTrack/AudioSource
-- [ ] **Device creation and RTP capabilities loading** — Initialize Device, load server's router capabilities (already stubbed)
-- [ ] **Send transport with PTT producer** — Create send transport, produce audio with Opus config when PTT pressed
-- [ ] **Receive transport with consumers** — Create recv transport, consume remote audio from channel participants
-- [ ] **Transport listener callbacks** — Implement onConnect (DTLS signaling) and onProduce (get producer ID from server)
-- [ ] **AudioTrack creation with AEC/NS** — Create AudioSource with MediaConstraints (echo cancel, noise suppress), feed to Producer
-- [ ] **Consumer resume on newConsumer event** — Start audio playback when server signals new remote producer
-- [ ] **Ordered resource cleanup** — Dispose producers → consumers → transports in MediasoupClient.cleanup()
-
-### Add After Validation (v1.x) - Post-Launch Enhancements
-
-Features to add once core audio is working.
-
-- [ ] **Per-consumer volume control** — Wire ChannelVolumeDialog.kt to `consumer.track.setVolume()` API
-- [ ] **Consumer statistics (getStats)** — Integrate `consumer.getStats()` for NetworkQualityIndicator.kt (packet loss, jitter)
-- [ ] **Audio device module custom config** — Replace default JavaAudioDeviceModule with custom config for AudioRouter.kt integration
-- [ ] **Producer pause/resume** — Support toggle mode (PTT stays on until second press) with `producer.pause()`
-
-### Future Consideration (v2+) - Advanced Features
-
-Features to defer until product-market fit is established.
-
-- [ ] **Simulcast for bandwidth adaptation** — Enable `encodings` parameter in `produce()` for multi-bitrate streams
-- [ ] **Data channel support** — Use DataProducer/DataConsumer for text chat or metadata
-- [ ] **Video track support** — Extend to video producers/consumers for future video PTT
-
-## Feature Prioritization Matrix
-
-| Feature | User Value | Implementation Cost | Priority |
-|---------|------------|---------------------|----------|
-| Device + Transport creation | HIGH | MEDIUM | P1 |
-| Producer (send audio) | HIGH | MEDIUM | P1 |
-| Consumer (receive audio) | HIGH | MEDIUM | P1 |
-| PeerConnectionFactory + AudioTrack | HIGH | MEDIUM | P1 |
-| Transport callbacks (onConnect, onProduce) | HIGH | MEDIUM | P1 |
-| Consumer resume() | HIGH | LOW | P1 |
-| Ordered cleanup | HIGH | LOW | P1 |
-| AEC + noise suppression constraints | HIGH | LOW | P1 |
-| Per-consumer volume control | MEDIUM | LOW | P2 |
-| Consumer getStats() | MEDIUM | MEDIUM | P2 |
-| Audio device module config | MEDIUM | HIGH | P2 |
-| Producer pause/resume | LOW | LOW | P2 |
-| Simulcast | LOW | HIGH | P3 |
-| Data channel | LOW | MEDIUM | P3 |
-
-**Priority key:**
-- P1: Must have for launch (real audio via mediasoup)
-- P2: Should have, add when possible (volume, stats, device routing)
-- P3: Nice to have, future consideration (advanced features)
-
-## Implementation Pattern Analysis
-
-### Device Lifecycle (Already Stubbed in MediasoupClient.kt)
-
-**Current skeleton:**
-```kotlin
-// Line 62-86: initialize()
-val capsResponse = signalingClient.request(SignalingType.GET_ROUTER_CAPABILITIES)
-val rtpCapabilities = toJsonString(capsResponse.data?.get("routerRtpCapabilities"))
-// TODO: device = Device()
-// TODO: device.load(rtpCapabilities)
+### Audio Reliability
+```
+Audio Retry Queue
+  ↓
+Room Database (exists: VoicePingDatabase)
+  ↓
+WorkManager (for background retry when connection restored)
+  ↓
+Server Acknowledgment Protocol (new signaling message type)
+  ↓
+Transmission Acknowledgment UI (delivery confirmation)
 ```
 
-**Actual implementation:**
-```kotlin
-import org.mediasoup.droid.Device
-
-suspend fun initialize() = withContext(Dispatchers.IO) {
-    val capsResponse = signalingClient.request(SignalingType.GET_ROUTER_CAPABILITIES)
-    val rtpCapabilities = capsResponse.data?.get("routerRtpCapabilities") as? String
-        ?: throw IllegalStateException("No routerRtpCapabilities")
-
-    device = Device()
-    device?.load(rtpCapabilities) // JSON string expected
-    _isInitialized.value = true
-}
+### Power/Bandwidth Optimization
+```
+Battery Optimization Whitelist
+  ↓
+Doze Exemption (REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+  ↓
+Adaptive Audio Bitrate
+  ↓
+NetworkMonitor cellular detection (exists)
+  ↓
+Producer reconfigure (bitrate adjustment)
 ```
 
-**CRITICAL:** Server returns JSON object, but `device.load()` expects JSON string. Use `toJsonString()` helper (line 48-50).
-
-### Transport Creation Pattern
-
-**Send transport with listener (lines 262-341):**
-```kotlin
-import org.mediasoup.droid.SendTransport
-import org.mediasoup.droid.Transport
-
-sendTransport = device?.createSendTransport(
-    object : SendTransport.Listener {
-        override fun onConnect(transport: Transport, dtlsParameters: String): String {
-            // CRITICAL: This fires BEFORE produce()
-            // Must signal DTLS params to server for ICE/DTLS handshake
-            runBlocking {
-                signalingClient.request(
-                    SignalingType.CONNECT_TRANSPORT,
-                    mapOf(
-                        "transportId" to transportId,
-                        "dtlsParameters" to dtlsParameters // Already JSON string
-                    )
-                )
-            }
-            return "" // Return value ignored
-        }
-
-        override fun onProduce(
-            transport: Transport,
-            kind: String,
-            rtpParameters: String,
-            appData: String
-        ): String {
-            // CRITICAL: Return server-assigned producer ID
-            // produce() call blocks until this returns
-            return runBlocking {
-                val response = signalingClient.request(
-                    SignalingType.PRODUCE,
-                    mapOf("kind" to kind, "rtpParameters" to rtpParameters)
-                )
-                response.data?.get("id") as? String
-                    ?: throw IllegalStateException("No producer id")
-            }
-        }
-
-        override fun onConnectionStateChange(transport: Transport, state: String) {
-            Log.d(TAG, "Send transport state: $state")
-        }
-    },
-    id = transportId,
-    iceParameters = iceParameters, // JSON string
-    iceCandidates = iceCandidates,  // JSON string
-    dtlsParameters = dtlsParameters // JSON string
-)
+### Permission Flows
+```
+Onboarding Education Screens
+  ↓
+shouldShowRequestPermissionRationale() checks
+  ↓
+Runtime Permission Requests (in-context)
+  ↓
+Permission Recovery Flow (if revoked later)
 ```
 
-**Receive transport (lines 99-159):** Same pattern, but RecvTransport.Listener only needs `onConnect` and `onConnectionStateChange`.
-
-### Producer Creation with AudioTrack
-
-**PeerConnectionFactory setup (add to MediasoupClient or separate manager):**
-```kotlin
-import org.webrtc.PeerConnectionFactory
-import org.webrtc.AudioSource
-import org.webrtc.AudioTrack
-import org.webrtc.MediaConstraints
-
-// One-time initialization (call in Application.onCreate or MediasoupClient init)
-PeerConnectionFactory.initialize(
-    PeerConnectionFactory.InitializationOptions.builder(context)
-        .setEnableInternalTracer(false)
-        .createInitializationOptions()
-)
-
-val factory = PeerConnectionFactory.builder()
-    .setOptions(PeerConnectionFactory.Options())
-    .createPeerConnectionFactory()
-
-// Create audio track with AEC + NS
-val audioConstraints = MediaConstraints().apply {
-    mandatory.add(MediaConstraints.KeyValuePair("googEchoCancellation", "true"))
-    mandatory.add(MediaConstraints.KeyValuePair("googNoiseSuppression", "true"))
-    mandatory.add(MediaConstraints.KeyValuePair("googAutoGainControl", "true"))
-}
-
-val audioSource = factory.createAudioSource(audioConstraints)
-val audioTrack = factory.createAudioTrack("audio-track-${System.currentTimeMillis()}", audioSource)
+### Security Audit
+```
+TLS/WSS Enforcement
+  ↓
+Certificate Validation (reject self-signed)
+  ↓
+Server-Side Audit Logging
+  ↓
+Client Metadata (device ID, IP, channel access)
 ```
 
-**Producer creation (lines 355-385):**
-```kotlin
-import org.mediasoup.droid.Producer
+## Implementation Patterns by Domain
 
-audioProducer = sendTransport?.produce(
-    object : Producer.Listener {
-        override fun onTransportClose(producer: Producer) {
-            audioProducer = null
-            Log.d(TAG, "Producer closed by transport")
-        }
-    },
-    audioTrack, // WebRTC AudioTrack from PeerConnectionFactory
-    null, // encodings (null = single stream, no simulcast)
-    JSONObject().apply {
-        // Opus codec options for PTT (already in stub line 369-375)
-        put("opusStereo", false)      // Mono for PTT
-        put("opusDtx", true)           // Discontinuous TX (silence suppression)
-        put("opusFec", true)           // Forward error correction
-        put("opusMaxPlaybackRate", 48000)
-        put("opusPtime", 20)           // 20ms packets
-    }.toString(),
-    null // appData
-)
-```
+### 1. Adaptive Location Tracking
 
-**CRITICAL:** MediasoupClient.sendAudioData() (lines 396-401) is NOT needed. Producer sends audio automatically from AudioTrack's internal capture.
+**Expected UX:**
+- Location updates every 5-10 seconds when moving (high precision)
+- Location updates every 5-10 minutes when stationary (battery saver)
+- Geofence responsiveness: 2-5 minutes (optimized for battery, not real-time)
+- User sees: "Tracking: Active" / "Tracking: Idle" indicator
 
-### Consumer Creation and Playback
+**Behavior Patterns:**
+- **Motion Detection:** Combine accelerometer + gyroscope to detect movement threshold before requesting GPS fix
+- **Stationary Detection:** If location changes <100m over 5 minutes, switch to "idle" mode with 10-minute intervals
+- **Geofencing:** Maximum 100 geofences per app (Android limit), use for site boundaries, not individual workers
+- **Battery Impact:** Industry target is <5% battery per hour with location tracking enabled (source: [Android battery optimization guide](https://developer.android.com/develop/sensors-and-location/location/battery))
 
-**Consumer creation (lines 173-224):**
-```kotlin
-import org.mediasoup.droid.Consumer
+**Implementation:**
+- FusedLocationProviderClient with PRIORITY_BALANCED_POWER_ACCURACY (not HIGH_ACCURACY when stationary)
+- GeofencingClient for site boundaries with 5-minute responsiveness (setNotificationResponsiveness(300000))
+- Accelerometer sensor fusion to delay GPS requests until movement detected
+- WorkManager for geofence trigger events (background processing)
 
-val consumer = recvTransport?.consume(
-    object : Consumer.Listener {
-        override fun onTransportClose(consumer: Consumer) {
-            consumers.remove(consumerId)
-            Log.d(TAG, "Consumer closed: $consumerId")
-        }
-    },
-    consumerId,      // Server-provided
-    producerId,      // Server-provided
-    kind,            // "audio"
-    rtpParameters,   // JSON string from server
-    null             // appData
-)
+**Confidence:** HIGH (official Android documentation, Google Play Services standard API)
 
-consumer?.let {
-    consumers[consumerId] = it
-    it.resume() // CRITICAL: Consumer starts paused, must resume to play audio
-}
-```
+### 2. Audio Reliability Hardening
 
-**Volume control (lines 243-249):**
-```kotlin
-fun setConsumerVolume(consumerId: String, volume: Float) {
-    consumers[consumerId]?.let { consumer ->
-        (consumer as Consumer).track?.setVolume(volume.toDouble().coerceIn(0.0, 10.0))
-    }
-}
-```
+**Expected UX:**
+- Visual confirmation "Delivered to 5/8 listeners" after PTT release
+- Retry indicator: "Sending..." with spinner if network poor
+- Failure notification: "Transmission failed - retry?" with manual retry button
+- Transmission history shows: "Sent", "Delivered", "Failed" status per message
 
-**Consumer statistics (add to MediasoupClient):**
-```kotlin
-suspend fun getConsumerStats(consumerId: String): String? = withContext(Dispatchers.IO) {
-    consumers[consumerId]?.let { (it as Consumer).stats }
-}
-```
+**Behavior Patterns:**
+- **Transmission Queue:** Store Opus packets in Room database with timestamp, channelId, retry count
+- **Acknowledgment Protocol:** Server sends ACK message when audio delivered to N consumers
+- **Retry Logic:** Exponential backoff (1s, 2s, 4s, 8s, max 30s), WorkManager for background retry when offline
+- **Packet Loss Recovery:** WebRTC NetEQ jitter buffer + Opus in-band FEC (Forward Error Correction) for 5-10% packet loss tolerance
+- **Latency Target:** <300ms PTT latency (industry standard, source: [PeakPTT specifications](https://www.peakptt.com/))
+- **Availability Target:** 99.9% (enterprise SLA, source: [Viasat PTT Select](https://www.viasat.com/enterprise/services/ptt-select/))
 
-### Resource Cleanup Order (lines 423-458)
+**Implementation:**
+- Room entity: `TransmissionQueueEntry(id, audioFilePath, channelId, timestamp, retryCount, status)`
+- WorkManager PeriodicWorkRequest to check queue every 15 minutes
+- Server signaling: `AUDIO_DELIVERED` message type with recipient count
+- Opus FEC enabled via MediasoupClient producerOptions: `enableOpusFec: true`
+- NetEQ jitter buffer: Default WebRTC adaptive buffer (15-120ms), tune to PTT profile (lower bound 10ms)
 
-**Current pattern is CORRECT:**
-```kotlin
-// 1. Producer first
-audioProducer?.close()
-audioProducer = null
+**Confidence:** MEDIUM-HIGH (WebRTC standards documented, PTT latency targets from industry sources, implementation requires server-side changes)
 
-// 2. Consumers
-consumers.values.forEach { (it as Consumer).close() }
-consumers.clear()
+### 3. Power/Bandwidth Optimization
 
-// 3. Send transport
-sendTransport?.close()
-sendTransport = null
+**Expected UX:**
+- Settings option: "Data Saver Mode" (lower audio quality on cellular)
+- Automatic quality adjustment with toast: "Switched to WiFi - audio quality improved"
+- Battery stats: "VoicePing used 8% battery in last 24 hours"
+- No excessive battery drain warnings from Android OS
 
-// 4. Recv transport
-recvTransport?.close()
-recvTransport = null
+**Behavior Patterns:**
+- **Doze Mode:** App must request battery optimization whitelist (isIgnoringBatteryOptimizations) during onboarding
+- **Foreground Service Exemption:** Already have ChannelMonitoringService with mediaPlayback type, exempt from Doze restrictions
+- **Adaptive Bitrate:** Opus codec 16kbps (cellular) vs. 32kbps (WiFi) for voice quality vs. data usage balance
+- **Wake Lock Management:** Release partial wake locks after 2 cumulative hours (Google Play 2026 policy enforcement)
+- **Network Detection:** ConnectivityManager.getActiveNetwork() + NetworkCapabilities.TRANSPORT_WIFI vs. TRANSPORT_CELLULAR
+- **Background Restrictions:** WorkManager with network constraints for retry operations (Constraints.Builder().setRequiredNetworkType(CONNECTED))
 
-// 5. Device NEVER disposed (singleton, reused)
-```
+**Implementation:**
+- Check `PowerManager.isIgnoringBatteryOptimizations()` in onboarding, request via `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`
+- NetworkMonitor already exists, extend with `isCellular()` helper
+- Producer reconfigure on network change: `producer.replaceTrack(newAudioTrack)` with different Opus bitrate
+- WorkManager constraints: `.setRequiredNetworkType(NetworkType.UNMETERED)` for non-urgent uploads
 
-## Known Pitfalls (from Research)
+**Confidence:** HIGH (official Android documentation, Google Play policy documented, WebRTC Producer API known)
 
-### Chrome/Android Initial Codec Issue
-**Problem:** First `device.load()` on Android Chrome may only expose Opus audio codec; full codec list appears after page refresh.
+### 4. Permission Flows
 
-**Mitigation:** Not applicable to native Android app (WebView issue only).
+**Expected UX:**
+- **Upfront (before permission request):** Educational screen: "VoicePing needs microphone access to transmit voice messages to your team"
+- **In-Context (when feature used):** PTT button pressed → if no mic permission → show rationale dialog → request permission
+- **Re-Prompt (if denied once):** Show educational dialog explaining why permission needed, with "Open Settings" button
+- **Graceful Degradation:** If mic revoked, PTT button shows "Microphone access required" instead of crashing
+- **Location Permission Flow:** Two-step (fine location first, then background location after user enables tracking)
 
-### Device-Specific Codec Support
-**Problem:** Some Android devices support H.264 decoding but not encoding.
+**Behavior Patterns:**
+- **shouldShowRequestPermissionRationale():** Returns true if user denied once (show educational UI before re-requesting)
+- **Don't Ask Again:** If user selects "Don't ask again", rationale returns false → must guide to Settings
+- **Contextual Timing:** Request mic only when PTT button first pressed, location only when "Enable Tracking" toggled
+- **Permission Groups:** RECORD_AUDIO (dangerous, runtime), ACCESS_FINE_LOCATION (dangerous, runtime), ACCESS_BACKGROUND_LOCATION (dangerous, runtime, requires FINE first)
+- **Android 14+ Requirements:** Must show clear explanation before requesting sensitive permissions (Play Store review requirement)
 
-**Mitigation:** Not applicable to audio-only app. If adding video, check `device.canProduce("video")` before creating video producer.
+**Implementation:**
+- Onboarding screen: `PermissionEducationScreen` with "Why we need this" text + "Continue" button
+- Before permission request: Check `shouldShowRequestPermissionRationale()`, show dialog if true
+- Permission request: `rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission())`
+- Graceful degradation: Before PTT use, check `ContextCompat.checkSelfPermission()`, show error state if denied
+- Settings redirect: `Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)` with app package URI
 
-### RTP Capabilities Filtering
-**Problem:** Some RTP header extensions cause compatibility issues.
+**Confidence:** HIGH (official Android permission guidelines, NN/g UX research documented)
 
-**Mitigation:** Use server's `router.rtpCapabilities` as-is. Don't filter unless specific extension causes crashes.
+### 5. Security Audit
 
-### Negative Producer ID Response
-**Problem:** If `onProduce()` callback doesn't return server's producer ID, `produce()` call hangs indefinitely.
+**Expected UX:**
+- Admin dashboard: "Security Events" log showing: "User 123 joined Channel ABC at 2026-02-15 10:30 UTC from IP 1.2.3.4"
+- TLS enforcement: App refuses to connect to non-wss:// servers (no fallback to ws://)
+- Certificate validation: Rejects self-signed certificates with error: "Invalid server certificate"
+- End-to-End Encryption indicator: "Secure connection" icon in notification (already have TLS, consider E2EE for MCPTT compliance)
 
-**Mitigation:** Already handled in stub (lines 310-318) - throw exception if no ID in response.
+**Behavior Patterns:**
+- **TLS 1.3:** WebRTC DTLS 1.3 for media, WSS (TLS 1.3) for signaling (industry migration from 1.2 in 2025)
+- **Certificate Pinning:** Optional for high-security deployments (pin server certificate to prevent MITM)
+- **Signaling Security:** HTTPS/WSS for all signaling, protect against CSRF/XSS on control-plane API
+- **TURN Credentials:** Time-limited TURN credentials (not static passwords) for WebRTC NAT traversal
+- **Authentication:** JWT tokens already implemented, ensure expiry enforcement and refresh token rotation
+- **MCPTT End-to-End Encryption:** 3GPP standard requires E2EE for mission-critical, optional for commercial PTT
+- **Audit Log Requirements:** User ID, device ID, channel ID, timestamp, IP address, action (join/leave/transmit)
 
-### AudioTrack Disposal Before Producer Close
-**Problem:** Disposing WebRTC AudioTrack while Producer still references it causes native crash.
+**Implementation:**
+- SignalingClient: Enforce `wss://` schema, reject `ws://` connections
+- OkHttp TLS configuration: `.sslSocketFactory(tlsSocketFactory, trustManager)` with system trust store (reject self-signed)
+- Server-side audit log: PostgreSQL table `audit_events(user_id, device_id, channel_id, action, timestamp, ip_address)`
+- Optional E2EE: Implement 3GPP MCPTT KMS (Key Management Service) for end-to-end encryption (HIGH complexity, deferred for v5.0)
+- TURN credential rotation: Server generates time-limited credentials with TTL (already supported by TURN protocol)
 
-**Mitigation:** Close producer first (line 427-431), then dispose AudioTrack (if manually managed).
+**Confidence:** MEDIUM-HIGH (WebRTC security architecture documented, MCPTT 3GPP standards available, E2EE is complex and may require external audit)
 
-## Competitor Feature Analysis
+## MVP Recommendation
 
-| Feature | Zello | TeamSpeak Mobile | Our Approach (VoicePing) |
-|---------|-------|------------------|--------------------------|
-| Audio codec | Opus (proprietary modifications) | Opus/Speex | Opus via mediasoup (standard WebRTC) |
-| PTT latency optimization | Optimistic sending (starts before grant) | Server confirmation required | Server confirmation (PttState.Requesting) - prevents wasted bandwidth |
-| Volume control | Per-channel volume in UI | Master volume only | Per-consumer volume via AudioTrack.setVolume() |
-| Echo cancellation | Proprietary AEC | Standard WebRTC AEC | WebRTC MediaConstraints (googEchoCancellation) |
-| Audio routing | Auto-switch to earpiece/speaker/BT | Manual selection | AudioRouter.kt (already implemented) |
-| Network quality indicator | Real-time bitrate/latency display | Connection bars only | Consumer.getStats() → NetworkQualityIndicator.kt |
+Prioritize features by impact and dependency:
 
-## Sources
+### Phase 1: Foundation (Low-Hanging Fruit)
+1. **TLS/WSS Enforcement** — Security baseline, low complexity
+2. **Battery Optimization Whitelist** — User education during onboarding
+3. **Permission Education UI** — Required for Android 14+ compliance
+4. **Network Quality Feedback Enhancement** — Extend existing NetworkMonitor
 
-**API Documentation (HIGH confidence):**
-- [mediasoup libmediasoupclient API](https://mediasoup.org/documentation/v3/libmediasoupclient/api/) - Device, Transport, Producer, Consumer lifecycle
-- [mediasoup RTP Parameters and Capabilities](https://mediasoup.org/documentation/v3/mediasoup/rtp-parameters-and-capabilities/) - Opus codec configuration
+### Phase 2: Location (Core Differentiator)
+5. **Basic Location Tracking** — FusedLocationProviderClient with fixed intervals
+6. **Permission Flows (Location)** — Two-step fine → background location
+7. **Stationary Detection** — Adaptive throttling based on movement
+8. **Geofencing (Optional)** — If enterprise clients need site-based workflows
 
-**Library Repositories (MEDIUM confidence):**
-- [crow-misia/libmediasoup-android](https://github.com/crow-misia/libmediasoup-android) - Maven Central library
-- [haiyangwu/mediasoup-client-android](https://github.com/haiyangwu/mediasoup-client-android) - Example implementations
+### Phase 3: Audio Reliability (Mission-Critical)
+9. **Audio Retry Queue** — Room database + WorkManager retry
+10. **Transmission Acknowledgment** — Server protocol + delivery UI
+11. **Bandwidth-Aware Codec** — Opus bitrate switching on cellular
+12. **Jitter Buffer Tuning** — Reduce PTT latency from 300ms → 200ms
 
-**WebRTC AudioTrack API (HIGH confidence):**
-- [org.webrtc.AudioTrack setVolume() documentation](https://getstream.github.io/webrtc-android/stream-webrtc-android/org.webrtc/-audio-track/set-volume.html)
-- [WebRTC Android PeerConnectionFactory examples](https://www.tabnine.com/code/java/classes/org.webrtc.AudioTrack)
+### Phase 4: Hardening (Production-Ready)
+13. **Security Audit Log** — Server-side event logging
+14. **Permission Recovery Flow** — Graceful degradation if permissions revoked
+15. **Power Profiling (Admin)** — Battery stats dashboard for fleet management
 
-**Community Best Practices (LOW confidence - needs verification):**
-- [mediasoup Device.load() error handling](https://github.com/versatica/mediasoup-client/issues/120)
-- [mediasoup SendTransport callbacks discussion](https://mediasoup.discourse.group/t/libmediasoupclient-mysendtransportlistener-onconnect-and-onproduce-events-not-firing/1151)
-- [WebRTC Android audio constraints](https://groups.google.com/g/discuss-webrtc/c/SM7p5qzl_ZQ)
+### Defer to v5.0:
+- **End-to-End Encryption (E2EE)** — MCPTT KMS implementation, requires security audit
+- **Offline Audio Queueing** — Complex storage/sync, lower priority than retry queue
+- **Geofence Automation** — Workflow engine for "arrived at site" triggers
+
+## Feature Complexity Assessment
+
+| Feature | Complexity | Reason | Estimated Effort |
+|---------|------------|--------|------------------|
+| TLS/WSS Enforcement | Low | Configuration change, certificate replacement | 1 plan |
+| Battery Whitelist UI | Low | Single permission request with rationale | 1 plan |
+| Permission Education | Medium | Multi-screen onboarding flow, state management | 2 plans |
+| Basic Location Tracking | Medium | FusedLocationProviderClient integration, foreground service update | 2 plans |
+| Stationary Detection | Medium | Sensor fusion, motion detection algorithm | 2 plans |
+| Geofencing | High | GeofencingClient, WorkManager triggers, 100 geofence limit | 3 plans |
+| Audio Retry Queue | High | Room schema, WorkManager integration, retry logic | 3 plans |
+| Transmission ACK | Medium | Server protocol change, client UI update | 2 plans |
+| Bandwidth-Aware Codec | Medium | NetworkMonitor integration, Producer reconfigure | 2 plans |
+| Jitter Buffer Tuning | Low | MediasoupClient configuration | 1 plan |
+| Security Audit Log | Medium | Server-side implementation, client metadata | 2 plans |
+| Permission Recovery | Medium | Runtime checks, graceful degradation UI | 2 plans |
+| Power Profiling | Medium | Battery stats API, server aggregation | 2 plans |
+| End-to-End Encryption | Very High | MCPTT KMS, key distribution, security audit | 6+ plans |
+
+## Sources and Confidence Levels
+
+### HIGH Confidence Sources
+- [Android Official: Location Optimization](https://developer.android.com/develop/sensors-and-location/location/battery)
+- [Android Official: Geofencing](https://developer.android.com/develop/sensors-and-location/location/geofencing)
+- [Android Official: Doze Optimization](https://developer.android.com/training/monitoring-device-state/doze-standby)
+- [Android Official: Runtime Permissions](https://developer.android.com/training/permissions/requesting)
+- [Android Official: Foreground Service Types](https://developer.android.com/develop/background-work/services/fgs/service-types)
+- [WebRTC Security Architecture](https://rtcweb-wg.github.io/security-arch/)
+- [NN/g Permission UX Research](https://www.nngroup.com/articles/permission-requests/)
+
+### MEDIUM Confidence Sources
+- [PeakPTT Latency Specifications](https://www.peakptt.com/) — Industry PTT latency targets
+- [Viasat PTT Select Availability](https://www.viasat.com/enterprise/services/ptt-select/) — 99.9% SLA
+- [WebRTC NetEQ Jitter Buffer](https://webrtchacks.com/how-webrtcs-neteq-jitter-buffer-provides-smooth-audio/) — Technical deep dive
+- [MCPTT Security Overview](https://www.npstc.org/download.jsp?tableId=37&column=217&id=4308&file=NPSTC_MCPTT_Console_Report_200703.pdf) — Mission-critical requirements
+- [Android Geofencing 2026 Guide](https://smartupworld.com/android-geofencing/) — Best practices
+
+### LOW Confidence (Needs Validation)
+- Google Play 2026 battery policy (2hr wake lock threshold) — Policy documentation incomplete, verify with official source
+- MCPTT E2EE KMS implementation complexity — No open-source reference implementations found, may require consulting
+- Offline audio queueing patterns — Limited PTT app documentation on this specific feature
+
+## Gap Analysis
+
+### Areas with Incomplete Research
+1. **MCPTT End-to-End Encryption:** 3GPP standards are public, but implementation guides scarce. May require commercial MCPTT SDK or security consulting.
+2. **Geofence Workflow Automation:** No industry-standard patterns found for "auto-join channel when arriving at site". Custom implementation needed.
+3. **Power Profiling Dashboard:** Battery stats API (BatteryStatsManager) is restricted in recent Android versions. May need alternative approach via WorkManager execution logs.
+
+### Topics Needing Phase-Specific Research
+- **Phase-Specific (Location):** Motion sensor fusion algorithms for stationary detection (accelerometer + gyroscope thresholds)
+- **Phase-Specific (Audio):** Server-side acknowledgment protocol design (how many ACKs = "delivered"? All consumers? Majority?)
+- **Phase-Specific (Security):** Certificate pinning trade-offs for enterprise deployments (operational complexity vs. security benefit)
+
+## Production Hardening Checklist
+
+Before v4.0 ships, validate:
+
+- [ ] TLS certificate from trusted CA (not self-signed)
+- [ ] Battery optimization whitelist requested during onboarding
+- [ ] Permission education screens comply with Play Store review guidelines
+- [ ] Location tracking <5% battery drain per hour (test on physical device)
+- [ ] Audio retry queue handles 24-hour offline scenario
+- [ ] Transmission acknowledgment tested with 100+ simultaneous consumers
+- [ ] Bandwidth-aware codec switches seamlessly between WiFi/cellular
+- [ ] Security audit log captures all channel access events
+- [ ] Permission recovery flow tested (revoke mic mid-PTT, location mid-tracking)
+- [ ] No Google Play excessive battery warnings (wake lock <2hr cumulative)
 
 ---
-*Feature research for: libmediasoup-android integration in VoicePing PTT*
-*Researched: 2026-02-13*
-*Confidence: MEDIUM (API patterns verified via official docs, implementation details from community sources)*
+
+**Research Complete:** 2026-02-15
+**Overall Confidence:** MEDIUM-HIGH
+**Ready for Roadmap Planning:** YES (with noted gaps for phase-specific research)
