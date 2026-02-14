@@ -142,8 +142,8 @@ class PttManager @Inject constructor(
                     }
                     context.startForegroundService(startIntent)
 
-                    // Step 4: Create send transport (singleton, no channelId)
-                    mediasoupClient.createSendTransport()
+                    // Step 4: Create send transport (singleton, requires channelId for server)
+                    mediasoupClient.createSendTransport(channelId)
 
                     // Step 5: Start producing (creates AudioSource + AudioTrack, configures Opus codec)
                     // AudioSource captures microphone internally, no manual buffer forwarding needed

@@ -81,7 +81,7 @@ class HapticFeedback @Inject constructor(
     fun vibrateRelease() {
         try {
             if (vibrator?.hasVibrator() == true) {
-                val effect = VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE / 2)
+                val effect = VibrationEffect.createOneShot(30, 128)
                 vibrator.vibrate(effect)
                 Log.d(TAG, "PTT release vibration triggered")
             }
@@ -98,7 +98,7 @@ class HapticFeedback @Inject constructor(
     fun vibrateTransmissionStart() {
         try {
             if (vibrator?.hasVibrator() == true) {
-                val effect = VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE / 2)
+                val effect = VibrationEffect.createOneShot(40, 128)
                 vibrator.vibrate(effect)
                 Log.d(TAG, "Transmission start vibration triggered")
             }

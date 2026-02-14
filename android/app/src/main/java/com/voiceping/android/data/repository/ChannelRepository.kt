@@ -24,6 +24,7 @@ import com.voiceping.android.domain.model.ChannelMonitoringState
 import com.voiceping.android.domain.model.PttTargetMode
 import com.voiceping.android.domain.model.User
 import com.voiceping.android.service.ChannelMonitoringService
+import com.google.gson.JsonElement
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -38,6 +39,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 import javax.inject.Singleton
+
+/** Safe accessor: returns null for both missing keys and JSON null values. */
+private fun JsonElement?.asStringOrNull(): String? =
+    if (this == null || this.isJsonNull) null else this.asString
+
+private fun JsonElement?.asIntOrNull(): Int? =
+    if (this == null || this.isJsonNull) null else this.asInt
 
 @Singleton
 class ChannelRepository @Inject constructor(
@@ -205,10 +213,16 @@ class ChannelRepository @Inject constructor(
                         tonePlayer.playConnectionTone()
                     }
 
-                    // Auto-rejoin channels after extended disconnection (30+s)
-                    if (duration != null && duration > 30_000) {
-                        Log.d(TAG, "Extended disconnect (${duration}ms), rejoining all channels")
-                        rejoinAllMonitoredChannels()
+                    // Always rejoin channels after reconnection — server drops all
+                    // channel memberships when the WebSocket disconnects, so even brief
+                    // disconnections require full rejoin + transport recreation.
+                    if (prevState == com.voiceping.android.domain.model.ConnectionState.RECONNECTING &&
+                        _monitoredChannels.value.isNotEmpty()) {
+                        launch {
+                            Log.d(TAG, "Reconnected, cleaning up stale resources and rejoining ${_monitoredChannels.value.size} channels")
+                            mediasoupClient.cleanup()
+                            rejoinAllMonitoredChannels()
+                        }
                     }
 
                     // Reset disconnect tracking
@@ -278,19 +292,21 @@ class ChannelRepository @Inject constructor(
                 return Result.failure(Exception(joinResponse.error))
             }
 
-            // If first channel: set up audio routing and create recv transport
+            // If first channel: set up audio routing
             val isFirstChannel = _monitoredChannels.value.isEmpty()
             if (isFirstChannel) {
                 audioRouter.requestAudioFocus()
                 audioRouter.setEarpieceMode()
-                mediasoupClient.createRecvTransport(channelId)
 
                 // Set as primary
                 _primaryChannelId.value = channelId
             }
 
+            // Create recv transport for every channel (each channel needs its own for audio consumption)
+            mediasoupClient.createRecvTransport(channelId)
+
             // Parse user count from join response
-            val joinUserCount = (joinResponse.data?.get("userCount") as? Number)?.toInt() ?: 0
+            val joinUserCount = joinResponse.data?.get("userCount").asIntOrNull() ?: 0
 
             // Create ChannelMonitoringState
             val channelState = ChannelMonitoringState(
@@ -439,9 +455,9 @@ class ChannelRepository @Inject constructor(
                 .filter { it.type == SignalingType.CHANNEL_STATE }
                 .collect { message ->
                     val data = message.data ?: return@collect
-                    val messageChannelId = data["channelId"] as? String
+                    val messageChannelId = data.get("channelId").asStringOrNull()
                     if (messageChannelId == channelId) {
-                        val userCount = (data["userCount"] as? Number)?.toInt()
+                        val userCount = data.get("userCount").asIntOrNull()
                         if (userCount != null) {
                             updateChannelState(channelId) { state ->
                                 state.copy(userCount = userCount)
@@ -465,10 +481,10 @@ class ChannelRepository @Inject constructor(
                     val data = message.data ?: return@collect
 
                     // Extract data from broadcast
-                    val messageChannelId = data["channelId"] as? String
-                    val speakerUserId = data["currentSpeaker"] as? String
-                    val speakerName = data["speakerName"] as? String
-                    val producerId = data["producerId"] as? String
+                    val messageChannelId = data.get("channelId").asStringOrNull()
+                    val speakerUserId = data.get("currentSpeaker").asStringOrNull()
+                    val speakerName = data.get("speakerName").asStringOrNull()
+                    val producerId = data.get("producerId").asStringOrNull()
 
                     // Only process messages for this channel
                     if (messageChannelId == channelId) {
@@ -503,13 +519,14 @@ class ChannelRepository @Inject constructor(
                             // Consume audio from this producer (guard: only if not muted)
                             val channelState = _monitoredChannels.value[channelId]
                             if (channelState?.isMuted == false) {
-                                mediasoupClient.consumeAudio(channelId, producerId, speakerUserId)
+                                val actualConsumerId = mediasoupClient.consumeAudio(channelId, producerId, speakerUserId)
 
-                                // Track consumer
+                                // Track consumer: producerId -> actual consumerId (NOT producerId!)
+                                // The actual consumerId is needed for closeConsumer() and setConsumerVolume()
                                 if (channelConsumers[channelId] == null) {
                                     channelConsumers[channelId] = mutableMapOf()
                                 }
-                                channelConsumers[channelId]!![producerId] = producerId
+                                channelConsumers[channelId]!![producerId] = actualConsumerId
 
                                 // Apply audio mix mode to new consumer
                                 applyAudioMixMode(currentAudioMixMode)
@@ -544,11 +561,11 @@ class ChannelRepository @Inject constructor(
                                 }
                             }
 
-                            // Close the consumer
-                            channelState?.consumerId?.let { consumerId ->
-                                mediasoupClient.closeConsumer(consumerId)
-                                channelConsumers[channelId]?.remove(consumerId)
+                            // Close all consumers for this channel
+                            channelConsumers[channelId]?.values?.forEach { consId ->
+                                mediasoupClient.closeConsumer(consId)
                             }
+                            channelConsumers[channelId]?.clear()
                         }
                     }
                 }
@@ -612,13 +629,13 @@ class ChannelRepository @Inject constructor(
             val producerId = channelState.consumerId
             val speakerId = channelState.currentSpeaker.id
 
-            mediasoupClient.consumeAudio(channelId, producerId, speakerId)
+            val actualConsumerId = mediasoupClient.consumeAudio(channelId, producerId, speakerId)
 
-            // Track consumer
+            // Track consumer: producerId -> actual consumerId
             if (channelConsumers[channelId] == null) {
                 channelConsumers[channelId] = mutableMapOf()
             }
-            channelConsumers[channelId]!![producerId] = producerId
+            channelConsumers[channelId]!![producerId] = actualConsumerId
 
             // Apply audio mix mode
             applyAudioMixMode(currentAudioMixMode)
@@ -720,13 +737,23 @@ class ChannelRepository @Inject constructor(
         }
 
         Log.d(TAG, "Rejoining ${currentChannels.size} channels after reconnection")
+
+        // Re-acquire audio focus (may have been released during disconnect)
+        audioRouter.requestAudioFocus()
+        audioRouter.setEarpieceMode()
+
         for ((channelId, state) in currentChannels) {
             try {
+                // Step 1: Rejoin channel on server
                 signalingClient.request(
                     SignalingType.JOIN_CHANNEL,
                     mapOf("channelId" to channelId)
                 )
-                Log.d(TAG, "Rejoined channel: ${state.channelName}")
+
+                // Step 2: Recreate recv transport (cleanup() closed all transports)
+                mediasoupClient.createRecvTransport(channelId)
+
+                Log.d(TAG, "Rejoined channel with transport: ${state.channelName}")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to rejoin channel ${state.channelName}", e)
             }

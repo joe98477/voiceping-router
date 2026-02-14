@@ -1,16 +1,19 @@
 package com.voiceping.android.data.network.dto
 
+import com.google.gson.JsonObject
 import com.google.gson.annotations.SerializedName
 
 /**
  * Signaling message DTO matching src/shared/protocol.ts
  *
  * Server protocol uses kebab-case enum values, serialized via @SerializedName annotations.
+ * Data field uses JsonObject (not Map<String, Any>) to preserve exact JSON types
+ * for native mediasoup C++ interop — Map<String, Any> loses number/object type fidelity.
  */
 data class SignalingMessage(
     val type: SignalingType,
     val id: String? = null,
-    val data: Map<String, Any>? = null,
+    val data: JsonObject? = null,
     val error: String? = null
 )
 

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import com.google.gson.ToNumberPolicy
 import com.google.gson.TypeAdapter
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonWriter
@@ -54,6 +55,7 @@ object AppModule {
     fun provideGson(): Gson {
         return GsonBuilder()
             .setLenient()
+            .setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE)
             .registerTypeAdapter(SignalingType::class.java, SignalingTypeAdapter())
             .create()
     }

@@ -2,7 +2,9 @@ package com.voiceping.android.data.network
 
 import android.content.Context
 import android.util.Log
-import com.google.gson.Gson
+import com.google.gson.JsonElement
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import com.voiceping.android.data.audio.AudioRouter
 import com.voiceping.android.data.network.dto.SignalingType
 import com.voiceping.android.domain.model.ConsumerNetworkStats
@@ -14,6 +16,7 @@ import io.github.crow_misia.mediasoup.RecvTransport
 import io.github.crow_misia.mediasoup.SendTransport
 import io.github.crow_misia.mediasoup.Transport
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,10 +27,15 @@ import kotlinx.coroutines.withContext
 import org.webrtc.AudioSource
 import org.webrtc.AudioTrack
 import org.webrtc.MediaConstraints
+import org.webrtc.PeerConnection
 import org.webrtc.PeerConnectionFactory
 import org.webrtc.audio.JavaAudioDeviceModule
 import javax.inject.Inject
 import javax.inject.Singleton
+
+/** Safe accessor: returns null for both missing keys and JSON null values. */
+private fun JsonElement?.asStringOrNull(): String? =
+    if (this == null || this.isJsonNull) null else this.asString
 
 /**
  * mediasoup Device wrapper for bidirectional audio (send + receive).
@@ -47,7 +55,6 @@ import javax.inject.Singleton
 class MediasoupClient @Inject constructor(
     private val signalingClient: SignalingClient,
     private val audioRouter: AudioRouter,
-    private val gson: Gson,
     @ApplicationContext private val context: Context
 ) {
     // WebRTC factory and audio module
@@ -60,10 +67,17 @@ class MediasoupClient @Inject constructor(
     // Transport and producer/consumer placeholders (typed in Phase 12/13)
     private val recvTransports = mutableMapOf<String, RecvTransport>()
     private var sendTransport: SendTransport? = null
+    private var sendTransportChannelId: String? = null
     private val consumers = mutableMapOf<String, Consumer>()
     private var audioProducer: Producer? = null
     private var audioSource: AudioSource? = null
     private var pttAudioTrack: org.webrtc.AudioTrack? = null
+
+    // Flag to detect race condition: stopProducing() called while transport.produce() is in-flight.
+    // transport.produce() blocks for ~700ms (onConnect + onProduce server roundtrip).
+    // If user releases PTT before produce() returns, the late-arriving producer is orphaned.
+    @Volatile
+    private var producingRequested = false
 
     // Mutex for transport lifecycle protection (prevents concurrent creation/destruction)
     private val transportMutex = Mutex()
@@ -71,8 +85,8 @@ class MediasoupClient @Inject constructor(
     private val _isInitialized = MutableStateFlow(false)
     val isInitialized: StateFlow<Boolean> = _isInitialized.asStateFlow()
 
-    private fun toJsonString(data: Any?): String {
-        return gson.toJson(data) ?: throw IllegalStateException("Failed to serialize to JSON")
+    private fun toJsonString(data: com.google.gson.JsonElement?): String {
+        return data?.toString() ?: throw IllegalStateException("Failed to serialize to JSON")
     }
 
     /**
@@ -88,6 +102,11 @@ class MediasoupClient @Inject constructor(
      * because WebRTC's AudioDeviceModule now owns that responsibility.
      */
     fun initializeWebRTC() {
+        // Dispose previous Device to prevent native memory leak on re-initialization
+        if (::device.isInitialized) {
+            try { device.dispose() } catch (e: Exception) { Log.w(TAG, "Error disposing old device", e) }
+        }
+
         audioDeviceModule = JavaAudioDeviceModule.builder(context)
             .setUseHardwareAcousticEchoCanceler(true)
             .setUseHardwareNoiseSuppressor(true)
@@ -135,53 +154,87 @@ class MediasoupClient @Inject constructor(
     }
 
     /**
-     * Initialize mediasoup Device and load RTP capabilities from server.
+     * Initialize WebRTC subsystem (PeerConnectionFactory + Device creation).
      *
-     * Steps:
-     * 1. Request router RTP capabilities from server
-     * 2. Create Device instance
-     * 3. Load capabilities into device
+     * Does NOT load router capabilities — that requires a channelId and happens
+     * lazily on first channel join via [loadDeviceCapabilities].
      *
-     * @throws Exception if capabilities request fails or device load fails
+     * @throws Exception if WebRTC initialization fails
      */
     suspend fun initialize() = withContext(Dispatchers.IO) {
         try {
-            // Step 1: Initialize WebRTC (must happen before Device.load)
             initializeWebRTC()
-
-            Log.d(TAG, "Requesting router RTP capabilities from server")
-
-            // Step 1: Get router RTP capabilities from server
-            val capsResponse = signalingClient.request(SignalingType.GET_ROUTER_CAPABILITIES)
-            if (capsResponse.error != null) {
-                throw IllegalStateException("Server error: ${capsResponse.error}")
-            }
-            val rtpCapabilities = toJsonString(capsResponse.data?.get("routerRtpCapabilities")
-                ?: throw IllegalStateException("No routerRtpCapabilities in response (data keys: ${capsResponse.data?.keys})"))
-
-            Log.d(TAG, "Received RTP capabilities, loading into Device")
-
-            // Step 2: Load capabilities into Device (blocks IO thread 50-200ms)
-            // Validates device can handle router's codecs
-            device.load(rtpCapabilities, null)
-
-            // Step 3: Validate Opus codec support (required for audio-only app)
-            val deviceCapsJson = device.rtpCapabilities
-            val hasOpus = deviceCapsJson.contains("\"mimeType\":\"audio/opus\"", ignoreCase = true) ||
-                          deviceCapsJson.contains("\"mimeType\": \"audio/opus\"", ignoreCase = true)
-
-            if (!hasOpus) {
-                throw IllegalStateException("Device does not support Opus codec — cannot proceed with audio")
-            }
-
-            Log.d(TAG, "Device loaded with Opus codec support validated")
-
             _isInitialized.value = true
-
+            Log.d(TAG, "WebRTC initialized, Device created (capabilities not yet loaded)")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize Device", e)
+            Log.e(TAG, "Failed to initialize WebRTC", e)
             throw e
         }
+    }
+
+    /**
+     * Load router RTP capabilities into Device (idempotent — runs once).
+     *
+     * Uses native `device.loaded` property to check if already loaded,
+     * preventing "already loaded" errors when native Device state diverges
+     * from application state (e.g., after a failed load attempt).
+     *
+     * Server requires a channelId to look up the router for that channel.
+     * Called before first transport creation.
+     *
+     * @param channelId Channel to fetch router capabilities for
+     * @throws Exception if capabilities request fails or device load fails
+     */
+    suspend fun loadDeviceCapabilities(channelId: String) = withContext(Dispatchers.IO) {
+        if (device.loaded) return@withContext
+
+        Log.d(TAG, "Requesting router RTP capabilities for channel: $channelId")
+
+        val capsResponse = signalingClient.request(
+            SignalingType.GET_ROUTER_CAPABILITIES,
+            mapOf("channelId" to channelId)
+        )
+        if (capsResponse.error != null) {
+            throw IllegalStateException("Server error: ${capsResponse.error}")
+        }
+        val rtpCapabilities = toJsonString(capsResponse.data?.get("routerRtpCapabilities")
+            ?: throw IllegalStateException("No routerRtpCapabilities in response (data keys: ${capsResponse.data?.keySet()})"))
+
+        // Log capabilities for debugging native load failures
+        Log.d(TAG, "Received RTP capabilities (${rtpCapabilities.length} chars), first 500: ${rtpCapabilities.take(500)}")
+
+        // CRITICAL: Pass empty RTCConfiguration, not null. Null causes the native
+        // PeerConnection to use device-default config which on some devices (Samsung)
+        // generates SDP with extensions that crash mediasoup-client's extractRtpCapabilities
+        // parser ([json.exception.type_error.305]). The demo app always passes an explicit config.
+        //
+        // Retry: SDP generation is non-deterministic (random ICE/DTLS params).
+        // Some SDPs trigger a json parse error while others succeed. Retry up to 5 times.
+        val rtcConfig = PeerConnection.RTCConfiguration(emptyList())
+        var lastException: Exception? = null
+        for (attempt in 1..10) {
+            try {
+                device.load(rtpCapabilities, rtcConfig)
+                lastException = null
+                break
+            } catch (e: Exception) {
+                lastException = e
+                Log.w(TAG, "device.load() attempt $attempt/10 failed: ${e.message}")
+                if (attempt < 10) delay(200L * attempt)
+            }
+        }
+        if (lastException != null) throw lastException!!
+
+        // Validate Opus codec support
+        val deviceCapsJson = device.rtpCapabilities
+        val hasOpus = deviceCapsJson.contains("\"mimeType\":\"audio/opus\"", ignoreCase = true) ||
+                      deviceCapsJson.contains("\"mimeType\": \"audio/opus\"", ignoreCase = true)
+
+        if (!hasOpus) {
+            throw IllegalStateException("Device does not support Opus codec — cannot proceed with audio")
+        }
+
+        Log.d(TAG, "Device loaded with Opus codec support validated")
     }
 
     /**
@@ -195,7 +248,22 @@ class MediasoupClient @Inject constructor(
         if (!_isInitialized.value) {
             throw IllegalStateException("Device not initialized, call initialize() first")
         }
-        return toJsonString(device.rtpCapabilities)
+        return device.rtpCapabilities
+    }
+
+    /**
+     * Ensure WebRTC subsystem is initialized (Device + PeerConnectionFactory exist).
+     *
+     * Safety guard for the rare case where createRecvTransport/createSendTransport
+     * is called before LoadingViewModel's initialize(), or after a failed initialization.
+     * In normal operation, initialize() runs once on app start and the device persists.
+     */
+    private fun ensureInitialized() {
+        if (!_isInitialized.value || !::device.isInitialized) {
+            Log.w(TAG, "MediasoupClient not initialized, initializing WebRTC now")
+            initializeWebRTC()
+            _isInitialized.value = true
+        }
     }
 
     /**
@@ -210,6 +278,7 @@ class MediasoupClient @Inject constructor(
      * @throws Exception if transport creation fails
      */
     suspend fun createRecvTransport(channelId: String) = withContext(Dispatchers.IO) {
+        ensureInitialized()
         transportMutex.withLock {
             try {
                 // Guard: Prevent duplicate RecvTransport creation for same channel
@@ -219,6 +288,9 @@ class MediasoupClient @Inject constructor(
                 }
 
                 Log.d(TAG, "Creating receive transport for channel: $channelId")
+
+                // Ensure Device has loaded router capabilities (idempotent)
+                loadDeviceCapabilities(channelId)
 
                 // Step 1: Request transport from server
                 val transportResponse = signalingClient.request(
@@ -232,11 +304,11 @@ class MediasoupClient @Inject constructor(
                 val transportData = transportResponse.data
                     ?: throw IllegalStateException("No transport data in response")
 
-                val transportId = transportData["id"] as? String
+                val transportId = transportData.get("id").asStringOrNull()
                     ?: throw IllegalStateException("No transport id")
-                val iceParameters = toJsonString(transportData["iceParameters"])
-                val iceCandidates = toJsonString(transportData["iceCandidates"])
-                val dtlsParameters = toJsonString(transportData["dtlsParameters"])
+                val iceParameters = toJsonString(transportData.get("iceParameters"))
+                val iceCandidates = toJsonString(transportData.get("iceCandidates"))
+                val dtlsParameters = toJsonString(transportData.get("dtlsParameters"))
 
                 Log.d(TAG, "Transport parameters received: id=$transportId")
 
@@ -246,12 +318,15 @@ class MediasoupClient @Inject constructor(
                         override fun onConnect(transport: Transport, dtlsParameters: String) {
                             Log.d(TAG, "RecvTransport onConnect: $transportId")
                             runBlocking {
+                                // dtlsParameters is a JSON string from native —
+                                // parse into JsonElement to avoid double-encoding
+                                val connectData = JsonObject().apply {
+                                    addProperty("transportId", transportId)
+                                    add("dtlsParameters", JsonParser.parseString(dtlsParameters))
+                                }
                                 signalingClient.request(
                                     SignalingType.CONNECT_TRANSPORT,
-                                    mapOf(
-                                        "transportId" to transportId,
-                                        "dtlsParameters" to dtlsParameters
-                                    )
+                                    connectData
                                 )
                             }
                         }
@@ -313,23 +388,26 @@ class MediasoupClient @Inject constructor(
             Log.d(TAG, "Consuming audio: channel=$channelId, producer=$producerId, peer=$peerId")
 
             // Step 1: Request consume from server
+            // rtpCapabilities is a JSON string from native — parse into JsonElement
+            // to avoid double-encoding as a string literal
+            val consumeRequestData = JsonObject().apply {
+                addProperty("channelId", channelId)
+                addProperty("producerId", producerId)
+                add("rtpCapabilities", JsonParser.parseString(device.rtpCapabilities))
+            }
             val consumeResponse = signalingClient.request(
                 SignalingType.CONSUME,
-                mapOf(
-                    "channelId" to channelId,
-                    "producerId" to producerId,
-                    "rtpCapabilities" to device.rtpCapabilities
-                )
+                consumeRequestData
             )
 
             val consumeData = consumeResponse.data
                 ?: throw IllegalStateException("No consume data in response")
 
-            val consumerId = consumeData["id"] as? String
+            val consumerId = consumeData.get("id").asStringOrNull()
                 ?: throw IllegalStateException("No consumer id")
-            val kind = consumeData["kind"] as? String
+            val kind = consumeData.get("kind").asStringOrNull()
                 ?: throw IllegalStateException("No kind")
-            val rtpParameters = toJsonString(consumeData["rtpParameters"])
+            val rtpParameters = toJsonString(consumeData.get("rtpParameters"))
 
             val transport = recvTransports[channelId]
                 ?: throw IllegalStateException("RecvTransport not found for channel: $channelId")
@@ -440,37 +518,45 @@ class MediasoupClient @Inject constructor(
      * Create send transport for PTT audio transmission (singleton).
      *
      * Steps:
-     * 1. Request CREATE_TRANSPORT from server with direction="send" (no channelId)
+     * 1. Request CREATE_TRANSPORT from server with channelId and direction="send"
      * 2. Create SendTransport with server's transport parameters
      * 3. Set up transport listener for DTLS connection and produce events
      *
+     * @param channelId Channel to create transport for (server requires it)
      * @throws Exception if transport creation fails
      */
-    suspend fun createSendTransport() = withContext(Dispatchers.IO) {
+    suspend fun createSendTransport(channelId: String) = withContext(Dispatchers.IO) {
+        ensureInitialized()
         transportMutex.withLock {
             try {
                 // Guard: SendTransport is singleton (not per-channel)
                 if (sendTransport != null) {
-                    Log.d(TAG, "SendTransport already exists")
+                    // Update channel so onProduce sends to the correct channel
+                    sendTransportChannelId = channelId
+                    Log.d(TAG, "SendTransport already exists, updated channel to $channelId")
                     return@withContext
                 }
 
-                Log.d(TAG, "Creating send transport")
+                Log.d(TAG, "Creating send transport for channel: $channelId")
+                sendTransportChannelId = channelId
 
-                // Step 1: Request transport from server (direction="send", no channelId)
+                // Step 1: Request transport from server
                 val transportResponse = signalingClient.request(
                     SignalingType.CREATE_TRANSPORT,
-                    mapOf("direction" to "send")
+                    mapOf(
+                        "channelId" to channelId,
+                        "direction" to "send"
+                    )
                 )
 
                 val transportData = transportResponse.data
                     ?: throw IllegalStateException("No transport data in response")
 
-                val transportId = transportData["id"] as? String
+                val transportId = transportData.get("id").asStringOrNull()
                     ?: throw IllegalStateException("No transport id")
-                val iceParameters = toJsonString(transportData["iceParameters"])
-                val iceCandidates = toJsonString(transportData["iceCandidates"])
-                val dtlsParameters = toJsonString(transportData["dtlsParameters"])
+                val iceParameters = toJsonString(transportData.get("iceParameters"))
+                val iceCandidates = toJsonString(transportData.get("iceCandidates"))
+                val dtlsParameters = toJsonString(transportData.get("dtlsParameters"))
 
                 Log.d(TAG, "Send transport parameters received: id=$transportId")
 
@@ -480,12 +566,15 @@ class MediasoupClient @Inject constructor(
                         override fun onConnect(transport: Transport, dtlsParameters: String) {
                             Log.d(TAG, "SendTransport onConnect: $transportId")
                             runBlocking {
+                                // dtlsParameters is a JSON string from native —
+                                // parse into JsonElement to avoid double-encoding
+                                val connectData = JsonObject().apply {
+                                    addProperty("transportId", transportId)
+                                    add("dtlsParameters", JsonParser.parseString(dtlsParameters))
+                                }
                                 signalingClient.request(
                                     SignalingType.CONNECT_TRANSPORT,
-                                    mapOf(
-                                        "transportId" to transportId,
-                                        "dtlsParameters" to dtlsParameters
-                                    )
+                                    connectData
                                 )
                             }
                         }
@@ -496,16 +585,25 @@ class MediasoupClient @Inject constructor(
                             rtpParameters: String,
                             appData: String?
                         ): String {
-                            Log.d(TAG, "SendTransport onProduce: kind=$kind")
+                            Log.d(TAG, "SendTransport onProduce: kind=$kind, transport=$transportId, channel=$sendTransportChannelId")
                             return runBlocking {
+                                // rtpParameters is a JSON string from native —
+                                // parse into JsonElement to avoid double-encoding.
+                                // Server requires transportId and channelId.
+                                val produceData = JsonObject().apply {
+                                    addProperty("transportId", transportId)
+                                    addProperty("channelId", sendTransportChannelId)
+                                    addProperty("kind", kind)
+                                    add("rtpParameters", JsonParser.parseString(rtpParameters))
+                                }
                                 val produceResponse = signalingClient.request(
                                     SignalingType.PRODUCE,
-                                    mapOf(
-                                        "kind" to kind,
-                                        "rtpParameters" to rtpParameters
-                                    )
+                                    produceData
                                 )
-                                produceResponse.data?.get("id") as? String
+                                if (produceResponse.error != null) {
+                                    throw IllegalStateException("Produce failed: ${produceResponse.error}")
+                                }
+                                produceResponse.data?.get("id").asStringOrNull()
                                     ?: throw IllegalStateException("No producer id in response")
                             }
                         }
@@ -579,13 +677,17 @@ class MediasoupClient @Inject constructor(
      */
     suspend fun startProducing() = withContext(Dispatchers.IO) {
         try {
-            // Guard: Prevent duplicate Producer creation
-            if (audioProducer != null) {
-                Log.d(TAG, "Producer already exists, skipping")
-                return@withContext
+            // Close any stale/orphaned producer from a previous race condition
+            // (stopProducing ran before produce() returned, leaving a dangling producer)
+            audioProducer?.let { staleProducer ->
+                Log.w(TAG, "Closing stale producer before creating new one")
+                staleProducer.close()
+                audioProducer = null
+                cleanupAudioResources()
             }
 
             Log.d(TAG, "Starting audio producer")
+            producingRequested = true
 
             // Guard: SendTransport must exist
             val transport = sendTransport
@@ -600,16 +702,17 @@ class MediasoupClient @Inject constructor(
             pttAudioTrack = track
 
             // Opus codec configuration for PTT
-            val codecOptions = mapOf(
-                "opusStereo" to false,
-                "opusDtx" to true,
-                "opusFec" to true,
-                "opusMaxPlaybackRate" to 48000,
-                "opusPtime" to 20
-            )
+            val codecOptions = com.google.gson.JsonObject().apply {
+                addProperty("opusStereo", false)
+                addProperty("opusDtx", true)
+                addProperty("opusFec", true)
+                addProperty("opusMaxPlaybackRate", 48000)
+                addProperty("opusPtime", 20)
+            }
 
-            // Create Producer
-            audioProducer = transport.produce(
+            // Create Producer — this BLOCKS for ~700ms (onConnect + onProduce server roundtrip).
+            // During this time, user may release PTT causing stopProducing() to run.
+            val producer = transport.produce(
                 listener = object : Producer.Listener {
                     override fun onTransportClose(producer: Producer) {
                         audioProducer = null
@@ -624,10 +727,20 @@ class MediasoupClient @Inject constructor(
                 appData = null
             )
 
+            // CRITICAL: Check if stopProducing() was called while produce() was blocking.
+            // If so, the audio resources have been disposed and this producer is orphaned.
+            if (!producingRequested) {
+                Log.w(TAG, "stopProducing() called during produce(), closing orphaned producer")
+                producer.close()
+                return@withContext
+            }
+
+            audioProducer = producer
             Log.d(TAG, "Audio producer started")
 
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start producer", e)
+            producingRequested = false
             cleanupAudioResources()
             throw e
         }
@@ -642,7 +755,11 @@ class MediasoupClient @Inject constructor(
         try {
             Log.d(TAG, "Stopping audio producer")
 
-            // Close producer
+            // Signal to in-flight produce() that we want to stop
+            producingRequested = false
+
+            // Close producer (may be null if produce() hasn't returned yet —
+            // the producingRequested flag handles that case)
             audioProducer?.close()
             audioProducer = null
 
@@ -652,6 +769,7 @@ class MediasoupClient @Inject constructor(
         } catch (e: Exception) {
             Log.e(TAG, "Error stopping producer", e)
             // Ensure cleanup happens even on error
+            producingRequested = false
             cleanupAudioResources()
         }
     }
@@ -706,6 +824,7 @@ class MediasoupClient @Inject constructor(
         Log.d(TAG, "Cleaning up mediasoup resources")
 
         // Step 1: Close producer FIRST
+        producingRequested = false
         audioProducer?.close()
         audioProducer = null
         cleanupAudioResources()
@@ -717,13 +836,15 @@ class MediasoupClient @Inject constructor(
         // Step 3: Close send transport
         sendTransport?.close()
         sendTransport = null
+        sendTransportChannelId = null
 
         // Step 4: Close all recv transports
         recvTransports.values.forEach { it.close() }
         recvTransports.clear()
 
-        // Step 5: DO NOT dispose device (shared across channels)
-        // Device persists for lifetime of MediasoupClient singleton
+        // Note: Device and PeerConnectionFactory are kept alive across cleanup cycles.
+        // They're expensive to recreate, and initialize() is only called once in LoadingViewModel.
+        // Device capabilities (loaded state) remain valid across transport teardown/recreation.
 
         Log.d(TAG, "Cleanup complete")
     }

@@ -6,6 +6,7 @@ import android.media.AudioDeviceInfo
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.os.Build
+import android.telephony.TelephonyManager
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -26,6 +27,7 @@ class AudioRouter @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    private val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
     private var audioFocusRequest: AudioFocusRequest? = null
     private var modeControlEnabled = true
 
@@ -39,11 +41,24 @@ class AudioRouter @Inject constructor(
     private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
         when (focusChange) {
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                // Phone call started (incoming or outgoing)
-                // User decision: immediate pause of all channel audio (no fade)
-                Log.d(TAG, "Audio focus lost (transient): phone call detected")
-                isInPhoneCall = true
-                onPhoneCallStarted?.invoke()
+                // AUDIOFOCUS_LOSS_TRANSIENT can be triggered by Bluetooth SCO activation,
+                // not just phone calls. Verify with TelephonyManager before pausing channels.
+                // NOTE: On Android 16 (Samsung), getCallState() requires READ_PHONE_STATE
+                // permission. Without it, a SecurityException crashes the app via
+                // AudioManager's internal ServiceEventHandlerDelegate. Wrap in try-catch.
+                val callState = try {
+                    telephonyManager.callState
+                } catch (e: SecurityException) {
+                    Log.w(TAG, "Cannot read call state (no READ_PHONE_STATE permission), assuming not a phone call")
+                    TelephonyManager.CALL_STATE_IDLE
+                }
+                if (callState != TelephonyManager.CALL_STATE_IDLE) {
+                    Log.d(TAG, "Audio focus lost (transient): phone call detected (callState=$callState)")
+                    isInPhoneCall = true
+                    onPhoneCallStarted?.invoke()
+                } else {
+                    Log.d(TAG, "Audio focus lost (transient): not a phone call (Bluetooth SCO or other), ignoring")
+                }
             }
             AudioManager.AUDIOFOCUS_GAIN -> {
                 if (isInPhoneCall) {
@@ -85,29 +100,52 @@ class AudioRouter @Inject constructor(
     /**
      * Set audio routing to earpiece (default for receive-only mode).
      *
-     * Mode: MODE_IN_COMMUNICATION enables echo cancellation and noise suppression.
-     * Speakerphone: OFF routes audio to earpiece (quiet/private).
+     * API 31+: Uses setCommunicationDevice with earpiece device for reliable routing
+     * when WebRTC AudioDeviceModule is active (isSpeakerphoneOn is deprecated/unreliable).
+     * API 26-30: Falls back to legacy isSpeakerphoneOn = false.
      */
     fun setEarpieceMode() {
         Log.d(TAG, "Setting audio mode: earpiece")
         if (modeControlEnabled) {
             audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
         }
-        audioManager.isSpeakerphoneOn = false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val earpiece = audioManager.availableCommunicationDevices
+                .firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE }
+            if (earpiece != null) {
+                audioManager.setCommunicationDevice(earpiece)
+                Log.d(TAG, "setCommunicationDevice: earpiece")
+            } else {
+                audioManager.isSpeakerphoneOn = false
+            }
+        } else {
+            audioManager.isSpeakerphoneOn = false
+        }
     }
 
     /**
      * Set audio routing to speaker (loud mode).
      *
-     * Mode: MODE_IN_COMMUNICATION enables echo cancellation and noise suppression.
-     * Speakerphone: ON routes audio to speaker (loud/shared).
+     * API 31+: Uses setCommunicationDevice with speaker device for reliable routing.
+     * API 26-30: Falls back to legacy isSpeakerphoneOn = true.
      */
     fun setSpeakerMode() {
         Log.d(TAG, "Setting audio mode: speaker")
         if (modeControlEnabled) {
             audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
         }
-        audioManager.isSpeakerphoneOn = true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val speaker = audioManager.availableCommunicationDevices
+                .firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+            if (speaker != null) {
+                audioManager.setCommunicationDevice(speaker)
+                Log.d(TAG, "setCommunicationDevice: speaker")
+            } else {
+                audioManager.isSpeakerphoneOn = true
+            }
+        } else {
+            audioManager.isSpeakerphoneOn = true
+        }
     }
 
     /**

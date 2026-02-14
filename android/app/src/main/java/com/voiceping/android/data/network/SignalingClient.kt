@@ -2,6 +2,7 @@ package com.voiceping.android.data.network
 
 import android.util.Log
 import com.google.gson.Gson
+import com.google.gson.JsonObject
 import com.voiceping.android.data.network.dto.SignalingMessage
 import com.voiceping.android.data.network.dto.SignalingType
 import com.voiceping.android.domain.model.ConnectionState
@@ -215,12 +216,24 @@ class SignalingClient @Inject constructor(
      * Send a request message and wait for response (request-response pattern).
      *
      * @param type Signaling message type
-     * @param data Optional message data
+     * @param data Optional message data as Map (simple string key-value pairs only;
+     *             JSON string values will be double-encoded — use JsonObject overload for nested JSON)
      * @return Response message from server
      * @throws IllegalStateException if WebSocket not connected
      * @throws kotlinx.coroutines.TimeoutCancellationException if response not received within 10 seconds
      */
     suspend fun request(type: SignalingType, data: Map<String, Any> = emptyMap()): SignalingMessage {
+        val jsonData = if (data.isEmpty()) null else gson.toJsonTree(data).asJsonObject
+        return request(type, jsonData)
+    }
+
+    /**
+     * Send a request with pre-built JsonObject data (preserves nested JSON structure).
+     *
+     * Use this overload when data contains nested JSON values (e.g., dtlsParameters,
+     * rtpParameters) to avoid double-encoding JSON strings as string literals.
+     */
+    suspend fun request(type: SignalingType, data: JsonObject?): SignalingMessage {
         val id = UUID.randomUUID().toString()
         val message = SignalingMessage(type, id, data)
         val deferred = CompletableDeferred<SignalingMessage>()
@@ -255,7 +268,8 @@ class SignalingClient @Inject constructor(
      * @param data Optional message data
      */
     fun send(type: SignalingType, data: Map<String, Any> = emptyMap()) {
-        val message = SignalingMessage(type, null, data)
+        val jsonData = if (data.isEmpty()) null else gson.toJsonTree(data).asJsonObject
+        val message = SignalingMessage(type, null, jsonData)
         val json = gson.toJson(message)
         webSocket?.send(json)
     }

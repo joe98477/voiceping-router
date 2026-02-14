@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-13)
 
 **Core value:** Reliable, secure real-time audio communication for coordinating 1000+ distributed team members during high-profile events where security and uptime are critical
-**Current focus:** Phase 13 complete, ready for Phase 14
+**Current focus:** Milestone v3.0 complete — all phases shipped
 
 ## Current Position
 
-Phase: 15-release-build-validation-device-testing
-Plan: 1 of 2 in phase 15
-Status: Phase 15 in progress
-Last activity: 2026-02-13 — Plan 15-01 complete (ProGuard/R8 rules and release build validation)
+Phase: 15-release-build-validation-device-testing (COMPLETE)
+Plan: 2 of 2 in phase 15
+Status: Milestone v3.0 COMPLETE
+Last activity: 2026-02-15 — Plan 15-02 complete (Physical device testing, 3 bug fixes, battery profiling)
 
-Progress: [████████░░░░░░░░░░░░] 43/TBD plans complete (v1.0: 24, v2.0: 26, v3.0: 11)
+Progress: [████████████████████] 44 plans complete (v1.0: 24, v2.0: 26, v3.0: 12)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 43 (v1.0: 24, v2.0: 26, v3.0: 11)
-- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~3.3 min (11 plans)
-- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.61 hours
+- Total plans completed: 44 (v1.0: 24, v2.0: 26, v3.0: 12)
+- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~3.3 min (12 plans)
+- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.67 hours
 
 **By Milestone:**
 
@@ -29,10 +29,10 @@ Progress: [████████░░░░░░░░░░░░] 43/TBD 
 |-----------|--------|-------|--------|
 | v1.0 WebRTC Rebuild | 4 | 24 | Complete |
 | v2.0 Android Client | 6 | 26 | Complete |
-| v3.0 mediasoup Integration | 5 | TBD | In progress |
+| v3.0 mediasoup Integration | 5 | 12 | Complete |
 
 **Recent Trend:**
-- v3.0 in progress: 11 plans complete, 17 commits, Phase 15 in progress (release build validation)
+- v3.0 complete: 12 plans, 5 phases (11-15), real mediasoup audio on Android verified on physical device
 - v2.0 shipped 6 phases, 26 plans, 70 commits, 9,233 LOC Kotlin
 
 *Updated after each plan completion*
@@ -48,6 +48,7 @@ Progress: [████████░░░░░░░░░░░░] 43/TBD 
 | Phase 14 P01 | 149 | 2 tasks | 1 files |
 | Phase 14 P02 | 141 | 2 tasks | 2 files |
 | Phase 15 P01 | 353 | 2 tasks | 1 files |
+| Phase 15 P02 | manual | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -78,46 +79,20 @@ Recent decisions affecting current work:
 - [Phase 14-02]: Clean up mediasoup resources on signaling DISCONNECTED to prevent orphaned resources
 - [Phase 15-01]: Preserve both io.github.crow_misia.mediasoup and org.mediasoup packages — Library may use either internally
 - [Phase 15-01]: Enable full R8 optimization (no -dontobfuscate) — Production builds need code shrinking and obfuscation
+- [Phase 15-02]: @Volatile producingRequested flag for produce/stop race condition — JNI blocking call prevents Mutex/cancel solutions
+- [Phase 15-02]: try-catch telephonyManager.callState instead of READ_PHONE_STATE permission — Less invasive for best-effort phone call detection
+- [Phase 15-02]: Update sendTransportChannelId on SendTransport reuse — onProduce callback needs current channel
 
 ### Pending Todos
 
-None yet.
+None.
 
 ### Blockers/Concerns
 
-**Phase 15 In Progress:**
-- Plan 15-01 complete: ProGuard/R8 rules updated, release APK builds successfully (42.8 MB)
-- Comprehensive R8 keep rules for WebRTC, crow-misia mediasoup, Hilt DI, native methods, @CalledByNative
-- No R8 warnings about missing JNI classes, mapping.txt generated for crash deobfuscation
-- Next: Plan 15-02 physical device testing (login, channel join, PTT, battery profiling)
-
-**From v2.0 Tech Debt:**
-- On-device testing not yet performed (no physical Android device during development) — Plan 15-02 will address
-
-**Phase 14 Complete:**
-- Mutex-protected transport lifecycle (createSendTransport, createRecvTransport, cleanupChannel)
-- Guard checks prevent duplicate transport/producer creation during network flapping
-- cleanupChannel() now suspend with Mutex protection for safe concurrent cleanup
-- Idempotent transport operations enable resilient reconnection logic
-- Transport error recovery with auto-recovery window (disconnected vs failed state differentiation)
-- SendTransport failure cleanup: close producer, clean audio resources, null transport
-- RecvTransport failure cleanup: remove transport from map (consumers cleaned via onTransportClose)
-- Signaling DISCONNECTED cleanup: prevent orphaned resources before channel rejoin
-
-**Phase 13 Complete:**
-- SendTransport singleton with onConnect/onProduce callbacks ✓
-- Producer lifecycle with WebRTC AudioSource/AudioTrack ✓
-- PttManager wired to Producer lifecycle (no AudioCaptureManager) ✓
-- AudioCaptureManager.kt deleted (168 LOC removed) ✓
-- PTT flow: requestPtt -> createSendTransport + startProducing, releasePtt -> stopProducing
-- Opus PTT config: mono, DTX, FEC, 48kHz, 20ms ptime
-- Native resource disposal order validated (AudioTrack before AudioSource)
-
-**Phase 12 Complete:**
-- RecvTransport per-channel pattern — Map-based storage for multi-channel monitoring
-- Consumer.resume() critical — Consumers start paused, must resume for audio playback
-- runBlocking bridge validated — Native JNI thread → runBlocking → suspend signaling works for one-time DTLS handshake
-- Network quality polling — 5-second intervals with Good/Fair/Poor indicators, stub stats until API confirmed
+**Phase 15 Complete (v3.0 Milestone Done):**
+- Plan 15-01: ProGuard/R8 rules, release APK builds (42.8 MB)
+- Plan 15-02: 3 bugs fixed (SecurityException, producer race, wrong channel), all 8 E2E tests passed, battery 5%/hour
+- Tested on Samsung Galaxy S21 (SM-S906E, Android 16 Beta BP2A.250605.031)
 
 **Carried forward:**
 - Multi-server state consistency strategy needs research for distributed Redis pub/sub pattern
@@ -132,11 +107,11 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-13 (plan execution)
-Stopped at: Completed 15-01-PLAN.md — Phase 15 Plan 01 complete (ProGuard/R8 rules and release build validation)
+Last session: 2026-02-15 (phase 15 completion)
+Stopped at: Completed 15-02-PLAN.md — Phase 15 Plan 02 complete (device testing + bug fixes + battery profiling)
 Resume file: None
 
-Next step: Execute Plan 15-02 (Physical device testing and battery profiling)
+Next step: Milestone v3.0 complete. Run `/gsd:complete-milestone` to archive or `/gsd:new-milestone` for next version.
 
 **Milestone 1 (WebRTC Audio Rebuild + Web UI) SHIPPED 2026-02-07:**
 - 4 phases, 24 plans
@@ -146,5 +121,9 @@ Next step: Execute Plan 15-02 (Physical device testing and battery profiling)
 - 6 phases, 26 plans, 9,233 LOC Kotlin
 - See: .planning/milestones/v2.0-ROADMAP.md
 
+**Milestone 3 (mediasoup Library Integration) SHIPPED 2026-02-15:**
+- 5 phases, 12 plans
+- See: .planning/ROADMAP.md
+
 ---
-*Last updated: 2026-02-13 after completing 15-01-PLAN.md (ProGuard/R8 rules and release build validation)*
+*Last updated: 2026-02-15 after completing 15-02-PLAN.md (Phase 15 complete, Milestone v3.0 complete)*
