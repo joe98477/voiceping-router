@@ -99,40 +99,47 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AUDIO-01 | — | Pending |
-| AUDIO-02 | — | Pending |
-| AUDIO-03 | — | Pending |
-| AUDIO-04 | — | Pending |
-| AUDIO-05 | — | Pending |
-| AUDIO-06 | — | Pending |
-| PERM-01 | — | Pending |
-| PERM-02 | — | Pending |
-| PERM-03 | — | Pending |
-| PERM-04 | — | Pending |
-| LOC-01 | — | Pending |
-| LOC-02 | — | Pending |
-| LOC-03 | — | Pending |
-| LOC-04 | — | Pending |
-| LOC-05 | — | Pending |
-| LOC-06 | — | Pending |
-| LOC-07 | — | Pending |
-| PWR-01 | — | Pending |
-| PWR-02 | — | Pending |
-| PWR-03 | — | Pending |
-| PWR-04 | — | Pending |
-| SEC-01 | — | Pending |
-| SEC-02 | — | Pending |
-| SEC-03 | — | Pending |
-| SEC-04 | — | Pending |
-| SEC-05 | — | Pending |
-| CODE-01 | — | Pending |
-| CODE-02 | — | Pending |
+| AUDIO-01 | Phase 17 | Pending |
+| AUDIO-02 | Phase 17 | Pending |
+| AUDIO-03 | Phase 17 | Pending |
+| AUDIO-04 | Phase 17 | Pending |
+| AUDIO-05 | Phase 17 | Pending |
+| AUDIO-06 | Phase 17 | Pending |
+| PERM-01 | Phase 16 | Pending |
+| PERM-02 | Phase 16 | Pending |
+| PERM-03 | Phase 16 | Pending |
+| PERM-04 | Phase 16 | Pending |
+| LOC-01 | Phase 18 | Pending |
+| LOC-02 | Phase 18 | Pending |
+| LOC-03 | Phase 18 | Pending |
+| LOC-04 | Phase 18 | Pending |
+| LOC-05 | Phase 18 | Pending |
+| LOC-06 | Phase 18 | Pending |
+| LOC-07 | Phase 18 | Pending |
+| PWR-01 | Phase 20 | Pending |
+| PWR-02 | Phase 20 | Pending |
+| PWR-03 | Phase 20 | Pending |
+| PWR-04 | Phase 20 | Pending |
+| SEC-01 | Phase 19 | Pending |
+| SEC-02 | Phase 19 | Pending |
+| SEC-03 | Phase 19 | Pending |
+| SEC-04 | Phase 19 | Pending |
+| SEC-05 | Phase 19 | Pending |
+| CODE-01 | Phase 19 | Pending |
+| CODE-02 | Phase 19 | Pending |
 
 **Coverage:**
 - v4.0 requirements: 28 total
-- Mapped to phases: 0
-- Unmapped: 28 ⚠️
+- Mapped to phases: 28
+- Unmapped: 0 ✓
+
+**Phase distribution:**
+- Phase 16 (Permission Management): 4 requirements
+- Phase 17 (Audio Reliability): 6 requirements
+- Phase 18 (Location Tracking): 7 requirements
+- Phase 19 (Security Hardening & Code Quality): 7 requirements
+- Phase 20 (Power Optimization & Validation): 4 requirements
 
 ---
 *Requirements defined: 2026-02-15*
-*Last updated: 2026-02-15 after initial definition*
+*Last updated: 2026-02-15 after roadmap creation (100% coverage validated)*

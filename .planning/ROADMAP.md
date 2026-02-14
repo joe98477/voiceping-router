@@ -5,6 +5,7 @@
 - ✅ **v1.0 WebRTC Audio Rebuild + Web UI** - Phases 1-4 (shipped 2026-02-07)
 - ✅ **v2.0 Android Client App** - Phases 5-10 (shipped 2026-02-13)
 - ✅ **v3.0 mediasoup Library Integration** - Phases 11-15 (shipped 2026-02-15)
+- 🚧 **v4.0 Production Hardening & Location** - Phases 16-20 (in progress)
 
 ## Phases
 
@@ -101,7 +102,99 @@ See: `.planning/milestones/v3.0-ROADMAP.md` for full details.
 
 </details>
 
+### 🚧 v4.0 Production Hardening & Location (In Progress)
+
+**Milestone Goal:** Harden audio reliability, optimize power/bandwidth, add location tracking for dispatch, and security-audit the full stack.
+
+#### Phase 16: Permission Management
+**Goal**: Upfront permission education and graceful degradation
+**Depends on**: Phase 15
+**Requirements**: PERM-01, PERM-02, PERM-03, PERM-04
+**Success Criteria** (what must be TRUE):
+  1. User sees permission education screen on first launch explaining mic/location/notification needs
+  2. User can tap action requiring denied permission and app shows rationale dialog re-prompting
+  3. App gracefully degrades when permission revoked mid-use (shows error state, no crash)
+  4. App redirects to system Settings after 2 denials to prevent infinite prompt loops
+**Plans**: 2 plans
+
+Plans:
+- [ ] 16-01: PermissionManager singleton with denial tracking and Settings redirect
+- [ ] 16-02: First-launch education flow and contextual rationale dialogs
+
+#### Phase 17: Audio Reliability
+**Goal**: Fix intermittent PTT silence and harden audio stream timing
+**Depends on**: Phase 16 (permissions enable mic access)
+**Requirements**: AUDIO-01, AUDIO-02, AUDIO-03, AUDIO-04, AUDIO-05, AUDIO-06
+**Success Criteria** (what must be TRUE):
+  1. User presses PTT and audio transmits reliably without intermittent silence failures
+  2. Producer creation retries automatically on failure and user sees "retrying" feedback
+  3. Orphaned/stale transports cleaned up after 15s disconnect detected
+  4. User hears intelligible speech without excessive latency or packet loss artifacts
+  5. User sees visual confirmation that transmission was received by listeners
+**Plans**: 3 plans
+
+Plans:
+- [ ] 17-01: Producer retry logic with exponential backoff and user feedback
+- [ ] 17-02: WebRTC jitter buffer tuning and Opus FEC configuration
+- [ ] 17-03: Transport health monitoring with auto-cleanup and server ACK
+
+#### Phase 18: Location Tracking
+**Goal**: Adaptive location tracking with motion-aware throttling for dispatch
+**Depends on**: Phase 16 (permissions enable location access)
+**Requirements**: LOC-01, LOC-02, LOC-03, LOC-04, LOC-05, LOC-06, LOC-07
+**Success Criteria** (what must be TRUE):
+  1. App collects precise GPS location every 5 minutes when user moving
+  2. App collects general location every 60 seconds for battery efficiency
+  3. App reduces location frequency when user stationary (detected via motion sensors)
+  4. App skips redundant location sends if recent update already transmitted
+  5. Server API receives and stores location updates from Android clients
+  6. Location data documented for future dispatch web UI map integration
+  7. Background location works via foreground service with Android 14+ compliance
+**Plans**: 3 plans
+
+Plans:
+- [ ] 18-01: LocationManager with FusedLocationProviderClient and adaptive modes
+- [ ] 18-02: Motion-aware throttling with ActivityRecognitionClient
+- [ ] 18-03: Server API endpoint and Android 14+ foreground service type declaration
+
+#### Phase 19: Security Hardening & Code Quality
+**Goal**: Security audit full stack and optimize Android codebase
+**Depends on**: Phase 17 (audio hardening complete), Phase 18 (location infrastructure in place)
+**Requirements**: SEC-01, SEC-02, SEC-03, SEC-04, SEC-05, CODE-01, CODE-02
+**Success Criteria** (what must be TRUE):
+  1. All signaling connections use WSS (TLS WebSocket) and app rejects WS connections
+  2. All API endpoints verified as authenticated with no unauthenticated gaps
+  3. Network security config blocks cleartext traffic in release builds
+  4. Android codebase scanned for vulnerabilities and critical issues fixed
+  5. WebRTC media streams verified as using DTLS encryption
+  6. Android codebase cleaned up with unused code and dead imports removed
+  7. Performance optimized with unnecessary allocations eliminated
+**Plans**: 3 plans
+
+Plans:
+- [ ] 19-01: TLS/WSS enforcement and network security config hardening
+- [ ] 19-02: API authentication audit and WebRTC DTLS verification
+- [ ] 19-03: Android codebase cleanup and performance optimization
+
+#### Phase 20: Power Optimization & Validation
+**Goal**: Battery profiling and adaptive power management with all v4.0 features active
+**Depends on**: Phase 17 (audio complete), Phase 18 (location complete)
+**Requirements**: PWR-01, PWR-02, PWR-03, PWR-04
+**Success Criteria** (what must be TRUE):
+  1. Wake lock released after 30 seconds of audio inactivity and reacquired on speaker activity
+  2. Network quality polling adjusts dynamically (15s idle channels, 5s active channels)
+  3. Location updates batched efficiently for server transmission
+  4. Battery consumption validated at less than 6%/hour with screen off and all features active
+**Plans**: 2 plans
+
+Plans:
+- [ ] 20-01: Adaptive wake lock scoping and dynamic network polling
+- [ ] 20-02: Location batching optimization and battery profiling validation
+
 ## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 1 → 2 → 3 → ... → 20
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -120,7 +213,12 @@ See: `.planning/milestones/v3.0-ROADMAP.md` for full details.
 | 13. SendTransport | v3.0 | 2/2 | Complete | 2026-02-13 |
 | 14. Lifecycle | v3.0 | 2/2 | Complete | 2026-02-13 |
 | 15. Validation | v3.0 | 2/2 | Complete | 2026-02-15 |
+| 16. Permission Management | v4.0 | 0/2 | Not started | - |
+| 17. Audio Reliability | v4.0 | 0/3 | Not started | - |
+| 18. Location Tracking | v4.0 | 0/3 | Not started | - |
+| 19. Security Hardening & Code Quality | v4.0 | 0/3 | Not started | - |
+| 20. Power Optimization & Validation | v4.0 | 0/2 | Not started | - |
 
 ---
 *Roadmap created: 2026-02-06*
-*Last updated: 2026-02-15 after v3.0 milestone shipped*
+*Last updated: 2026-02-15 after v4.0 roadmap creation*
