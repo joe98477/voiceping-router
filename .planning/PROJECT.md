@@ -59,7 +59,18 @@ Reliable, secure real-time audio communication for coordinating 1000+ distribute
 
 ### Active
 
-(No active requirements — planning next milestone)
+**Current Milestone: v4.0 — Production Hardening & Location**
+
+**Goal:** Harden audio reliability, optimize power/bandwidth, add location tracking for dispatch, and security-audit the full stack.
+
+**Target features:**
+- Fix intermittent PTT silence and harden audio stream timing for speech intelligibility
+- Optimize Android app for low power and bandwidth consumption
+- Upfront permission request on first launch + graceful re-prompting on denied actions
+- Security audit: verify TLS on all streams, authenticate all server endpoints, scan for vulnerabilities
+- Full Android codebase cleanup and optimization
+- Adaptive location tracking (precise 5min, general 60s, motion-aware throttling)
+- Server API for dispatch to receive location data
 
 ### Out of Scope
 
@@ -131,4 +142,4 @@ Three milestones shipped. Full-stack PTT communications platform with server-sid
 | Full R8 optimization (no -dontobfuscate) | Production builds need code shrinking and obfuscation | ✓ Good — 42.8 MB release APK |
 
 ---
-*Last updated: 2026-02-15 after v3.0 milestone*
+*Last updated: 2026-02-15 after starting v4.0 milestone*

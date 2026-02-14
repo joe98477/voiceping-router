@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-02-15)
 
 **Core value:** Reliable, secure real-time audio communication for coordinating 1000+ distributed team members during high-profile events where security and uptime are critical
-**Current focus:** Milestone v3.0 complete — all phases shipped
+**Current focus:** Milestone v4.0 — Production Hardening & Location
 
 ## Current Position
 
-Phase: 15-release-build-validation-device-testing (COMPLETE)
-Plan: 2 of 2 in phase 15
-Status: Milestone v3.0 COMPLETE
-Last activity: 2026-02-15 — Plan 15-02 complete (Physical device testing, 3 bug fixes, battery profiling)
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-02-15 — Milestone v4.0 started
 
 Progress: [████████████████████] 44 plans complete (v1.0: 24, v2.0: 26, v3.0: 12)
 
@@ -111,7 +111,7 @@ Last session: 2026-02-15 (phase 15 completion)
 Stopped at: Completed 15-02-PLAN.md — Phase 15 Plan 02 complete (device testing + bug fixes + battery profiling)
 Resume file: None
 
-Next step: Milestone v3.0 complete. Run `/gsd:complete-milestone` to archive or `/gsd:new-milestone` for next version.
+Next step: Define v4.0 requirements and create roadmap.
 
 **Milestone 1 (WebRTC Audio Rebuild + Web UI) SHIPPED 2026-02-07:**
 - 4 phases, 24 plans
@@ -126,4 +126,4 @@ Next step: Milestone v3.0 complete. Run `/gsd:complete-milestone` to archive or 
 - See: .planning/ROADMAP.md
 
 ---
-*Last updated: 2026-02-15 after completing 15-02-PLAN.md (Phase 15 complete, Milestone v3.0 complete)*
+*Last updated: 2026-02-15 after starting Milestone v4.0*
