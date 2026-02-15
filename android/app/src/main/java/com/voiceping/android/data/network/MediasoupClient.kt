@@ -665,10 +665,12 @@ class MediasoupClient @Inject constructor(
      *
      * Configures Opus codec with PTT-optimized settings:
      * - Mono (opusStereo=false)
-     * - DTX enabled for silence suppression
-     * - FEC enabled for packet loss recovery
+     * - DTX disabled for continuous stream (comfort noise, smoother listening)
+     * - FEC always enabled for packet loss recovery (proactive protection)
      * - 48kHz playback rate
-     * - 20ms ptime
+     * - 20ms ptime for low latency
+     * - Bitrate range: 16-40 kbps (graceful degradation on poor networks, high quality when available)
+     * - packetLossPercentage=10: Activates FEC encoder (needs >0 to work)
      *
      * Creates WebRTC AudioSource and AudioTrack for microphone capture,
      * then produces via SendTransport.
@@ -704,10 +706,13 @@ class MediasoupClient @Inject constructor(
             // Opus codec configuration for PTT
             val codecOptions = com.google.gson.JsonObject().apply {
                 addProperty("opusStereo", false)
-                addProperty("opusDtx", true)
-                addProperty("opusFec", true)
+                addProperty("opusDtx", false)                // DTX disabled: continuous stream during PTT (comfort noise)
+                addProperty("opusFec", true)                  // FEC always enabled: proactive packet loss protection
                 addProperty("opusMaxPlaybackRate", 48000)
-                addProperty("opusPtime", 20)
+                addProperty("opusPtime", 20)                  // 20ms packet time for low latency
+                addProperty("maxBitrate", 40000)              // 40kbps max (high quality)
+                addProperty("minBitrate", 16000)              // 16kbps min (graceful degradation on poor networks)
+                addProperty("packetLossPercentage", 10)       // Activate FEC encoder (needs >0 to work)
             }
 
             // Create Producer — this BLOCKS for ~700ms (onConnect + onProduce server roundtrip).

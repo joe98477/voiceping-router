@@ -28,6 +28,7 @@ import javax.inject.Singleton
  * - Requesting: Waiting for server PTT grant
  * - Transmitting: Server granted, actively sending audio
  * - Denied: Server denied PTT request (busy channel), will auto-return to Idle after 500ms
+ * - Error: Producer creation failed after retries, auto-returns to Idle after 500ms
  *
  * CRITICAL: State transition requires server confirmation (NOT optimistic).
  * User sees Requesting state (subtle loading pulse) until server responds.
@@ -37,6 +38,7 @@ sealed class PttState {
     object Requesting : PttState()
     object Transmitting : PttState()
     object Denied : PttState()
+    data class Error(val reason: String) : PttState()
 }
 
 /**
@@ -78,6 +80,14 @@ class PttManager @Inject constructor(
      * Distinct from onPttReleased which plays roger beep (intentional stop).
      */
     var onPttInterrupted: (() -> Unit)? = null
+
+    /**
+     * Callbacks for error feedback and server acknowledgment.
+     * - onPttError: Triggered on producer creation failure after retries (double-buzz haptic + error toast)
+     * - onServerAck: Triggered when server acknowledges transmission (Plan 17-02 wires green/red flash)
+     */
+    var onPttError: (() -> Unit)? = null
+    var onServerAck: ((success: Boolean) -> Unit)? = null
 
     /**
      * Toggle mode configuration (set by ViewModel from SettingsRepository)
@@ -142,27 +152,68 @@ class PttManager @Inject constructor(
                     }
                     context.startForegroundService(startIntent)
 
-                    // Step 4: Create send transport (singleton, requires channelId for server)
-                    mediasoupClient.createSendTransport(channelId)
+                    // Steps 4 & 5: Create send transport and start producing with retry logic
+                    // Producer creation retries up to 2 times with exponential backoff on failure
+                    val maxRetries = 2
+                    var lastError: Exception? = null
+                    var producerCreated = false
 
-                    // Step 5: Start producing (creates AudioSource + AudioTrack, configures Opus codec)
-                    // AudioSource captures microphone internally, no manual buffer forwarding needed
-                    mediasoupClient.startProducing()
+                    for (attempt in 0..maxRetries) {
+                        // Check PTT state each iteration — user may have cancelled
+                        if (_pttState.value !is PttState.Transmitting) {
+                            Log.d(TAG, "PTT state changed during retry, aborting")
+                            return@launch
+                        }
 
-                    // Step 6: Notify callback (Plan 04 will wire in tone/haptic)
-                    onPttGranted?.invoke()
+                        try {
+                            if (attempt > 0) {
+                                val delayMs = (1000L * (1 shl (attempt - 1))) // 1s, 2s
+                                Log.d(TAG, "Retry attempt $attempt/$maxRetries after ${delayMs}ms")
+                                delay(delayMs)
+                            }
 
-                    // Step 7: If TOGGLE mode, start max duration timer
-                    if (currentPttMode == com.voiceping.android.domain.model.PttMode.TOGGLE) {
-                        maxDurationJob?.cancel()
-                        maxDurationJob = scope.launch {
-                            delay(maxToggleDuration * 1000L)
-                            Log.d(TAG, "Toggle mode max duration reached, auto-releasing PTT")
-                            releasePtt()
+                            mediasoupClient.createSendTransport(channelId)
+                            mediasoupClient.startProducing()
+                            producerCreated = true
+                            Log.d(TAG, "Producer created on attempt ${attempt + 1}")
+                            break
+                        } catch (e: Exception) {
+                            lastError = e
+                            Log.w(TAG, "Producer creation failed (attempt ${attempt + 1}/${maxRetries + 1}): ${e.message}")
                         }
                     }
 
-                    Log.d(TAG, "PTT transmission started")
+                    if (producerCreated) {
+                        // Step 6: Notify callback (Plan 04 will wire in tone/haptic)
+                        onPttGranted?.invoke()
+
+                        // Step 7: If TOGGLE mode, start max duration timer
+                        if (currentPttMode == com.voiceping.android.domain.model.PttMode.TOGGLE) {
+                            maxDurationJob?.cancel()
+                            maxDurationJob = scope.launch {
+                                delay(maxToggleDuration * 1000L)
+                                Log.d(TAG, "Toggle mode max duration reached, auto-releasing PTT")
+                                releasePtt()
+                            }
+                        }
+
+                        Log.d(TAG, "PTT transmission started")
+                    } else {
+                        // All retries exhausted
+                        Log.e(TAG, "Producer creation failed after ${maxRetries + 1} attempts: ${lastError?.message}")
+                        _pttState.value = PttState.Error(lastError?.message ?: "Unable to transmit")
+                        onPttError?.invoke()
+
+                        // Auto-release to Idle after brief error display (500ms, same as Denied)
+                        delay(500)
+                        _pttState.value = PttState.Idle
+
+                        // Stop foreground service since we can't transmit
+                        val stopIntent = Intent(context, AudioCaptureService::class.java).apply {
+                            action = AudioCaptureService.ACTION_STOP
+                        }
+                        context.startService(stopIntent)
+                    }
 
                 } else {
                     // PTT DENIED (channel busy)
@@ -177,8 +228,10 @@ class PttManager @Inject constructor(
 
             } catch (e: Exception) {
                 Log.e(TAG, "PTT request failed", e)
+                _pttState.value = PttState.Error(e.message ?: "Connection error")
+                onPttError?.invoke()
+                delay(500)
                 _pttState.value = PttState.Idle
-                onPttDenied?.invoke()
             }
         }
     }
