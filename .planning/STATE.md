@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 ## Current Position
 
 Phase: 19 of 20 (Security Hardening & Code Quality)
-Plan: 02 of 03 complete
-Status: In Progress
-Last activity: 2026-02-15 — Completed 19-01-PLAN.md (TLS Enforcement & Cleartext Traffic Blocking)
+Plan: 03 of 03 complete
+Status: Complete
+Last activity: 2026-02-15 — Completed 19-03-PLAN.md (Code Quality Improvements)
 
-Progress: [█████████████████████████░░░] 90% (69/77 plans complete across all milestones)
+Progress: [█████████████████████████░░░] 91% (70/77 plans complete across all milestones)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 69 (v1.0: 24, v2.0: 26, v3.0: 10, v4.0: 9)
-- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~4.0 min, v4.0 ~6.2 min
-- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.67 hours, v4.0 ~0.73 hours
+- Total plans completed: 70 (v1.0: 24, v2.0: 26, v3.0: 10, v4.0: 10)
+- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~4.0 min, v4.0 ~6.5 min
+- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.67 hours, v4.0 ~1.07 hours
 
 **By Milestone:**
 
@@ -30,7 +30,7 @@ Progress: [███████████████████████
 | v1.0 WebRTC Rebuild | 4 | 24/24 | Complete (2026-02-07) |
 | v2.0 Android Client | 6 | 26/26 | Complete (2026-02-13) |
 | v3.0 mediasoup Integration | 5 | 10/10 | Complete (2026-02-15) |
-| v4.0 Production Hardening | 5 | 9/13 | In progress |
+| v4.0 Production Hardening | 5 | 10/13 | In progress |
 
 **Recent Trend:**
 - v3.0 complete: 10 plans, 5 phases (11-15), real mediasoup audio verified on physical device
@@ -38,9 +38,10 @@ Progress: [███████████████████████
 - Phase 16 complete: Permission management foundation (2 plans, 787s total)
 - Phase 17 complete: Audio reliability improvements (3 plans, 848s total)
 - Phase 18 complete: Location tracking (3/3 plans, 1395s total)
-- Trend: Stable velocity ~4-13 minutes per plan in v4.0
+- Phase 19 complete: Security hardening & code quality (3/3 plans, 1258s total)
+- Trend: Stable velocity ~5-13 minutes per plan in v4.0
 
-*Updated after 18-03 completion*
+*Updated after 19-03 completion*
 
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
@@ -50,8 +51,10 @@ Progress: [███████████████████████
 | Phase 18 P01 | 263s | 2 | 8 |
 | Phase 18 P02 | 783s | 2 | 10 |
 | Phase 18 P03 | 349s | 2 | 11 |
+| Phase 19 P01 | 352s | 2 | 9 |
 | Phase 19 P02 | 310s | 2 | 5 |
-| Phase 19 P01 | 352 | 2 tasks | 9 files |
+| Phase 19 P03 | 596s | 2 | 23 |
+| Phase 19 P03 | 596 | 2 tasks | 23 files |
 
 ## Accumulated Context
 
@@ -95,6 +98,9 @@ Recent decisions affecting v4.0 work:
 - Phase 19-02: DTLS validation via fingerprint count logging (non-blocking, mediasoup enforces internally)
 - [Phase 19]: TLS errors show user-visible error instead of silent retry (VPN/network/cert issues require user action)
 - [Phase 19]: Defense-in-depth: server rejects cleartext WS in production even behind reverse proxy
+- [Phase 19]: detekt maxIssues: -1 for initial run (566 weighted issues, mostly disabled noisy rules)
+- [Phase 19]: Pre-commit hooks auto-format TypeScript (prettier) and Kotlin (ktlint) on every commit
+- [Phase 19]: Formatting commit (53cdfca) isolated in .git-blame-ignore-revs for clean git blame history
 
 ### Pending Todos
 
@@ -116,10 +122,10 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-15
-Stopped at: Completed 19-01-PLAN.md (TLS Enforcement & Cleartext Traffic Blocking)
+Stopped at: Completed 19-03-PLAN.md (Code Quality Improvements)
 Resume file: None
 
-**Next action:** Continue Phase 19 Plan 03 (Code Quality Improvements).
+**Next action:** Begin Phase 20 (Performance Optimization & Final Polish).
 
 **Previous Milestones:**
 - v1.0 WebRTC Audio Rebuild + Web UI — SHIPPED 2026-02-07
@@ -138,10 +144,10 @@ Resume file: None
   - 18-01: Location Tracking Foundation ✅
   - 18-02: Server-Side Location Infrastructure ✅
   - 18-03: Android Location Service Integration ✅
-- v4.0 Phase 19 (Security Audit & Hardening): 2/3 plans in progress
+- v4.0 Phase 19 (Security Audit & Hardening): 3/3 plans complete ✅
   - 19-01: TLS Enforcement & Cleartext Traffic Blocking ✅
   - 19-02: API Endpoint & DTLS Encryption Audit ✅
-  - 19-03: Code Quality Improvements (next)
+  - 19-03: Code Quality Improvements ✅
 
 ---
-*Last updated: 2026-02-15 after Phase 19-01 completion*
+*Last updated: 2026-02-15 after Phase 19-03 completion*
