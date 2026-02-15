@@ -153,9 +153,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 18-01: LocationManager with FusedLocationProviderClient and adaptive modes
-- [ ] 18-02: Motion-aware throttling with ActivityRecognitionClient
-- [ ] 18-03: Server API endpoint and Android 14+ foreground service type declaration
+- [ ] 18-01: Android location tracking foundation (LocationTracker, MotionDetector, LocationManager, permissions)
+- [ ] 18-02: Server location infrastructure (SQLite storage, dispatch broadcast, WebSocket handlers)
+- [ ] 18-03: Android-server integration (WebSocket transmission, offline queue, foreground service type, debug display)
 
 #### Phase 19: Security Hardening & Code Quality
 **Goal**: Security audit full stack and optimize Android codebase
