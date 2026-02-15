@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 ## Current Position
 
 Phase: 17 of 20 (Audio Reliability Improvements)
-Plan: 01 of 03 complete
-Status: In Progress
-Last activity: 2026-02-15 — Completed 17-01-PLAN.md (Audio Reliability Foundation)
+Plan: 03 of 03 complete
+Status: Phase Complete
+Last activity: 2026-02-15 — Completed 17-03-PLAN.md (Transport Health Monitoring & Auto-Rejoin)
 
-Progress: [████████████████████████░░░░] 82% (63/77 plans complete across all milestones)
+Progress: [█████████████████████████░░░] 84% (65/77 plans complete across all milestones)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 63 (v1.0: 24, v2.0: 26, v3.0: 10, v4.0: 3)
-- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~4.0 min, v4.0 ~5.7 min
-- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.67 hours, v4.0 ~0.29 hours
+- Total plans completed: 65 (v1.0: 24, v2.0: 26, v3.0: 10, v4.0: 5)
+- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~4.0 min, v4.0 ~5.3 min
+- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.67 hours, v4.0 ~0.44 hours
 
 **By Milestone:**
 
@@ -30,16 +30,22 @@ Progress: [███████████████████████
 | v1.0 WebRTC Rebuild | 4 | 24/24 | Complete (2026-02-07) |
 | v2.0 Android Client | 6 | 26/26 | Complete (2026-02-13) |
 | v3.0 mediasoup Integration | 5 | 10/10 | Complete (2026-02-15) |
-| v4.0 Production Hardening | 5 | 3/13 | In progress |
+| v4.0 Production Hardening | 5 | 5/13 | In progress |
 
 **Recent Trend:**
 - v3.0 complete: 10 plans, 5 phases (11-15), real mediasoup audio verified on physical device
 - Battery profiling validated: 5%/hour with screen off
 - Phase 16 complete: Permission management foundation (2 plans, 787s total)
-- Phase 17 in progress: Audio reliability improvements (1/3 plans, 284s)
-- Trend: Stable velocity ~5-7 minutes per plan in v4.0
+- Phase 17 complete: Audio reliability improvements (3 plans, 848s total)
+- Trend: Stable velocity ~5 minutes per plan in v4.0
 
-*Updated after 17-01 completion*
+*Updated after 17-03 completion*
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 17 P01 | 284s | 4 | 7 |
+| Phase 17 P02 | 213s | 2 | 7 |
+| Phase 17 P03 | 351s | 2 | 4 |
 
 ## Accumulated Context
 
@@ -66,6 +72,11 @@ Recent decisions affecting v4.0 work:
 - Phase 17-01: Opus DTX disabled for continuous stream (comfort noise), FEC always enabled with packetLossPercentage=10
 - Phase 17-01: Confirmation tone default ON, independent toggle from roger beep
 - Phase 17-01: Error haptic pattern: double-buzz at full amplitude (distinct from denied/release)
+- Phase 17-03: 2s grace period for mid-transmission transport failures (reduces false failures)
+- Phase 17-03: 15s orphan cleanup for disconnected transports (aligns with WebRTC auto-recovery window)
+- Phase 17-03: 5 max auto-rejoin attempts with exponential backoff (balances recovery with user control)
+- Phase 17-03: SEND_DEGRADED state for partial failures (user can still hear when send transport fails)
+- Phase 17-03: Silent recovery to HEALTHY state (no toast on recovery, reduces notification fatigue)
 
 ### Pending Todos
 
@@ -87,10 +98,10 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-15
-Stopped at: Completed 17-01-PLAN.md (Audio Reliability Foundation)
+Stopped at: Completed 17-03-PLAN.md (Transport Health Monitoring & Auto-Rejoin)
 Resume file: None
 
-**Next action:** `/gsd:execute-plan 17-02` to continue Phase 17 (Audio Reliability Improvements)
+**Next action:** Phase 17 complete. Begin Phase 18 (Location Tracking) planning.
 
 **Previous Milestones:**
 - v1.0 WebRTC Audio Rebuild + Web UI — SHIPPED 2026-02-07
@@ -101,8 +112,10 @@ Resume file: None
 - v4.0 Phase 16 (Permission Management): 2/2 plans complete ✅
   - 16-01: Permission Manager & Graceful Degradation ✅
   - 16-02: Permission Education Screen ✅
-- v4.0 Phase 17 (Audio Reliability Improvements): 1/3 plans complete 🔄
+- v4.0 Phase 17 (Audio Reliability Improvements): 3/3 plans complete ✅
   - 17-01: Audio Reliability Foundation ✅
+  - 17-02: Producer ACK & Confirmation Feedback ✅
+  - 17-03: Transport Health Monitoring & Auto-Rejoin ✅
 
 ---
-*Last updated: 2026-02-15 after Phase 17-01 completion*
+*Last updated: 2026-02-15 after Phase 17-03 completion*
