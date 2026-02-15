@@ -48,6 +48,7 @@
   ],
   "license": "MIT",
   "dependencies": {
+    "better-sqlite3": "^11.10.0",
     "dotenv": "^16.4.0",
     "jsonwebtoken": "^9.0.2",
     "mediasoup": "^3.19.16",
@@ -58,6 +59,7 @@
     "ws": "^8.16.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20.0.0",
     "@types/ws": "^8.5.0",

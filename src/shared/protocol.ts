@@ -47,6 +47,12 @@ export enum SignalingType {
   ROLE_INFO = 'role-info',
   BAN_USER = 'ban-user',
   UNBAN_USER = 'unban-user',
+
+  // Location tracking (Phase 18)
+  LOCATION_UPDATE = 'location-update',
+  LOCATION_BATCH = 'location-batch',
+  LOCATION_QUERY = 'location-query',
+  LOCATION_BROADCAST = 'location-broadcast',
 }
 
 /**
