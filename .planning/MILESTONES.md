@@ -70,3 +70,30 @@
 - Docker deployment with nginx TLS termination
 
 ---
+
+## v4.0 Production Hardening & Location (Shipped: 2026-02-16)
+
+**Delivered:** Production-ready audio reliability, adaptive location tracking, full-stack security hardening, and power optimization for the Android PTT client.
+
+**Stats:** 5 phases (16-20), 13 plans, 61 commits, 87 source files, +5,516/-1,315 LOC
+**Timeline:** 2 days (2026-02-15 → 2026-02-16)
+**Git range:** `feat(16-01)` → `docs(phase-20)`
+**Requirements:** 27/28 satisfied (PWR-04 battery profiling deferred by user choice)
+**LOC totals:** 12,877 LOC Kotlin + 14,187 LOC TypeScript
+
+**Key accomplishments:**
+- Permission education screen on first launch with contextual rationale dialogs and Settings redirect after 2 denials
+- PTT audio reliability: producer retry with exponential backoff, server ACK confirmation tone, transport health monitoring with 2s grace period, 15s orphan cleanup, and auto-rejoin (5 attempts)
+- Adaptive location tracking with motion-aware throttling (STILL/WALKING/DRIVING), 50m deduplication, offline queue, server SQLite storage, and real-time dispatch broadcast
+- Full-stack security audit: TLS/WSS enforcement, cleartext blocking, API authentication audit, DTLS verification, vulnerability scanning with documented findings
+- Code quality tooling: ktlint, detekt, prettier, Husky pre-commit hooks with automated formatting on every commit
+- Adaptive power management: wake lock timeout (300s configurable), per-channel polling (5s/15s), location power multipliers (2x/4x cascade with battery saver)
+
+**Tech debt:**
+- PWR-04 battery profiling deferred (all optimizations implemented, validation skipped per user decision)
+- detekt maxIssues: -1 (566 weighted issues, security rules active)
+- Consumer.getStats() stub quality (crow-misia API undocumented)
+- No automated integration tests for audio pipeline
+
+---
+

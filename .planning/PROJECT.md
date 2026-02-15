@@ -2,7 +2,7 @@
 
 ## What This Is
 
-An enterprise-grade push-to-talk (PTT) communications system enabling distributed teams to coordinate during large-scale events. Field workers carry Android devices as two-way radios with real WebRTC audio via mediasoup, hardware PTT buttons, and multi-channel scan mode. Dispatch users monitor channels from a browser-based console. Role-based access (Admin, Dispatch, General) and hierarchical organization (Events → Teams → Channels) provide structure for coordinating 1000+ team members.
+An enterprise-grade push-to-talk (PTT) communications system enabling distributed teams to coordinate during large-scale events. Field workers carry Android devices as two-way radios with real WebRTC audio via mediasoup, hardware PTT buttons, multi-channel scan mode, and adaptive location tracking. Dispatch users monitor channels and field worker positions from a browser-based console. The platform is production-hardened with TLS enforcement, security auditing, permission management, and adaptive power optimization. Role-based access (Admin, Dispatch, General) and hierarchical organization (Events → Teams → Channels) provide structure for coordinating 1000+ team members.
 
 ## Core Value
 
@@ -57,20 +57,27 @@ Reliable, secure real-time audio communication for coordinating 1000+ distribute
 - ✓ Physical device testing: end-to-end audio verified on Samsung Galaxy S21 (Android 16) — v3.0
 - ✓ Battery profiling: 5%/hour with screen off and foreground service — v3.0
 
+- ✓ Permission education screen on first launch with contextual rationale dialogs — v4.0
+- ✓ Graceful degradation on permission revocation (error state, not crash) — v4.0
+- ✓ Settings redirect after 2 permission denials — v4.0
+- ✓ PTT producer retry with exponential backoff (3 total attempts) — v4.0
+- ✓ Server ACK for transmission confirmation with confirmation tone — v4.0
+- ✓ Transport health monitoring: 2s grace period, 15s orphan cleanup, auto-rejoin (5 attempts) — v4.0
+- ✓ Opus FEC always enabled with packetLossPercentage=10 — v4.0
+- ✓ Adaptive location tracking with motion-aware throttling (STILL/WALKING/DRIVING) — v4.0
+- ✓ Server location storage (SQLite) with dispatch broadcast and API documentation — v4.0
+- ✓ Offline location queue (50 max) with batch flush on reconnect — v4.0
+- ✓ Android 14+ foreground service type (mediaPlayback|location) — v4.0
+- ✓ TLS/WSS enforcement on all signaling, cleartext blocking in release builds — v4.0
+- ✓ All API endpoints authenticated, DTLS encryption verified — v4.0
+- ✓ Code quality tooling: ktlint, detekt, prettier, Husky pre-commit hooks — v4.0
+- ✓ Wake lock timeout (300s configurable) with instant reacquisition on audio — v4.0
+- ✓ Adaptive per-channel network polling (5s active, 15s idle) — v4.0
+- ✓ Location power multipliers (2x wake lock release, 4x battery saver) — v4.0
+
 ### Active
 
-**Current Milestone: v4.0 — Production Hardening & Location**
-
-**Goal:** Harden audio reliability, optimize power/bandwidth, add location tracking for dispatch, and security-audit the full stack.
-
-**Target features:**
-- Fix intermittent PTT silence and harden audio stream timing for speech intelligibility
-- Optimize Android app for low power and bandwidth consumption
-- Upfront permission request on first launch + graceful re-prompting on denied actions
-- Security audit: verify TLS on all streams, authenticate all server endpoints, scan for vulnerabilities
-- Full Android codebase cleanup and optimization
-- Adaptive location tracking (precise 5min, general 60s, motion-aware throttling)
-- Server API for dispatch to receive location data
+(No active milestone — all 4 milestones shipped)
 
 ### Out of Scope
 
@@ -89,10 +96,10 @@ Reliable, secure real-time audio communication for coordinating 1000+ distribute
 
 ### Current State
 
-Three milestones shipped. Full-stack PTT communications platform with server-side mediasoup SFU, React web UI, and native Android client with real WebRTC audio. 15 phases, 60 plans executed across all milestones.
+Four milestones shipped. Production-hardened PTT communications platform with server-side mediasoup SFU, React web UI, native Android client with real WebRTC audio, adaptive location tracking, TLS security, and power optimization. 20 phases, 73 plans executed across all milestones.
 
-**Server:** ~8,000 LOC TypeScript — Node.js v24, mediasoup 3.19, Redis, PostgreSQL/Prisma, Docker deployment
-**Android:** ~9,800 LOC Kotlin — Jetpack Compose, Hilt DI, Room database, Media3, libmediasoup-android 0.21.0, 88 source files
+**Server:** ~14,187 LOC TypeScript — Node.js v24, mediasoup 3.19, Redis, PostgreSQL/Prisma, SQLite (location), Docker deployment
+**Android:** ~12,877 LOC Kotlin — Jetpack Compose, Hilt DI, Room database, Media3, libmediasoup-android 0.21.0, ~100 source files
 **Web:** React 18, Vite, mediasoup-client
 
 ### Known Issues
@@ -102,6 +109,9 @@ Three milestones shipped. Full-stack PTT communications platform with server-sid
 - Multi-server state consistency needs research for distributed Redis pub/sub
 - Self-signed certificates need replacement with real TLS for production
 - HW-02 rugged phone PTT deferred (hardware unavailable)
+- PWR-04 battery profiling not validated (implementation complete, profiling deferred)
+- detekt maxIssues: -1 (566 weighted issues from noisy rules, security rules active)
+- Hardcoded JWT secret default (production MUST override via ROUTER_JWT_SECRET env var)
 
 ## Constraints
 
@@ -140,6 +150,21 @@ Three milestones shipped. Full-stack PTT communications platform with server-sid
 | @Volatile flag for produce/stop race | JNI blocking call prevents Mutex/cancel solutions | ✓ Good — fixes audio-only-transmits-once |
 | try-catch telephonyManager.callState | Android 16 requires READ_PHONE_STATE, less invasive than permission | ✓ Good — prevents crash |
 | Full R8 optimization (no -dontobfuscate) | Production builds need code shrinking and obfuscation | ✓ Good — 42.8 MB release APK |
+| In-memory permission denial tracking | Resets on app restart, no persistent tracking | ✓ Good — simple, respects user intent |
+| Settings redirect after 2 denials | Prevents infinite prompt loops | ✓ Good — balanced UX |
+| Producer retry: 2 retries, exponential backoff | Recovers from transient WebRTC failures | ✓ Good — 1s, 2s backoff |
+| Opus DTX disabled, FEC always enabled | Continuous stream with comfort noise, packet loss recovery | ✓ Good — better speech quality |
+| 2s grace period for mid-transmission failures | Reduces false failures from transient disconnects | ✓ Good — seamless recovery |
+| 15s orphan transport cleanup | Aligns with WebRTC auto-recovery window | ✓ Good — prevents resource leaks |
+| 5 max auto-rejoin attempts | Balances recovery with user control | ✓ Good — persistent banner on exhaustion |
+| ActivityTransition API for motion detection | Hardware-backed, battery-efficient | ✓ Good — STILL/WALKING/DRIVING |
+| SQLite for location storage (not PostgreSQL) | Lightweight, embedded, 24h retention | ✓ Good — no external dependency |
+| 50m deduplication threshold | Reduces redundant location sends | ✓ Good — balanced accuracy vs bandwidth |
+| Network security config (cleartext blocking) | OS-level TLS enforcement for all connections | ✓ Good — defense in depth |
+| detekt maxIssues: -1 for initial run | Noisy rules disabled, security rules active | ⚠️ Revisit — tighten over time |
+| Wake lock 300s timeout, server-configurable | Balances battery vs responsiveness | ✓ Good — tunable per deployment |
+| Location multiplier cascade (2x/4x) | Coordinated power reduction across subsystems | ✓ Good — gradual recovery |
+| Skip battery profiling | User decision, all optimizations implemented | ✓ Good — deferred validation |
 
 ---
-*Last updated: 2026-02-15 after starting v4.0 milestone*
+*Last updated: 2026-02-16 after v4.0 milestone*
