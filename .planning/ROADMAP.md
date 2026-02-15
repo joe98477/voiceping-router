@@ -134,9 +134,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 17-01: Producer retry with exponential backoff, PttState.Error, Opus codec tuning, error feedback
-- [ ] 17-02: Server ACK for transmission confirmation, PTT button flash, confirmation tone, dev stats screen
-- [ ] 17-03: Transport health monitoring with auto-cleanup, auto-rejoin, amber PTT state
+- [x] 17-01: Producer retry with exponential backoff, PttState.Error, Opus codec tuning, error feedback
+- [x] 17-02: Server ACK for transmission confirmation, PTT button flash, confirmation tone, dev stats screen
+- [x] 17-03: Transport health monitoring with auto-cleanup, auto-rejoin, amber PTT state
 
 #### Phase 18: Location Tracking
 **Goal**: Adaptive location tracking with motion-aware throttling for dispatch
@@ -214,11 +214,11 @@ Phases execute in numeric order: 1 → 2 → 3 → ... → 20
 | 14. Lifecycle | v3.0 | 2/2 | Complete | 2026-02-13 |
 | 15. Validation | v3.0 | 2/2 | Complete | 2026-02-15 |
 | 16. Permission Management | v4.0 | 2/2 | Complete | 2026-02-15 |
-| 17. Audio Reliability | v4.0 | 0/3 | Not started | - |
+| 17. Audio Reliability | v4.0 | 3/3 | Complete | 2026-02-15 |
 | 18. Location Tracking | v4.0 | 0/3 | Not started | - |
 | 19. Security Hardening & Code Quality | v4.0 | 0/3 | Not started | - |
 | 20. Power Optimization & Validation | v4.0 | 0/2 | Not started | - |
 
 ---
 *Roadmap created: 2026-02-06*
-*Last updated: 2026-02-15 after Phase 16 completion*
+*Last updated: 2026-02-15 after Phase 17 completion*
