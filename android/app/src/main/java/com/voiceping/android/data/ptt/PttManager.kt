@@ -349,6 +349,49 @@ class PttManager @Inject constructor(
     }
 
     /**
+     * Force-release PTT due to transport failure.
+     *
+     * Distinct from forceReleasePtt() (phone call interruption):
+     * - Uses onPttError callback (double-buzz) instead of onPttInterrupted (double beep)
+     * - Does NOT send PTT_STOP to server (transport is already broken)
+     */
+    fun forceReleasePttTransportFailure() {
+        if (_pttState.value !is PttState.Transmitting && _pttState.value !is PttState.Requesting) {
+            Log.d(TAG, "Not transmitting, nothing to force-release for transport failure")
+            return
+        }
+
+        Log.w(TAG, "Force-releasing PTT (transport failure)")
+
+        maxDurationJob?.cancel()
+        maxDurationJob = null
+
+        // Error feedback (double-buzz + error tone)
+        onPttError?.invoke()
+
+        _pttState.value = PttState.Idle
+        val channelId = currentChannelId
+        transmissionStartTime = 0
+        currentChannelId = null
+
+        // Cleanup on IO thread — do NOT send PTT_STOP (transport broken)
+        scope.launch {
+            try {
+                mediasoupClient.stopProducing()
+
+                val stopIntent = Intent(context, AudioCaptureService::class.java).apply {
+                    action = AudioCaptureService.ACTION_STOP
+                }
+                context.startService(stopIntent)
+
+                Log.d(TAG, "PTT force-released (transport failure)")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error during transport failure PTT release cleanup", e)
+            }
+        }
+    }
+
+    /**
      * Get current transmission duration in seconds.
      *
      * @return Duration in seconds, or 0 if not transmitting
