@@ -76,6 +76,9 @@ class SettingsRepository @Inject constructor(
         val BLUETOOTH_PTT_ENABLED = booleanPreferencesKey("bluetooth_ptt_enabled")
         val BOOT_AUTO_START_ENABLED = booleanPreferencesKey("boot_auto_start_enabled")
         val LONG_PRESS_THRESHOLD_MS = intPreferencesKey("long_press_threshold_ms")
+
+        // Permission education
+        val HAS_SHOWN_PERMISSION_EDUCATION = booleanPreferencesKey("has_shown_permission_education")
     }
 
     // PTT Mode
@@ -344,5 +347,16 @@ class SettingsRepository @Inject constructor(
             preferences.remove(Keys.MONITORED_CHANNEL_IDS)
             preferences.remove(Keys.PRIMARY_CHANNEL_ID)
         }
+    }
+
+    // Permission Education
+    suspend fun setPermissionEducationShown() {
+        context.dataStore.edit { preferences ->
+            preferences[Keys.HAS_SHOWN_PERMISSION_EDUCATION] = true
+        }
+    }
+
+    fun hasShownPermissionEducation(): Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[Keys.HAS_SHOWN_PERMISSION_EDUCATION] ?: false
     }
 }
