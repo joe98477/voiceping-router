@@ -1,6 +1,9 @@
 package com.voiceping.android.presentation.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -8,15 +11,19 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.voiceping.android.data.storage.PreferencesManager
+import com.voiceping.android.data.storage.SettingsRepository
 import com.voiceping.android.presentation.channels.ChannelListScreen
 import com.voiceping.android.presentation.events.EventPickerScreen
 import com.voiceping.android.presentation.loading.LoadingScreen
 import com.voiceping.android.presentation.login.LoginScreen
 import com.voiceping.android.presentation.login.LoginViewModel
+import com.voiceping.android.presentation.permissions.PermissionEducationScreen
 import com.voiceping.android.presentation.settings.SettingsScreen
+import kotlinx.coroutines.launch
 
 // Route constants
 object Routes {
+    const val PERMISSION_EDUCATION = "permission_education"
     const val LOGIN = "login"
     const val LOADING = "loading"
     const val EVENTS = "events"
@@ -30,10 +37,19 @@ object Routes {
 fun NavGraph(
     navController: NavHostController,
     loginViewModel: LoginViewModel = hiltViewModel(),
-    preferencesManager: PreferencesManager
+    preferencesManager: PreferencesManager,
+    settingsRepository: SettingsRepository
 ) {
-    // Determine start destination based on auto-login
-    val startDestination = if (loginViewModel.checkAutoLogin()) {
+    val scope = rememberCoroutineScope()
+
+    // Check if permission education has been shown
+    val hasShownEducation by settingsRepository.hasShownPermissionEducation()
+        .collectAsState(initial = true) // Default true to prevent flash
+
+    // Determine start destination based on permission education, then auto-login
+    val startDestination = if (!hasShownEducation) {
+        Routes.PERMISSION_EDUCATION
+    } else if (loginViewModel.checkAutoLogin()) {
         Routes.LOADING
     } else {
         Routes.LOGIN
@@ -43,6 +59,16 @@ fun NavGraph(
         navController = navController,
         startDestination = startDestination
     ) {
+        composable(Routes.PERMISSION_EDUCATION) {
+            PermissionEducationScreen(
+                onComplete = {
+                    scope.launch { settingsRepository.setPermissionEducationShown() }
+                    navController.navigate(Routes.LOGIN) {
+                        popUpTo(Routes.PERMISSION_EDUCATION) { inclusive = true }
+                    }
+                }
+            )
+        }
         composable(Routes.LOGIN) {
             LoginScreen(
                 onLoginSuccess = {

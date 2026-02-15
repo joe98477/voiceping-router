@@ -26,6 +26,9 @@ class MainActivity : ComponentActivity() {
     lateinit var preferencesManager: PreferencesManager
 
     @Inject
+    lateinit var settingsRepository: com.voiceping.android.data.storage.SettingsRepository
+
+    @Inject
     lateinit var hardwareKeyHandler: HardwareKeyHandler
 
     @Inject
@@ -58,7 +61,8 @@ class MainActivity : ComponentActivity() {
                     val navController = rememberNavController()
                     NavGraph(
                         navController = navController,
-                        preferencesManager = preferencesManager
+                        preferencesManager = preferencesManager,
+                        settingsRepository = settingsRepository
                     )
                 }
             }
