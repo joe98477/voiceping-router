@@ -12,7 +12,10 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.compose.rememberNavController
 import com.voiceping.android.data.hardware.HardwareKeyHandler
 import com.voiceping.android.data.location.LocationManager
+import com.voiceping.android.data.network.ChannelStatsPoller
 import com.voiceping.android.data.network.SignalingClient
+import com.voiceping.android.data.power.BatterySaverMonitor
+import com.voiceping.android.data.power.WakeLockManager
 import com.voiceping.android.data.ptt.PttManager
 import com.voiceping.android.data.repository.ChannelRepository
 import com.voiceping.android.data.storage.PreferencesManager
@@ -45,6 +48,15 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var locationManager: LocationManager
 
+    @Inject
+    lateinit var wakeLockManager: WakeLockManager
+
+    @Inject
+    lateinit var batterySaverMonitor: BatterySaverMonitor
+
+    @Inject
+    lateinit var channelStatsPoller: ChannelStatsPoller
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -72,7 +84,10 @@ class MainActivity : ComponentActivity() {
                         preferencesManager = preferencesManager,
                         settingsRepository = settingsRepository,
                         signalingClient = signalingClient,
-                        locationManager = locationManager
+                        locationManager = locationManager,
+                        wakeLockManager = wakeLockManager,
+                        batterySaverMonitor = batterySaverMonitor,
+                        channelStatsPoller = channelStatsPoller
                     )
                 }
             }

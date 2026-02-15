@@ -9,7 +9,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.voiceping.android.data.location.LocationManager
+import com.voiceping.android.data.network.ChannelStatsPoller
 import com.voiceping.android.data.network.SignalingClient
+import com.voiceping.android.data.power.BatterySaverMonitor
+import com.voiceping.android.data.power.WakeLockManager
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -28,10 +31,16 @@ import java.time.format.DateTimeFormatter
 fun DevStatsScreen(
     signalingClient: SignalingClient,
     locationManager: LocationManager,
+    wakeLockManager: WakeLockManager,
+    batterySaverMonitor: BatterySaverMonitor,
+    channelStatsPoller: ChannelStatsPoller,
     onBack: () -> Unit
 ) {
     val latency by signalingClient.latency.collectAsStateWithLifecycle()
     val currentLocation by locationManager.currentLocation.collectAsStateWithLifecycle()
+    val wakeLockActive by wakeLockManager.wakeLockActive.collectAsStateWithLifecycle()
+    val batterySaverEnabled by batterySaverMonitor.isBatterySaverEnabled.collectAsStateWithLifecycle()
+    val channelIntervals by channelStatsPoller.channelIntervals.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -70,6 +79,34 @@ fun DevStatsScreen(
             StatRow("Packet Loss", "Pending device validation")
             StatRow("Packets Received", "Pending device validation")
             StatRow("Quality Indicator", "Pending device validation")
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text("Power Management", style = MaterialTheme.typography.titleMedium)
+            StatRow("Wake Lock", if (wakeLockActive) "Active" else "Released")
+            StatRow("Wake Lock Timeout", "${wakeLockManager.wakeLockTimeoutMs / 1000}s")
+            StatRow("Battery Saver", if (batterySaverEnabled) "Active" else "Inactive")
+            val locationMultiplier = when {
+                batterySaverEnabled -> 4
+                !wakeLockActive -> 2
+                else -> 1
+            }
+            StatRow("Location Multiplier", "${locationMultiplier}x")
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text("Channel Polling", style = MaterialTheme.typography.titleMedium)
+            if (channelIntervals.isEmpty()) {
+                Text(
+                    "No channels being polled",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                channelIntervals.forEach { (channelId, interval) ->
+                    StatRow("Channel ${channelId.take(8)}", "${interval / 1000}s")
+                }
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 

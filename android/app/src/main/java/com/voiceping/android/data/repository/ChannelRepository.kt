@@ -12,10 +12,13 @@ import com.voiceping.android.data.audio.HapticFeedback
 import com.voiceping.android.data.audio.TonePlayer
 import com.voiceping.android.data.hardware.MediaButtonHandler
 import com.voiceping.android.data.location.LocationManager
+import com.voiceping.android.data.network.ChannelStatsPoller
 import com.voiceping.android.data.network.MediasoupClient
 import com.voiceping.android.data.network.NetworkMonitor
 import com.voiceping.android.data.network.SignalingClient
 import com.voiceping.android.data.network.dto.SignalingType
+import com.voiceping.android.data.power.BatterySaverMonitor
+import com.voiceping.android.data.power.WakeLockManager
 import com.voiceping.android.data.ptt.PttManager
 import com.voiceping.android.data.ptt.PttState
 import com.voiceping.android.data.storage.SettingsRepository
@@ -48,6 +51,9 @@ private fun JsonElement?.asStringOrNull(): String? =
 private fun JsonElement?.asIntOrNull(): Int? =
     if (this == null || this.isJsonNull) null else this.asInt
 
+private fun JsonElement?.asLongOrNull(): Long? =
+    if (this == null || this.isJsonNull) null else this.asLong
+
 @Singleton
 class ChannelRepository @Inject constructor(
     private val signalingClient: SignalingClient,
@@ -61,6 +67,9 @@ class ChannelRepository @Inject constructor(
     private val mediaButtonHandler: MediaButtonHandler,
     private val networkMonitor: NetworkMonitor,
     private val locationManager: LocationManager,
+    private val wakeLockManager: WakeLockManager,
+    private val batterySaverMonitor: BatterySaverMonitor,
+    private val channelStatsPoller: ChannelStatsPoller,
     @ApplicationContext private val context: Context
 ) {
     private val _monitoredChannels = MutableStateFlow<Map<String, ChannelMonitoringState>>(emptyMap())
@@ -328,6 +337,27 @@ class ChannelRepository @Inject constructor(
                 }
             }
         }
+
+        // Wire WakeLockManager callbacks (Plan 20-02 will integrate with LocationManager)
+        wakeLockManager.onWakeLockReleased = {
+            Log.d(TAG, "Wake lock released - will coordinate with LocationManager in Plan 20-02")
+        }
+        wakeLockManager.onWakeLockAcquired = {
+            Log.d(TAG, "Wake lock acquired - will coordinate with LocationManager in Plan 20-02")
+        }
+
+        // Observe CHANNEL_LIST message for server power config (wakeLockTimeoutSeconds)
+        scope.launch {
+            signalingClient.messages
+                .filter { it.type == SignalingType.CHANNEL_LIST }
+                .collect { message ->
+                    val data = message.data
+                    val wakeLockTimeoutSeconds = data?.get("wakeLockTimeoutSeconds").asLongOrNull()
+                    if (wakeLockTimeoutSeconds != null) {
+                        wakeLockManager.setTimeoutFromServer(wakeLockTimeoutSeconds)
+                    }
+                }
+        }
     }
 
     companion object {
@@ -358,7 +388,7 @@ class ChannelRepository @Inject constructor(
                 return Result.failure(Exception(joinResponse.error))
             }
 
-            // If first channel: set up audio routing
+            // If first channel: set up audio routing and power management
             val isFirstChannel = _monitoredChannels.value.isEmpty()
             if (isFirstChannel) {
                 audioRouter.requestAudioFocus()
@@ -366,10 +396,19 @@ class ChannelRepository @Inject constructor(
 
                 // Set as primary
                 _primaryChannelId.value = channelId
+
+                // Acquire wake lock on first channel join
+                wakeLockManager.acquire()
+
+                // Start battery saver monitoring
+                batterySaverMonitor.start()
             }
 
             // Create recv transport for every channel (each channel needs its own for audio consumption)
             mediasoupClient.createRecvTransport(channelId)
+
+            // Start stats polling for this channel
+            channelStatsPoller.startPolling(channelId)
 
             // Parse user count from join response
             val joinUserCount = joinResponse.data?.get("userCount").asIntOrNull() ?: 0
@@ -454,6 +493,9 @@ class ChannelRepository @Inject constructor(
             lastSpeakerFadeJobs[channelId]?.cancel()
             lastSpeakerFadeJobs.remove(channelId)
 
+            // Stop stats polling for this channel
+            channelStatsPoller.stopPolling(channelId)
+
             // Close all consumers for this channel
             channelConsumers[channelId]?.values?.forEach { consumerId ->
                 mediasoupClient.closeConsumer(consumerId)
@@ -536,6 +578,8 @@ class ChannelRepository @Inject constructor(
                             updateChannelState(channelId) { state ->
                                 state.copy(userCount = userCount)
                             }
+                            // Update consumer count for stats polling (empty channel detection)
+                            channelStatsPoller.updateConsumerCount(channelId, userCount)
                         }
                     }
                 }
@@ -578,6 +622,12 @@ class ChannelRepository @Inject constructor(
                             // Cancel fade job when new speaker starts
                             lastSpeakerFadeJobs[channelId]?.cancel()
                             lastSpeakerFadeJobs.remove(channelId)
+
+                            // Reset wake lock timeout on incoming audio activity
+                            wakeLockManager.resetTimeout()
+
+                            // Mark channel activity for stats polling
+                            channelStatsPoller.markActivity(channelId)
 
                             // Play RX squelch open and transmission start haptic (only for incoming speakers, not own transmission)
                             if (pttManager.pttState.value !is PttState.Transmitting) {
@@ -845,6 +895,13 @@ class ChannelRepository @Inject constructor(
         // Stop location tracking
         locationManager.stopTracking()
         Log.d(TAG, "Stopped location tracking")
+
+        // Release wake lock immediately and stop battery saver monitoring
+        wakeLockManager.releaseImmediate()
+        batterySaverMonitor.stop()
+
+        // Stop all channel stats polling
+        channelStatsPoller.stopAll()
 
         // Stop monitoring service
         if (isServiceRunning) {

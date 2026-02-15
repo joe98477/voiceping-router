@@ -11,6 +11,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.voiceping.android.data.location.LocationManager
+import com.voiceping.android.data.network.ChannelStatsPoller
+import com.voiceping.android.data.network.SignalingClient
+import com.voiceping.android.data.power.BatterySaverMonitor
+import com.voiceping.android.data.power.WakeLockManager
 import com.voiceping.android.data.storage.PreferencesManager
 import com.voiceping.android.data.storage.SettingsRepository
 import com.voiceping.android.presentation.channels.ChannelListScreen
@@ -21,7 +25,6 @@ import com.voiceping.android.presentation.login.LoginViewModel
 import com.voiceping.android.presentation.permissions.PermissionEducationScreen
 import com.voiceping.android.presentation.settings.DevStatsScreen
 import com.voiceping.android.presentation.settings.SettingsScreen
-import com.voiceping.android.data.network.SignalingClient
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -45,7 +48,10 @@ fun NavGraph(
     preferencesManager: PreferencesManager,
     settingsRepository: SettingsRepository,
     signalingClient: SignalingClient,
-    locationManager: LocationManager
+    locationManager: LocationManager,
+    wakeLockManager: WakeLockManager,
+    batterySaverMonitor: BatterySaverMonitor,
+    channelStatsPoller: ChannelStatsPoller
 ) {
     val scope = rememberCoroutineScope()
 
@@ -160,6 +166,9 @@ fun NavGraph(
             DevStatsScreen(
                 signalingClient = signalingClient,
                 locationManager = locationManager,
+                wakeLockManager = wakeLockManager,
+                batterySaverMonitor = batterySaverMonitor,
+                channelStatsPoller = channelStatsPoller,
                 onBack = {
                     navController.popBackStack()
                 }
