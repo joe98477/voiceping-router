@@ -786,7 +786,7 @@ class MediasoupClient @Inject constructor(
      *
      * @throws Exception if producer creation fails
      */
-    suspend fun startProducing() = withContext(Dispatchers.IO) {
+    suspend fun startProducing(): String = withContext(Dispatchers.IO) {
         try {
             // Close any stale/orphaned producer from a previous race condition
             // (stopProducing ran before produce() returned, leaving a dangling producer)
@@ -846,11 +846,12 @@ class MediasoupClient @Inject constructor(
             if (!producingRequested) {
                 Log.w(TAG, "stopProducing() called during produce(), closing orphaned producer")
                 producer.close()
-                return@withContext
+                throw IllegalStateException("Producer creation cancelled by stopProducing()")
             }
 
             audioProducer = producer
-            Log.d(TAG, "Audio producer started")
+            Log.d(TAG, "Audio producer started: ${producer.id}")
+            return@withContext producer.id
 
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start producer", e)

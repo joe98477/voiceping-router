@@ -97,6 +97,17 @@ class ChannelRepository @Inject constructor(
     private var previousConnectionState: com.voiceping.android.domain.model.ConnectionState? = null
     private val scope = CoroutineScope(Dispatchers.IO)
 
+    // Auto-rejoin state tracking
+    private var autoRejoinAttempts = 0
+    private val maxAutoRejoinAttempts = 5
+    private var autoRejoinJob: Job? = null
+
+    private val _showDisconnectedBanner = MutableStateFlow(false)
+    val showDisconnectedBanner: StateFlow<Boolean> = _showDisconnectedBanner.asStateFlow()
+
+    private val _isAutoRejoining = MutableStateFlow(false)
+    val isAutoRejoining: StateFlow<Boolean> = _isAutoRejoining.asStateFlow()
+
     init {
         // Wire PttManager callbacks for tone/haptic feedback
         pttManager.onPttGranted = {
@@ -117,6 +128,18 @@ class ChannelRepository @Inject constructor(
         // Wire call interruption beep (distinct from roger beep)
         pttManager.onPttInterrupted = {
             tonePlayer.playCallInterruptionBeep()
+        }
+
+        // Wire error feedback (producer creation failure after retries)
+        pttManager.onPttError = {
+            hapticFeedback.vibrateErrorRelease()
+        }
+
+        // Collect ACK results for confirmation tone
+        scope.launch {
+            pttManager.ackResult.collect { success ->
+                tonePlayer.playConfirmationTone(success)
+            }
         }
 
         // Wire phone call handling via AudioRouter (audio focus listener)
@@ -260,6 +283,47 @@ class ChannelRepository @Inject constructor(
 
                 // Track previous state for next transition
                 previousConnectionState = currentState
+            }
+        }
+
+        // Wire MediasoupClient transport failure callbacks
+        mediasoupClient.onSendTransportFailed = {
+            pttManager.forceReleasePttTransportFailure()
+        }
+
+        mediasoupClient.onSendTransportRecovered = {
+            Log.d(TAG, "Send transport recovered, PTT auto-recovers to normal state")
+            // No toast, silent transition per user decision
+        }
+
+        // Observe transport health state and react
+        scope.launch {
+            mediasoupClient.transportHealthState.collect { state ->
+                when (state) {
+                    com.voiceping.android.domain.model.TransportHealthState.HEALTHY -> {
+                        // Clear any reconnection state
+                        autoRejoinAttempts = 0
+                        autoRejoinJob?.cancel()
+                        _showDisconnectedBanner.value = false
+                        _isAutoRejoining.value = false
+                        pttManager.pttDisabledForReconnect = false
+                    }
+                    com.voiceping.android.domain.model.TransportHealthState.SEND_DEGRADED -> {
+                        // Partial failure: send broken, receive works
+                        // User can still hear others but can't transmit
+                        // Amber PTT handled by ViewModel via transportHealthState
+                        Log.w(TAG, "Send transport degraded, receive still working")
+                    }
+                    com.voiceping.android.domain.model.TransportHealthState.FULLY_DISCONNECTED -> {
+                        // Both transports gone — start auto-rejoin
+                        Log.e(TAG, "Fully disconnected, starting auto-rejoin")
+                        pttManager.pttDisabledForReconnect = true
+                        startAutoRejoin()
+                    }
+                    com.voiceping.android.domain.model.TransportHealthState.RECONNECTING -> {
+                        // In progress, no action needed
+                    }
+                }
             }
         }
     }
@@ -852,5 +916,57 @@ class ChannelRepository @Inject constructor(
     fun stopButtonDetection() {
         mediaButtonHandler.stopDetectionMode()
         mediaButtonHandler.onButtonDetected = null
+    }
+
+    /**
+     * Start auto-rejoin with exponential backoff.
+     * Attempts up to 5 times, then shows persistent banner.
+     */
+    private fun startAutoRejoin() {
+        if (_isAutoRejoining.value) return // Already in progress
+
+        _isAutoRejoining.value = true
+        mediasoupClient.resetTransportHealth() // Set to RECONNECTING handled by us
+        autoRejoinAttempts = 0
+
+        autoRejoinJob?.cancel()
+        autoRejoinJob = scope.launch {
+            while (autoRejoinAttempts < maxAutoRejoinAttempts) {
+                autoRejoinAttempts++
+                val delayMs = (1000L * (1 shl (autoRejoinAttempts - 1))).coerceAtMost(30_000L)
+                Log.d(TAG, "Auto-rejoin attempt $autoRejoinAttempts/$maxAutoRejoinAttempts in ${delayMs}ms")
+
+                delay(delayMs)
+
+                try {
+                    // Rejoin all monitored channels
+                    rejoinAllMonitoredChannels()
+
+                    // If successful, transport callbacks will set HEALTHY
+                    Log.d(TAG, "Auto-rejoin attempt $autoRejoinAttempts succeeded")
+                    _isAutoRejoining.value = false
+                    _showDisconnectedBanner.value = false
+                    autoRejoinAttempts = 0
+                    pttManager.pttDisabledForReconnect = false
+                    return@launch
+                } catch (e: Exception) {
+                    Log.w(TAG, "Auto-rejoin attempt $autoRejoinAttempts failed: ${e.message}")
+                }
+            }
+
+            // All attempts exhausted — show persistent banner with manual retry
+            Log.e(TAG, "Auto-rejoin failed after $maxAutoRejoinAttempts attempts")
+            _isAutoRejoining.value = false
+            _showDisconnectedBanner.value = true
+        }
+    }
+
+    /**
+     * Manual retry after auto-rejoin exhaustion.
+     * Triggered by "Retry" button in persistent banner.
+     */
+    fun manualRetryRejoin() {
+        _showDisconnectedBanner.value = false
+        startAutoRejoin()
     }
 }

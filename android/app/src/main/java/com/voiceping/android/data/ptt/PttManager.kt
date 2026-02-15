@@ -6,6 +6,7 @@ import android.util.Log
 import com.voiceping.android.data.network.MediasoupClient
 import com.voiceping.android.data.network.SignalingClient
 import com.voiceping.android.data.network.dto.SignalingType
+import com.voiceping.android.domain.model.TransportHealthState
 import com.voiceping.android.service.AudioCaptureService
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -13,10 +14,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -64,6 +69,9 @@ class PttManager @Inject constructor(
     private val _pttState = MutableStateFlow<PttState>(PttState.Idle)
     val pttState: StateFlow<PttState> = _pttState.asStateFlow()
 
+    private val _ackResult = MutableSharedFlow<Boolean>(extraBufferCapacity = 1)
+    val ackResult: SharedFlow<Boolean> = _ackResult.asSharedFlow()
+
     private var transmissionStartTime: Long = 0
     private var currentChannelId: String? = null
 
@@ -97,6 +105,13 @@ class PttManager @Inject constructor(
     private var maxDurationJob: Job? = null
 
     /**
+     * Set by ChannelRepository when auto-rejoin is in progress.
+     * When true, requestPtt() is blocked (PTT button grayed out).
+     */
+    @Volatile
+    var pttDisabledForReconnect: Boolean = false
+
+    /**
      * Request PTT from server.
      *
      * CRITICAL: NOT optimistic. State goes Idle -> Requesting -> (Transmitting | Denied).
@@ -124,6 +139,21 @@ class PttManager @Inject constructor(
             Log.w(TAG, "PTT press ignored: not connected (state=$currentState)")
             // Trigger error feedback without changing PTT state
             onPttDenied?.invoke()
+            return
+        }
+
+        // Guard: PTT disabled during auto-rejoin
+        if (pttDisabledForReconnect) {
+            Log.w(TAG, "PTT disabled: auto-rejoin in progress")
+            onPttDenied?.invoke()
+            return
+        }
+
+        // Guard: Send transport degraded (amber state)
+        if (mediasoupClient.transportHealthState.value == com.voiceping.android.domain.model.TransportHealthState.SEND_DEGRADED) {
+            Log.w(TAG, "PTT press during send transport degradation")
+            // Toast will be shown by ViewModel observing this
+            onPttDenied?.invoke() // Triggers existing denied feedback
             return
         }
 
@@ -157,6 +187,7 @@ class PttManager @Inject constructor(
                     val maxRetries = 2
                     var lastError: Exception? = null
                     var producerCreated = false
+                    var producerId: String? = null
 
                     for (attempt in 0..maxRetries) {
                         // Check PTT state each iteration — user may have cancelled
@@ -173,9 +204,9 @@ class PttManager @Inject constructor(
                             }
 
                             mediasoupClient.createSendTransport(channelId)
-                            mediasoupClient.startProducing()
+                            producerId = mediasoupClient.startProducing()
                             producerCreated = true
-                            Log.d(TAG, "Producer created on attempt ${attempt + 1}")
+                            Log.d(TAG, "Producer created on attempt ${attempt + 1}: $producerId")
                             break
                         } catch (e: Exception) {
                             lastError = e
@@ -183,9 +214,27 @@ class PttManager @Inject constructor(
                         }
                     }
 
-                    if (producerCreated) {
+                    if (producerCreated && producerId != null) {
                         // Step 6: Notify callback (Plan 04 will wire in tone/haptic)
                         onPttGranted?.invoke()
+
+                        // Step 6a: Async ACK check (does not block PTT grant)
+                        scope.launch {
+                            try {
+                                val ackResponse = withTimeout(2000L) {
+                                    signalingClient.request(
+                                        SignalingType.PRODUCER_ACK,
+                                        mapOf("producerId" to producerId, "channelId" to channelId)
+                                    )
+                                }
+                                val success = ackResponse.error == null
+                                _ackResult.tryEmit(success)
+                                Log.d(TAG, "Server ACK: $success")
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Server ACK timeout or error: ${e.message}")
+                                _ackResult.tryEmit(false)
+                            }
+                        }
 
                         // Step 7: If TOGGLE mode, start max duration timer
                         if (currentPttMode == com.voiceping.android.domain.model.PttMode.TOGGLE) {
