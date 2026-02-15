@@ -181,9 +181,9 @@ Plans:
 **Depends on**: Phase 17 (audio complete), Phase 18 (location complete)
 **Requirements**: PWR-01, PWR-02, PWR-03, PWR-04
 **Success Criteria** (what must be TRUE):
-  1. Wake lock released after 30 seconds of audio inactivity and reacquired on speaker activity
-  2. Network quality polling adjusts dynamically (15s idle channels, 5s active channels)
-  3. Location updates batched efficiently for server transmission
+  1. Wake lock released after configurable timeout (default 300s) of audio inactivity and reacquired on speaker activity
+  2. Network quality polling adjusts dynamically (15s idle channels, 5s active channels, suspended on empty)
+  3. Location tracking frequency adapts to power state (2x on wake lock release, 4x on battery saver)
   4. Battery consumption validated at less than 6%/hour with screen off and all features active
 **Plans**: 2 plans
 
