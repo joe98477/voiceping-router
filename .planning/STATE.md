@@ -5,7 +5,7 @@
 See: .planning/PROJECT.md (updated 2026-02-15)
 
 **Core value:** Reliable, secure real-time audio communication for coordinating 1000+ distributed team members during high-profile events where security and uptime are critical
-**Current focus:** Phase 16 - Permission Management (v4.0 milestone)
+**Current focus:** Phase 19 - Security Hardening & Code Quality (v4.0 milestone)
 
 ## Current Position
 
