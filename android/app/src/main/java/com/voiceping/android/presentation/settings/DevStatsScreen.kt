@@ -41,6 +41,7 @@ fun DevStatsScreen(
     val wakeLockActive by wakeLockManager.wakeLockActive.collectAsStateWithLifecycle()
     val batterySaverEnabled by batterySaverMonitor.isBatterySaverEnabled.collectAsStateWithLifecycle()
     val channelIntervals by channelStatsPoller.channelIntervals.collectAsStateWithLifecycle()
+    val currentMultiplier by locationManager.currentMultiplier.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -86,12 +87,7 @@ fun DevStatsScreen(
             StatRow("Wake Lock", if (wakeLockActive) "Active" else "Released")
             StatRow("Wake Lock Timeout", "${wakeLockManager.wakeLockTimeoutMs / 1000}s")
             StatRow("Battery Saver", if (batterySaverEnabled) "Active" else "Inactive")
-            val locationMultiplier = when {
-                batterySaverEnabled -> 4
-                !wakeLockActive -> 2
-                else -> 1
-            }
-            StatRow("Location Multiplier", "${locationMultiplier}x")
+            StatRow("Location Multiplier", "${currentMultiplier}x")
 
             Spacer(modifier = Modifier.height(16.dp))
 

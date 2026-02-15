@@ -338,12 +338,19 @@ class ChannelRepository @Inject constructor(
             }
         }
 
-        // Wire WakeLockManager callbacks (Plan 20-02 will integrate with LocationManager)
+        // Wire wake lock → location coordination
         wakeLockManager.onWakeLockReleased = {
-            Log.d(TAG, "Wake lock released - will coordinate with LocationManager in Plan 20-02")
+            locationManager.onWakeLockReleased()
         }
         wakeLockManager.onWakeLockAcquired = {
-            Log.d(TAG, "Wake lock acquired - will coordinate with LocationManager in Plan 20-02")
+            locationManager.onWakeLockAcquired()
+        }
+
+        // Wire battery saver → location coordination
+        scope.launch {
+            batterySaverMonitor.isBatterySaverEnabled.collect { enabled ->
+                locationManager.onBatterySaverChanged(enabled)
+            }
         }
 
         // Observe CHANNEL_LIST message for server power config (wakeLockTimeoutSeconds)

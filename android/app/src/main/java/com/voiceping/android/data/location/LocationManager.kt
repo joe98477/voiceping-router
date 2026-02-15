@@ -64,6 +64,16 @@ class LocationManager @Inject constructor(
     private var lastSentTime: Long = 0
     private var activityRecognitionAvailable = true
 
+    // Power multipliers for location tracking interval
+    var wakeLockMultiplier: Int = 1  // 1 = wake lock active, 2 = wake lock released
+        private set
+    var batterySaverMultiplier: Int = 1  // 1 = normal, 4 = battery saver active
+        private set
+    private var wakeLockRecoveryCycles = 0  // Gradual ramp-up counter
+
+    private val _currentMultiplier = MutableStateFlow(1)
+    val currentMultiplier: StateFlow<Int> = _currentMultiplier.asStateFlow()
+
     private val _locationUpdates = MutableSharedFlow<LocationUpdate>()
     val locationUpdates: SharedFlow<LocationUpdate> = _locationUpdates
 
@@ -157,6 +167,44 @@ class LocationManager @Inject constructor(
     }
 
     /**
+     * Called when wake lock is released after timeout.
+     * Doubles location tracking interval (2x multiplier).
+     */
+    fun onWakeLockReleased() {
+        wakeLockMultiplier = 2
+        _currentMultiplier.value = wakeLockMultiplier * batterySaverMultiplier
+        Log.d(TAG, "Wake lock released, location multiplier now ${_currentMultiplier.value}x")
+
+        if (isTracking) {
+            startTrackingWithAdaptiveInterval(motionDetector.motionState.value)
+        }
+    }
+
+    /**
+     * Called when wake lock is acquired.
+     * Gradually ramps up location interval over 1-2 cycles.
+     */
+    fun onWakeLockAcquired() {
+        wakeLockRecoveryCycles = 2
+        _currentMultiplier.value = wakeLockMultiplier * batterySaverMultiplier
+        Log.d(TAG, "Wake lock acquired, location recovery in $wakeLockRecoveryCycles cycles")
+    }
+
+    /**
+     * Called when battery saver state changes.
+     * Applies 4x multiplier when enabled, immediate snap-back when disabled.
+     */
+    fun onBatterySaverChanged(enabled: Boolean) {
+        batterySaverMultiplier = if (enabled) 4 else 1
+        _currentMultiplier.value = wakeLockMultiplier * batterySaverMultiplier
+        Log.d(TAG, "Battery saver changed to $enabled, location multiplier now ${_currentMultiplier.value}x")
+
+        if (isTracking) {
+            startTrackingWithAdaptiveInterval(motionDetector.motionState.value)
+        }
+    }
+
+    /**
      * Request PTT-triggered location send.
      *
      * Immediately sends current location if:
@@ -209,6 +257,10 @@ class LocationManager @Inject constructor(
             Log.d(TAG, "Low battery ($batteryLevel%), forcing 5min interval")
         }
 
+        // Apply power multipliers
+        val effectiveMultiplier = wakeLockMultiplier * batterySaverMultiplier
+        interval *= effectiveMultiplier
+
         // Determine priority
         val priority = if (lowBattery) {
             Priority.PRIORITY_LOW_POWER
@@ -216,7 +268,7 @@ class LocationManager @Inject constructor(
             Priority.PRIORITY_BALANCED_POWER_ACCURACY
         }
 
-        Log.d(TAG, "Starting tracker: motionState=$motionState, interval=${interval}ms, priority=$priority, battery=$batteryLevel%")
+        Log.d(TAG, "Starting tracker: motionState=$motionState, interval=${interval}ms, multiplier=${effectiveMultiplier}x, priority=$priority, battery=$batteryLevel%")
 
         locationTracker.startTracking(interval, priority) { location ->
             onLocationUpdate(location)
@@ -243,6 +295,17 @@ class LocationManager @Inject constructor(
         }
 
         emitLocationUpdate(location)
+
+        // Handle wake lock recovery cycle countdown
+        if (wakeLockRecoveryCycles > 0) {
+            wakeLockRecoveryCycles--
+            if (wakeLockRecoveryCycles == 0) {
+                wakeLockMultiplier = 1
+                _currentMultiplier.value = wakeLockMultiplier * batterySaverMultiplier
+                Log.d(TAG, "Wake lock recovery complete, location multiplier now ${_currentMultiplier.value}x")
+                startTrackingWithAdaptiveInterval(motionDetector.motionState.value)
+            }
+        }
     }
 
     /**

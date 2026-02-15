@@ -63,6 +63,7 @@ class ChannelListViewModel @Inject constructor(
     private val tokenManager: com.voiceping.android.data.storage.TokenManager,
     private val mediasoupClient: MediasoupClient,
     private val permissionManager: PermissionManager,
+    private val batterySaverMonitor: com.voiceping.android.data.power.BatterySaverMonitor,
     @ApplicationContext private val context: Context,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -169,6 +170,10 @@ class ChannelListViewModel @Inject constructor(
     private val _toastMessage = MutableStateFlow<String?>(null)
     val toastMessage: StateFlow<String?> = _toastMessage.asStateFlow()
 
+    // Battery saver toast (shown every time app opens with battery saver active)
+    private val _showBatterySaverToast = MutableStateFlow(false)
+    val showBatterySaverToast: StateFlow<Boolean> = _showBatterySaverToast.asStateFlow()
+
     // Permission state tracking
     private val _micPermissionGranted = MutableStateFlow(false)
     val micPermissionGranted: StateFlow<Boolean> = _micPermissionGranted.asStateFlow()
@@ -221,6 +226,11 @@ class ChannelListViewModel @Inject constructor(
 
         // Initialize permission states
         refreshPermissionStates()
+
+        // Battery saver toast: show every time app is opened while active
+        if (batterySaverMonitor.isBatterySaverEnabled.value) {
+            _showBatterySaverToast.value = true
+        }
 
         // Start NetworkMonitor
         networkMonitor.start()
@@ -346,6 +356,10 @@ class ChannelListViewModel @Inject constructor(
 
     fun clearToastMessage() {
         _toastMessage.value = null
+    }
+
+    fun onBatterySaverToastShown() {
+        _showBatterySaverToast.value = false
     }
 
     // Permission management
