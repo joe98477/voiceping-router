@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 ## Current Position
 
 Phase: 18 of 20 (Location Tracking)
-Plan: 02 of 03 complete
-Status: In Progress
-Last activity: 2026-02-15 — Completed 18-02-PLAN.md (Server-Side Location Infrastructure)
+Plan: 03 of 03 complete
+Status: Complete
+Last activity: 2026-02-15 — Completed 18-03-PLAN.md (Android Location Service Integration)
 
-Progress: [█████████████████████████░░░] 87% (67/77 plans complete across all milestones)
+Progress: [█████████████████████████░░░] 88% (68/77 plans complete across all milestones)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 67 (v1.0: 24, v2.0: 26, v3.0: 10, v4.0: 7)
-- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~4.0 min, v4.0 ~6.0 min
-- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.67 hours, v4.0 ~0.6 hours
+- Total plans completed: 68 (v1.0: 24, v2.0: 26, v3.0: 10, v4.0: 8)
+- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~4.0 min, v4.0 ~6.5 min
+- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.67 hours, v4.0 ~0.65 hours
 
 **By Milestone:**
 
@@ -30,17 +30,17 @@ Progress: [███████████████████████
 | v1.0 WebRTC Rebuild | 4 | 24/24 | Complete (2026-02-07) |
 | v2.0 Android Client | 6 | 26/26 | Complete (2026-02-13) |
 | v3.0 mediasoup Integration | 5 | 10/10 | Complete (2026-02-15) |
-| v4.0 Production Hardening | 5 | 7/13 | In progress |
+| v4.0 Production Hardening | 5 | 8/13 | In progress |
 
 **Recent Trend:**
 - v3.0 complete: 10 plans, 5 phases (11-15), real mediasoup audio verified on physical device
 - Battery profiling validated: 5%/hour with screen off
 - Phase 16 complete: Permission management foundation (2 plans, 787s total)
 - Phase 17 complete: Audio reliability improvements (3 plans, 848s total)
-- Phase 18 in progress: Location tracking (2/3 plans, 1046s total)
-- Trend: Stable velocity ~5-13 minutes per plan in v4.0
+- Phase 18 complete: Location tracking (3/3 plans, 1395s total)
+- Trend: Stable velocity ~4-13 minutes per plan in v4.0
 
-*Updated after 18-02 completion*
+*Updated after 18-03 completion*
 
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
@@ -49,6 +49,7 @@ Progress: [███████████████████████
 | Phase 17 P03 | 351s | 2 | 4 |
 | Phase 18 P01 | 263s | 2 | 8 |
 | Phase 18 P02 | 783s | 2 | 10 |
+| Phase 18 P03 | 349s | 2 | 11 |
 
 ## Accumulated Context
 
@@ -83,6 +84,10 @@ Recent decisions affecting v4.0 work:
 - Phase 17-03: 5 max auto-rejoin attempts with exponential backoff (balances recovery with user control)
 - Phase 17-03: SEND_DEGRADED state for partial failures (user can still hear when send transport fails)
 - Phase 17-03: Silent recovery to HEALTHY state (no toast on recovery, reduces notification fatigue)
+- Phase 18-03: Offline queue FIFO eviction (prioritize fresh location data over stale data)
+- Phase 18-03: Reconnect flush sends location-batch (not individual updates, reduces server overhead)
+- Phase 18-03: PTT-triggered location wrapped in try/catch (prevent location errors from breaking PTT)
+- Phase 18-03: currentLocation StateFlow updated before deduplication (shows all GPS fixes in debug screen)
 
 ### Pending Todos
 
@@ -104,10 +109,10 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-15
-Stopped at: Completed 18-02-PLAN.md (Server-Side Location Infrastructure)
+Stopped at: Completed 18-03-PLAN.md (Android Location Service Integration)
 Resume file: None
 
-**Next action:** Continue Phase 18 with plan 03 (Android Location Service Integration).
+**Next action:** Begin Phase 19 (Security Audit & Hardening) - research and planning phase.
 
 **Previous Milestones:**
 - v1.0 WebRTC Audio Rebuild + Web UI — SHIPPED 2026-02-07
@@ -122,10 +127,11 @@ Resume file: None
   - 17-01: Audio Reliability Foundation ✅
   - 17-02: Producer ACK & Confirmation Feedback ✅
   - 17-03: Transport Health Monitoring & Auto-Rejoin ✅
-- v4.0 Phase 18 (Location Tracking): 2/3 plans complete
+- v4.0 Phase 18 (Location Tracking): 3/3 plans complete ✅
   - 18-01: Location Tracking Foundation ✅
   - 18-02: Server-Side Location Infrastructure ✅
-  - 18-03: Android Location Service Integration (next)
+  - 18-03: Android Location Service Integration ✅
+- v4.0 Phase 19 (Security Audit & Hardening): 0/3 plans (next)
 
 ---
-*Last updated: 2026-02-15 after Phase 18-01 completion*
+*Last updated: 2026-02-15 after Phase 18-03 completion*
