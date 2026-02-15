@@ -21,6 +21,8 @@ import { SecurityEventsManager } from './auth/securityEvents';
 import { DispatchHandlers } from './signaling/dispatchHandlers';
 import { AdminHandlers } from './signaling/adminHandlers';
 import { PermissionSyncManager } from './state/permissionSync';
+import { LocationStore } from './location/LocationStore';
+import { LocationBroadcaster } from './location/LocationBroadcaster';
 
 /**
  * Main server initialization and startup
@@ -227,6 +229,22 @@ async function main() {
 
     logger.info('Phase 2 modules initialized: PermissionManager, AuditLogger, RateLimiter, SecurityEvents, PermissionSync');
 
+    // 7.6. Create location services (Phase 18)
+    const locationStore = new LocationStore('./data/locations.db');
+    const locationBroadcaster = new LocationBroadcaster(
+      (message) => signalingServer.sendToAllDispatchUsers(message)
+    );
+    handlers.setLocationServices(locationStore, locationBroadcaster);
+    logger.info('Location services initialized');
+
+    // Start hourly cleanup interval
+    const locationCleanupInterval = setInterval(() => {
+      const deleted = locationStore.cleanupOldLocations();
+      if (deleted > 0) {
+        logger.info(`Location cleanup: removed ${deleted} records older than 24h`);
+      }
+    }, 60 * 60 * 1000); // Every hour
+
     // 8. Start HTTP server
     server.listen(config.server.port, config.server.host, () => {
       logger.info(`VoicePing audio server listening on ${config.server.host}:${config.server.port}`);
@@ -256,6 +274,12 @@ async function main() {
         // Shutdown permission sync manager
         logger.info('Shutting down permission sync manager...');
         await permissionSyncManager.stop();
+
+        // Close location services
+        logger.info('Closing location services...');
+        clearInterval(locationCleanupInterval);
+        locationStore.close();
+        logger.info('Location store closed');
 
         // Shutdown channel state manager
         logger.info('Shutting down channel state manager...');

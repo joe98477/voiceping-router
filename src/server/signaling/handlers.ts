@@ -19,6 +19,9 @@ import { DispatchHandlers } from './dispatchHandlers';
 import { createLogger } from '../logger';
 import { config } from '../config';
 import { ClientContext } from './websocketServer';
+import { LocationStore } from '../location/LocationStore';
+import { LocationBroadcaster } from '../location/LocationBroadcaster';
+import { validateLocation, isValidMotionState } from '../location/types';
 
 const logger = createLogger('SignalingHandlers');
 
@@ -42,6 +45,8 @@ export class SignalingHandlers {
   private adminHandlers?: AdminHandlers;
   private securityEventsManager?: SecurityEventsManager;
   private dispatchHandlers?: DispatchHandlers;
+  private locationStore?: LocationStore;
+  private locationBroadcaster?: LocationBroadcaster;
 
   // Track user's producer IDs for PTT operations
   private userProducers = new Map<string, string>(); // userId:channelId -> producerId
@@ -88,6 +93,14 @@ export class SignalingHandlers {
    */
   setDispatchHandlers(dispatchHandlers: DispatchHandlers): void {
     this.dispatchHandlers = dispatchHandlers;
+  }
+
+  /**
+   * Set LocationStore and LocationBroadcaster instances (called during initialization in Phase 18)
+   */
+  setLocationServices(locationStore: LocationStore, locationBroadcaster: LocationBroadcaster): void {
+    this.locationStore = locationStore;
+    this.locationBroadcaster = locationBroadcaster;
   }
 
   /**
@@ -927,6 +940,174 @@ export class SignalingHandlers {
    */
   async handlePing(ctx: ClientContext, message: SignalingMessage): Promise<void> {
     this.sendResponse(ctx, message.id, { type: SignalingType.PONG });
+  }
+
+  /**
+   * Handle LOCATION_UPDATE: Store and broadcast single location update
+   */
+  async handleLocationUpdate(ctx: ClientContext, message: SignalingMessage): Promise<void> {
+    try {
+      if (!this.locationStore || !this.locationBroadcaster) {
+        logger.warn('LOCATION_UPDATE: Location services not initialized');
+        this.sendError(ctx, message.id, 'Location services not available');
+        return;
+      }
+
+      const { latitude, longitude, accuracy, speed, heading, motionState, timestamp } = message.data as {
+        latitude: number;
+        longitude: number;
+        accuracy: number;
+        speed: number | null;
+        heading: number | null;
+        motionState: string;
+        timestamp: string;
+      };
+
+      // Validate lat/lng
+      const locationError = validateLocation(latitude, longitude);
+      if (locationError) {
+        this.sendError(ctx, message.id, locationError);
+        return;
+      }
+
+      // Validate motion state
+      if (!isValidMotionState(motionState)) {
+        this.sendError(ctx, message.id, `Invalid motion state: ${motionState}`);
+        return;
+      }
+
+      const locationData = {
+        userId: ctx.userId,
+        latitude,
+        longitude,
+        accuracy,
+        speed,
+        heading,
+        motionState,
+        timestamp,
+      };
+
+      // Store in SQLite
+      this.locationStore.insertLocation(locationData);
+
+      // Broadcast to dispatch users
+      this.locationBroadcaster.broadcastLocation(ctx.userId, locationData);
+
+      logger.debug(`Location update from ${ctx.userId}: ${latitude}, ${longitude}`);
+
+      // No response needed (fire-and-forget)
+    } catch (err) {
+      logger.error(`Error handling LOCATION_UPDATE: ${err instanceof Error ? err.message : String(err)}`);
+      this.sendError(ctx, message.id, err instanceof Error ? err.message : 'Failed to process location update');
+    }
+  }
+
+  /**
+   * Handle LOCATION_BATCH: Store batch of location updates and broadcast latest
+   */
+  async handleLocationBatch(ctx: ClientContext, message: SignalingMessage): Promise<void> {
+    try {
+      if (!this.locationStore || !this.locationBroadcaster) {
+        logger.warn('LOCATION_BATCH: Location services not initialized');
+        this.sendError(ctx, message.id, 'Location services not available');
+        return;
+      }
+
+      const { updates } = message.data as {
+        updates: Array<{
+          latitude: number;
+          longitude: number;
+          accuracy: number;
+          speed: number | null;
+          heading: number | null;
+          motionState: string;
+          timestamp: string;
+        }>;
+      };
+
+      if (!Array.isArray(updates) || updates.length === 0) {
+        this.sendError(ctx, message.id, 'Invalid batch: updates must be a non-empty array');
+        return;
+      }
+
+      // Validate and add userId to each update
+      const validUpdates = [];
+      for (const update of updates) {
+        const locationError = validateLocation(update.latitude, update.longitude);
+        if (locationError) {
+          logger.warn(`Skipping invalid location in batch: ${locationError}`);
+          continue;
+        }
+
+        if (!isValidMotionState(update.motionState)) {
+          logger.warn(`Skipping invalid motion state in batch: ${update.motionState}`);
+          continue;
+        }
+
+        validUpdates.push({
+          userId: ctx.userId,
+          latitude: update.latitude,
+          longitude: update.longitude,
+          accuracy: update.accuracy,
+          speed: update.speed,
+          heading: update.heading,
+          motionState: update.motionState,
+          timestamp: update.timestamp,
+        });
+      }
+
+      if (validUpdates.length === 0) {
+        this.sendError(ctx, message.id, 'No valid updates in batch');
+        return;
+      }
+
+      // Store batch in SQLite
+      this.locationStore.insertBatch(validUpdates);
+
+      // Broadcast only the latest update (last in array, assuming sorted by timestamp)
+      const latestUpdate = validUpdates[validUpdates.length - 1];
+      this.locationBroadcaster.broadcastLocation(ctx.userId, latestUpdate);
+
+      logger.info(`Location batch from ${ctx.userId}: ${validUpdates.length} updates stored`);
+
+      // No response needed (fire-and-forget)
+    } catch (err) {
+      logger.error(`Error handling LOCATION_BATCH: ${err instanceof Error ? err.message : String(err)}`);
+      this.sendError(ctx, message.id, err instanceof Error ? err.message : 'Failed to process location batch');
+    }
+  }
+
+  /**
+   * Handle LOCATION_QUERY: Get all latest positions (dispatch-only)
+   */
+  async handleLocationQuery(ctx: ClientContext, message: SignalingMessage): Promise<void> {
+    try {
+      if (!this.locationBroadcaster) {
+        logger.warn('LOCATION_QUERY: Location services not initialized');
+        this.sendError(ctx, message.id, 'Location services not available');
+        return;
+      }
+
+      // Check if user has DISPATCH role
+      if (ctx.role !== UserRole.DISPATCH) {
+        logger.warn(`LOCATION_QUERY denied for ${ctx.userId}: not a Dispatch user`);
+        this.sendError(ctx, message.id, 'Permission denied: Location queries are only available to Dispatch users');
+        return;
+      }
+
+      // Get all latest positions with stale indicator
+      const positions = this.locationBroadcaster.getAllLatestPositions();
+
+      this.sendResponse(ctx, message.id, {
+        positions,
+        count: positions.length,
+      });
+
+      logger.debug(`Location query from ${ctx.userId}: returned ${positions.length} positions`);
+    } catch (err) {
+      logger.error(`Error handling LOCATION_QUERY: ${err instanceof Error ? err.message : String(err)}`);
+      this.sendError(ctx, message.id, err instanceof Error ? err.message : 'Failed to query locations');
+    }
   }
 
   /**

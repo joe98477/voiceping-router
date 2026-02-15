@@ -411,6 +411,18 @@ export class SignalingServer {
           await this.handlers.handleUnbanUser(ctx, message);
           break;
 
+        case SignalingType.LOCATION_UPDATE:
+          await this.handlers.handleLocationUpdate(ctx, message);
+          break;
+
+        case SignalingType.LOCATION_BATCH:
+          await this.handlers.handleLocationBatch(ctx, message);
+          break;
+
+        case SignalingType.LOCATION_QUERY:
+          await this.handlers.handleLocationQuery(ctx, message);
+          break;
+
         default:
           logger.warn(`Unhandled message type: ${message.type}`);
           this.sendError(ctx.ws, `Unhandled message type: ${message.type}`, message.id);
@@ -519,6 +531,26 @@ export class SignalingServer {
       }
     }
     return false;
+  }
+
+  /**
+   * Send message to all dispatch users
+   * Used by location broadcaster for real-time location updates
+   * @param message - Raw JSON string message to send
+   */
+  sendToAllDispatchUsers(message: string): void {
+    let sentCount = 0;
+
+    for (const ctx of this.clients.values()) {
+      if (ctx.role === UserRole.DISPATCH && ctx.ws.readyState === 1) {
+        ctx.ws.send(message);
+        sentCount++;
+      }
+    }
+
+    if (sentCount > 0) {
+      logger.debug(`Sent location broadcast to ${sentCount} dispatch users`);
+    }
   }
 
   /**
