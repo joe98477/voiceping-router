@@ -134,9 +134,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 17-01: Producer retry logic with exponential backoff and user feedback
-- [ ] 17-02: WebRTC jitter buffer tuning and Opus FEC configuration
-- [ ] 17-03: Transport health monitoring with auto-cleanup and server ACK
+- [ ] 17-01: Producer retry with exponential backoff, PttState.Error, Opus codec tuning, error feedback
+- [ ] 17-02: Server ACK for transmission confirmation, PTT button flash, confirmation tone, dev stats screen
+- [ ] 17-03: Transport health monitoring with auto-cleanup, auto-rejoin, amber PTT state
 
 #### Phase 18: Location Tracking
 **Goal**: Adaptive location tracking with motion-aware throttling for dispatch
