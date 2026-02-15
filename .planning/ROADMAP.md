@@ -5,7 +5,7 @@
 - ✅ **v1.0 WebRTC Audio Rebuild + Web UI** - Phases 1-4 (shipped 2026-02-07)
 - ✅ **v2.0 Android Client App** - Phases 5-10 (shipped 2026-02-13)
 - ✅ **v3.0 mediasoup Library Integration** - Phases 11-15 (shipped 2026-02-15)
-- 🚧 **v4.0 Production Hardening & Location** - Phases 16-20 (in progress)
+- ✅ **v4.0 Production Hardening & Location** - Phases 16-20 (shipped 2026-02-16)
 
 ## Phases
 
@@ -102,7 +102,7 @@ See: `.planning/milestones/v3.0-ROADMAP.md` for full details.
 
 </details>
 
-### 🚧 v4.0 Production Hardening & Location (In Progress)
+### ✅ v4.0 Production Hardening & Location (Shipped 2026-02-16)
 
 **Milestone Goal:** Harden audio reliability, optimize power/bandwidth, add location tracking for dispatch, and security-audit the full stack.
 
@@ -188,8 +188,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 20-01: Adaptive wake lock scoping and dynamic network polling
-- [ ] 20-02: Location batching optimization and battery profiling validation
+- [x] 20-01: Adaptive wake lock scoping and dynamic network polling
+- [x] 20-02: Location batching optimization and battery profiling validation
 
 ## Progress
 
@@ -217,8 +217,8 @@ Phases execute in numeric order: 1 → 2 → 3 → ... → 20
 | 17. Audio Reliability | v4.0 | 3/3 | Complete | 2026-02-15 |
 | 18. Location Tracking | v4.0 | 3/3 | Complete | 2026-02-15 |
 | 19. Security Hardening & Code Quality | v4.0 | 3/3 | Complete | 2026-02-15 |
-| 20. Power Optimization & Validation | v4.0 | 0/2 | Not started | - |
+| 20. Power Optimization & Validation | v4.0 | 2/2 | Complete | 2026-02-16 |
 
 ---
 *Roadmap created: 2026-02-06*
-*Last updated: 2026-02-15 after Phase 19 completion*
+*Last updated: 2026-02-16 after Phase 20 completion*
