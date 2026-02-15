@@ -509,7 +509,7 @@ export class SignalingServer {
    * @returns true if user was found and disconnected, false otherwise
    */
   disconnectUser(targetUserId: string, reason: string): boolean {
-    for (const [connectionId, ctx] of this.clients.entries()) {
+    for (const [_connectionId, ctx] of this.clients.entries()) {
       if (ctx.userId === targetUserId) {
         this.sendToClient(ctx.ws, createMessage(SignalingType.FORCE_DISCONNECT, { reason }));
         ctx.ws.close(4003, reason);

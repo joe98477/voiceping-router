@@ -5,7 +5,6 @@
 
 import * as dotenv from 'dotenv';
 import * as os from 'os';
-import { types as mediasoupTypes } from 'mediasoup';
 
 // Load environment variables
 dotenv.config();

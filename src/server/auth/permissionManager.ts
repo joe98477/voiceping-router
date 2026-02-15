@@ -140,7 +140,7 @@ export class PermissionManager {
    * Returns the current list of channel IDs the user is authorized for
    * Called during heartbeat permission refresh
    */
-  async refreshPermissions(userId: string, eventId: string): Promise<string[]> {
+  async refreshPermissions(userId: string, _eventId: string): Promise<string[]> {
     try {
       const channelIds = await this.getUserChannelsFromRedis(userId);
       logger.debug(`Refreshed permissions for user ${userId}: ${channelIds.length} channels`);

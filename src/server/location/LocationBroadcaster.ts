@@ -66,7 +66,7 @@ export class LocationBroadcaster {
 
     const positions: LocationPosition[] = [];
 
-    for (const [userId, position] of this.latestPositions.entries()) {
+    for (const [_userId, position] of this.latestPositions.entries()) {
       const age = now - new Date(position.timestamp).getTime();
       const isStale = age > staleThreshold;
 

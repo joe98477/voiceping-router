@@ -594,7 +594,7 @@ function displayMetrics(users: UserConnection[], dispatchInterruptTime: number |
 async function runLoadTest(): Promise<void> {
   console.log('VoicePing PTT Router - Load Test');
   console.log('================================\n');
-  console.log(`Configuration:`);
+  console.log('Configuration:');
   console.log(`  Users: ${NUM_USERS}`);
   console.log(`  Channels: ${NUM_CHANNELS}`);
   console.log(`  Server: ${SERVER_URL}`);
@@ -615,7 +615,7 @@ async function runLoadTest(): Promise<void> {
     await testChannelJoinPhase(users);
     await testPttLoadPhase(users);
     const dispatchInterruptTime = await testDispatchPriorityPhase(users);
-    const revocationTime = await testPermissionRevocationPhase(users, redis);
+    await testPermissionRevocationPhase(users, redis);
 
     // Display metrics
     const metrics = displayMetrics(users, dispatchInterruptTime);

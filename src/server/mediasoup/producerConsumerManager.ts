@@ -86,7 +86,7 @@ export class ProducerConsumerManager {
     producerId: string,
     rtpCapabilities: mediasoupTypes.RtpCapabilities,
     userId: string,
-    channelId: string,
+    _channelId: string,
   ): Promise<{
     id: string;
     producerId: string;

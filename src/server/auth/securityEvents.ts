@@ -4,7 +4,7 @@
  */
 
 import { RedisClientType } from 'redis';
-import { AuditLogger, AuditAction } from './auditLogger';
+import { AuditLogger } from './auditLogger';
 import { createLogger } from '../logger';
 
 const logger = createLogger('SecurityEventsManager');
@@ -116,14 +116,6 @@ export class SecurityEventsManager {
       });
 
       // Store ban details in hash
-      const banInfo: BanInfo = {
-        userId,
-        bannedBy,
-        bannedAt: now,
-        expiresAt,
-        reason: reason || 'No reason provided',
-      };
-
       const banKey = REDIS_KEYS.banDetails(userId);
       await client.hSet(banKey, {
         userId,
