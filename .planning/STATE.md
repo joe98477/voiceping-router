@@ -46,6 +46,7 @@ Progress: [███████████████████████
 | Phase 17 P01 | 284s | 4 | 7 |
 | Phase 17 P02 | 213s | 2 | 7 |
 | Phase 17 P03 | 351s | 2 | 4 |
+| Phase 17 P02 | 701 | 4 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -72,6 +73,9 @@ Recent decisions affecting v4.0 work:
 - Phase 17-01: Opus DTX disabled for continuous stream (comfort noise), FEC always enabled with packetLossPercentage=10
 - Phase 17-01: Confirmation tone default ON, independent toggle from roger beep
 - Phase 17-01: Error haptic pattern: double-buzz at full amplitude (distinct from denied/release)
+- Phase 17-02: ACK flash overrides all PTT button colors with 300ms duration (green=success, red=failure)
+- Phase 17-02: Confirmation tone toggle independent from roger beep (both can be enabled/disabled separately)
+- Phase 17-02: DevStatsScreen debug-only via BuildConfig.DEBUG guard (consumer stats stubbed pending validation)
 - Phase 17-03: 2s grace period for mid-transmission transport failures (reduces false failures)
 - Phase 17-03: 15s orphan cleanup for disconnected transports (aligns with WebRTC auto-recovery window)
 - Phase 17-03: 5 max auto-rejoin attempts with exponential backoff (balances recovery with user control)
