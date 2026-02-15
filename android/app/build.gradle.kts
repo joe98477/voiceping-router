@@ -106,6 +106,9 @@ dependencies {
     implementation("androidx.media3:media3-session:1.5.1")
     implementation("androidx.media3:media3-exoplayer:1.5.1")
 
+    // Google Play Services Location (for location tracking)
+    implementation("com.google.android.gms:play-services-location:21.3.0")
+
     // Testing
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
