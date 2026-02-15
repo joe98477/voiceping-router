@@ -41,6 +41,9 @@ enum class SignalingType {
     @SerializedName("produce")
     PRODUCE,
 
+    @SerializedName("producer-ack")
+    PRODUCER_ACK,
+
     @SerializedName("consume")
     CONSUME,
 

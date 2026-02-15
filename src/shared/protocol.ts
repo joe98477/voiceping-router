@@ -16,6 +16,7 @@ export enum SignalingType {
   CREATE_TRANSPORT = 'create-transport',
   CONNECT_TRANSPORT = 'connect-transport',
   PRODUCE = 'produce',
+  PRODUCER_ACK = 'producer-ack',  // Server confirms audio stream received
   CONSUME = 'consume',
 
   // PTT control

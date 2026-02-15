@@ -439,6 +439,39 @@ export class SignalingHandlers {
   }
 
   /**
+   * Handle PRODUCER_ACK: Server confirms it received audio stream from producer.
+   * Client sends this after producer creation to verify server-side producer exists.
+   * Server responds with success if producer found, error if not.
+   */
+  async handleProducerAck(ctx: ClientContext, message: SignalingMessage): Promise<void> {
+    try {
+      const { producerId, channelId } = message.data as {
+        producerId: string;
+        channelId: string;
+      };
+
+      if (!producerId || !channelId) {
+        throw new Error('producerId and channelId are required');
+      }
+
+      // Verify producer exists via the producer key we track
+      const producerKey = `${ctx.userId}:${channelId}`;
+      const trackedProducerId = this.userProducers.get(producerKey);
+
+      if (trackedProducerId === producerId) {
+        this.sendResponse(ctx, message.id, { success: true, producerId });
+        logger.debug(`Producer ${producerId} acknowledged for ${ctx.userId} in channel ${channelId}`);
+      } else {
+        this.sendError(ctx, message.id, 'Producer not found or does not belong to user');
+        logger.warn(`Producer ACK failed: expected ${trackedProducerId}, got ${producerId} for ${ctx.userId}`);
+      }
+    } catch (err) {
+      logger.error(`Error handling PRODUCER_ACK: ${err instanceof Error ? err.message : String(err)}`);
+      this.sendError(ctx, message.id, err instanceof Error ? err.message : 'Failed to acknowledge producer');
+    }
+  }
+
+  /**
    * Handle CONSUME: Create audio consumer for a producer
    */
   async handleConsume(ctx: ClientContext, message: SignalingMessage): Promise<void> {

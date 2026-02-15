@@ -8,6 +8,7 @@ import com.google.gson.JsonParser
 import com.voiceping.android.data.audio.AudioRouter
 import com.voiceping.android.data.network.dto.SignalingType
 import com.voiceping.android.domain.model.ConsumerNetworkStats
+import com.voiceping.android.domain.model.TransportHealthState
 import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.crow_misia.mediasoup.Consumer
 import io.github.crow_misia.mediasoup.Device
@@ -15,11 +16,15 @@ import io.github.crow_misia.mediasoup.Producer
 import io.github.crow_misia.mediasoup.RecvTransport
 import io.github.crow_misia.mediasoup.SendTransport
 import io.github.crow_misia.mediasoup.Transport
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -84,6 +89,20 @@ class MediasoupClient @Inject constructor(
 
     private val _isInitialized = MutableStateFlow(false)
     val isInitialized: StateFlow<Boolean> = _isInitialized.asStateFlow()
+
+    // Transport health monitoring
+    private val _transportHealthState = MutableStateFlow(TransportHealthState.HEALTHY)
+    val transportHealthState: StateFlow<TransportHealthState> = _transportHealthState.asStateFlow()
+
+    // Monitoring scope and jobs for transport health
+    private val monitorScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var sendGracePeriodJob: Job? = null
+    private var sendOrphanCleanupJob: Job? = null
+    private var recvOrphanCleanupJobs = mutableMapOf<String, Job>()
+
+    // Transport state callbacks
+    var onSendTransportFailed: (() -> Unit)? = null
+    var onSendTransportRecovered: (() -> Unit)? = null
 
     private fun toJsonString(data: com.google.gson.JsonElement?): String {
         return data?.toString() ?: throw IllegalStateException("Failed to serialize to JSON")
@@ -337,18 +356,38 @@ class MediasoupClient @Inject constructor(
                         ) {
                             when (newState) {
                                 "disconnected" -> {
-                                    // ICE connectivity lost — WebRTC will attempt auto-recovery (~15s window)
-                                    // Do NOT remove transport, it may reconnect
-                                    Log.w(TAG, "RecvTransport disconnected, waiting for auto-recovery (channel: $channelId)")
+                                    Log.w(TAG, "RecvTransport disconnected, starting 15s orphan cleanup timer (channel: $channelId)")
+
+                                    recvOrphanCleanupJobs[channelId]?.cancel()
+                                    recvOrphanCleanupJobs[channelId] = monitorScope.launch {
+                                        delay(15_000)
+                                        if (recvTransports.containsKey(channelId)) {
+                                            try {
+                                                val t = recvTransports[channelId]
+                                                val state = t?.connectionState
+                                                if (state == PeerConnection.IceConnectionState.DISCONNECTED || state == PeerConnection.IceConnectionState.FAILED) {
+                                                    Log.w(TAG, "RecvTransport orphaned after 15s for channel: $channelId, cleaning up (silent)")
+                                                    recvTransports.remove(channelId)?.close()
+                                                }
+                                            } catch (e: Exception) {
+                                                Log.e(TAG, "Error during RecvTransport orphan cleanup: $channelId", e)
+                                            }
+                                        }
+                                    }
                                 }
                                 "failed" -> {
-                                    // Auto-recovery failed — cleanup this channel's resources
                                     Log.e(TAG, "RecvTransport failed, cleaning up channel: $channelId")
-                                    // Remove transport — Consumer.onTransportClose will clean up consumers
+                                    recvOrphanCleanupJobs[channelId]?.cancel()
                                     recvTransports.remove(channelId)
+
+                                    // Check if ALL recv transports are gone + send transport is gone
+                                    if (recvTransports.isEmpty() && sendTransport == null) {
+                                        _transportHealthState.value = TransportHealthState.FULLY_DISCONNECTED
+                                    }
                                 }
                                 "connected" -> {
                                     Log.d(TAG, "RecvTransport (re)connected: $channelId")
+                                    recvOrphanCleanupJobs[channelId]?.cancel()
                                 }
                             }
                         }
@@ -625,22 +664,92 @@ class MediasoupClient @Inject constructor(
                         ) {
                             when (newState) {
                                 "disconnected" -> {
-                                    // ICE connectivity lost — WebRTC will attempt auto-recovery (~15s window)
-                                    // Do NOT cleanup resources yet, transport may reconnect
-                                    Log.w(TAG, "SendTransport disconnected, waiting for auto-recovery")
+                                    // ICE connectivity lost — hold for grace period before declaring failure
+                                    Log.w(TAG, "SendTransport disconnected, starting 2s grace period")
+
+                                    // Cancel any previous grace period job
+                                    sendGracePeriodJob?.cancel()
+
+                                    sendGracePeriodJob = monitorScope.launch {
+                                        delay(2000) // 2 second grace period per user decision
+
+                                        // Check if transport recovered during grace period
+                                        if (sendTransport != null) {
+                                            try {
+                                                val currentState = transport.connectionState
+                                                if (currentState == PeerConnection.IceConnectionState.DISCONNECTED || currentState == PeerConnection.IceConnectionState.FAILED) {
+                                                    Log.e(TAG, "SendTransport still $currentState after 2s grace period")
+
+                                                    // Determine if this is partial or full failure
+                                                    val hasWorkingRecvTransport = recvTransports.values.isNotEmpty()
+                                                    if (hasWorkingRecvTransport) {
+                                                        _transportHealthState.value = TransportHealthState.SEND_DEGRADED
+                                                    } else {
+                                                        _transportHealthState.value = TransportHealthState.FULLY_DISCONNECTED
+                                                    }
+
+                                                    // Force-release PTT if transmitting
+                                                    onSendTransportFailed?.invoke()
+                                                }
+                                            } catch (e: Exception) {
+                                                Log.e(TAG, "Error checking transport state after grace period", e)
+                                                _transportHealthState.value = TransportHealthState.SEND_DEGRADED
+                                                onSendTransportFailed?.invoke()
+                                            }
+                                        }
+                                    }
+
+                                    // Start 15s orphan cleanup timer
+                                    sendOrphanCleanupJob?.cancel()
+                                    sendOrphanCleanupJob = monitorScope.launch {
+                                        delay(15_000) // 15 second orphan cleanup per user decision
+                                        if (sendTransport != null) {
+                                            try {
+                                                val currentState = transport.connectionState
+                                                if (currentState == PeerConnection.IceConnectionState.DISCONNECTED || currentState == PeerConnection.IceConnectionState.FAILED) {
+                                                    Log.w(TAG, "SendTransport orphaned after 15s, cleaning up (silent)")
+                                                    audioProducer?.close()
+                                                    audioProducer = null
+                                                    cleanupAudioResources()
+                                                    sendTransport?.close()
+                                                    sendTransport = null
+                                                }
+                                            } catch (e: Exception) {
+                                                Log.e(TAG, "Error during orphan cleanup", e)
+                                            }
+                                        }
+                                    }
                                 }
                                 "failed" -> {
-                                    // Auto-recovery failed — manual cleanup required
-                                    // Close producer and audio resources, null the transport
-                                    // Next PTT press will recreate SendTransport
-                                    Log.e(TAG, "SendTransport failed, cleaning up producer and transport")
+                                    // Terminal failure — immediate cleanup
+                                    Log.e(TAG, "SendTransport failed (terminal), cleaning up")
+                                    sendGracePeriodJob?.cancel()
+                                    sendOrphanCleanupJob?.cancel()
+
                                     audioProducer?.close()
                                     audioProducer = null
                                     cleanupAudioResources()
                                     sendTransport = null
+
+                                    val hasWorkingRecvTransport = recvTransports.values.isNotEmpty()
+                                    _transportHealthState.value = if (hasWorkingRecvTransport) {
+                                        TransportHealthState.SEND_DEGRADED
+                                    } else {
+                                        TransportHealthState.FULLY_DISCONNECTED
+                                    }
+
+                                    onSendTransportFailed?.invoke()
                                 }
                                 "connected" -> {
                                     Log.d(TAG, "SendTransport (re)connected")
+                                    sendGracePeriodJob?.cancel()
+                                    sendOrphanCleanupJob?.cancel()
+
+                                    // Auto-recover to healthy state (silent, no toast per user decision)
+                                    if (_transportHealthState.value == TransportHealthState.SEND_DEGRADED) {
+                                        _transportHealthState.value = TransportHealthState.HEALTHY
+                                        onSendTransportRecovered?.invoke()
+                                    }
                                 }
                             }
                         }
@@ -852,6 +961,14 @@ class MediasoupClient @Inject constructor(
         // Device capabilities (loaded state) remain valid across transport teardown/recreation.
 
         Log.d(TAG, "Cleanup complete")
+    }
+
+    /**
+     * Reset transport health state to HEALTHY.
+     * Used by ChannelRepository when starting auto-rejoin.
+     */
+    fun resetTransportHealth() {
+        _transportHealthState.value = TransportHealthState.HEALTHY
     }
 
     companion object {

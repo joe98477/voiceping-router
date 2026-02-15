@@ -363,6 +363,10 @@ export class SignalingServer {
           await this.handlers.handleProduce(ctx, message);
           break;
 
+        case SignalingType.PRODUCER_ACK:
+          await this.handlers.handleProducerAck(ctx, message);
+          break;
+
         case SignalingType.CONSUME:
           await this.handlers.handleConsume(ctx, message);
           break;
