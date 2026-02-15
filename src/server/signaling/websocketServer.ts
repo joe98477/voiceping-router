@@ -124,6 +124,13 @@ export class SignalingServer {
     // Extract client IP for rate limiting
     const ip = info.req.socket.remoteAddress || 'unknown';
 
+    // Defense in depth: Reject non-TLS WebSocket in production
+    if (config.server.nodeEnv === 'production' && !info.secure) {
+      logger.warn(`Connection rejected: Cleartext WebSocket not allowed in production (IP: ${ip})`);
+      callback(false, 403, 'TLS required');
+      return;
+    }
+
     // Check connection rate limit
     const connectionLimit = await rateLimiter.consumeConnection(ip);
     if (!connectionLimit.allowed) {
