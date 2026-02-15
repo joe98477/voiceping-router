@@ -168,6 +168,8 @@ class ChannelListViewModel @Inject constructor(
     val notificationPermissionGranted: StateFlow<Boolean> = _notificationPermissionGranted.asStateFlow()
     private val _showSettingsRedirect = MutableStateFlow<String?>(null)
     val showSettingsRedirect: StateFlow<String?> = _showSettingsRedirect.asStateFlow()
+    private val _showRationaleFor = MutableStateFlow<String?>(null)
+    val showRationaleFor: StateFlow<String?> = _showRationaleFor.asStateFlow()
 
     // Battery optimization tracking
     private val _showBatteryOptimizationPrompt = MutableStateFlow(false)
@@ -349,6 +351,18 @@ class ChannelListViewModel @Inject constructor(
         _showSettingsRedirect.value = null
     }
 
+    fun showRationale(permission: String) {
+        _showRationaleFor.value = permission
+    }
+
+    fun dismissRationale() {
+        _showRationaleFor.value = null
+    }
+
+    fun onRationaleGrantClicked(permission: String) {
+        permissionManager.markRequested(permission)
+    }
+
     fun requestPermissionOrRedirect(permission: String): Boolean {
         return if (permissionManager.shouldRedirectToSettings(permission)) {
             _showSettingsRedirect.value = permission
@@ -369,7 +383,17 @@ class ChannelListViewModel @Inject constructor(
     // PTT actions
     fun onPttPressed() {
         if (!permissionManager.hasMicPermission()) {
-            _toastMessage.value = "Microphone permission required for PTT"
+            // Check if should redirect to settings (2+ denials)
+            if (permissionManager.shouldRedirectToSettings(PermissionManager.PERMISSION_MIC)) {
+                _showSettingsRedirect.value = PermissionManager.PERMISSION_MIC
+                return
+            }
+
+            // Check if permanently denied (system won't show dialog)
+            // Note: This check requires Activity context, handled in UI layer
+
+            // Otherwise, show rationale dialog
+            _showRationaleFor.value = PermissionManager.PERMISSION_MIC
             return
         }
 

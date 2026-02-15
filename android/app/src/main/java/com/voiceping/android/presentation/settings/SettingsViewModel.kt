@@ -1,5 +1,6 @@
 package com.voiceping.android.presentation.settings
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.voiceping.android.data.audio.AudioRouter
@@ -10,8 +11,11 @@ import com.voiceping.android.domain.model.PttMode
 import com.voiceping.android.domain.model.PttTargetMode
 import com.voiceping.android.domain.model.VolumeKeyPttConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -19,8 +23,22 @@ import javax.inject.Inject
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
-    private val audioRouter: AudioRouter
+    private val audioRouter: AudioRouter,
+    private val permissionManager: com.voiceping.android.data.permissions.PermissionManager,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
+
+    // Permission states
+    private val _micPermissionGranted = MutableStateFlow(false)
+    val micPermissionGranted: StateFlow<Boolean> = _micPermissionGranted.asStateFlow()
+    private val _locationPermissionGranted = MutableStateFlow(false)
+    val locationPermissionGranted: StateFlow<Boolean> = _locationPermissionGranted.asStateFlow()
+    private val _notificationPermissionGranted = MutableStateFlow(false)
+    val notificationPermissionGranted: StateFlow<Boolean> = _notificationPermissionGranted.asStateFlow()
+
+    init {
+        refreshPermissions()
+    }
 
     // PTT Settings
     val pttMode: StateFlow<PttMode> = settingsRepository.getPttMode()
@@ -135,5 +153,16 @@ class SettingsViewModel @Inject constructor(
 
     fun setBootAutoStartEnabled(enabled: Boolean) = viewModelScope.launch {
         settingsRepository.setBootAutoStartEnabled(enabled)
+    }
+
+    // Permission management
+    fun refreshPermissions() {
+        _micPermissionGranted.value = permissionManager.hasMicPermission()
+        _locationPermissionGranted.value = permissionManager.hasLocationPermission()
+        _notificationPermissionGranted.value = permissionManager.hasNotificationPermission()
+    }
+
+    fun openAppSettings() {
+        permissionManager.openAppSettings(context)
     }
 }

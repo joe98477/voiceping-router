@@ -1,5 +1,7 @@
 package com.voiceping.android.presentation.settings
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -26,17 +28,22 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.voiceping.android.domain.model.AudioMixMode
 import com.voiceping.android.domain.model.AudioRoute
 import com.voiceping.android.domain.model.PttMode
 import com.voiceping.android.domain.model.PttTargetMode
 import com.voiceping.android.domain.model.VolumeKeyPttConfig
+import com.voiceping.android.presentation.permissions.PermissionSettingsSection
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -46,6 +53,21 @@ fun SettingsScreen(
     onNavigateBack: () -> Unit = {},
     onNavigateToButtonDetection: () -> Unit = {}
 ) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    // Lifecycle observer to refresh permissions on resume
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.refreshPermissions()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
     // Collect all settings state
     val pttMode by viewModel.pttMode.collectAsState()
     val toggleMaxDuration by viewModel.toggleMaxDuration.collectAsState()
@@ -61,6 +83,19 @@ fun SettingsScreen(
     val bluetoothPttEnabled by viewModel.bluetoothPttEnabled.collectAsState()
     val bluetoothPttButtonKeycode by viewModel.bluetoothPttButtonKeycode.collectAsState()
     val bootAutoStartEnabled by viewModel.bootAutoStartEnabled.collectAsState()
+
+    // Permission states
+    val micPermissionGranted by viewModel.micPermissionGranted.collectAsState()
+    val locationPermissionGranted by viewModel.locationPermissionGranted.collectAsState()
+    val notificationPermissionGranted by viewModel.notificationPermissionGranted.collectAsState()
+
+    // Single permission launcher
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        // Refresh permissions after result
+        viewModel.refreshPermissions()
+    }
 
     Scaffold(
         topBar = {
@@ -79,6 +114,21 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
+            // Permissions Section
+            item {
+                PermissionSettingsSection(
+                    micGranted = micPermissionGranted,
+                    locationGranted = locationPermissionGranted,
+                    notificationGranted = notificationPermissionGranted,
+                    onRequestPermission = { permission ->
+                        permissionLauncher.launch(permission)
+                    },
+                    onOpenSettings = {
+                        viewModel.openAppSettings()
+                    }
+                )
+            }
+
             // PTT Settings Section
             item {
                 Spacer(modifier = Modifier.height(16.dp))

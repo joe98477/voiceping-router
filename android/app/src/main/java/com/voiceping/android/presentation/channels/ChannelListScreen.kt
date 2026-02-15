@@ -26,6 +26,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Headset
+import androidx.compose.material.icons.filled.LocationOff
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.VolumeOff
@@ -37,6 +39,7 @@ import com.voiceping.android.domain.model.AudioOutputDevice
 import com.voiceping.android.presentation.settings.ButtonDetectionDialog
 import com.voiceping.android.presentation.settings.keyCodeToName
 import com.voiceping.android.presentation.permissions.PermissionBanner
+import com.voiceping.android.presentation.permissions.PermissionRationaleDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -53,6 +56,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -102,6 +106,7 @@ fun ChannelListScreen(
     val locationPermissionGranted by viewModel.locationPermissionGranted.collectAsState()
     val notificationPermissionGranted by viewModel.notificationPermissionGranted.collectAsState()
     val showSettingsRedirect by viewModel.showSettingsRedirect.collectAsState()
+    val showRationaleFor by viewModel.showRationaleFor.collectAsState()
 
     // Hardware button settings
     val volumeKeyPttConfig by viewModel.volumeKeyPttConfig.collectAsState()
@@ -120,6 +125,28 @@ fun ChannelListScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     var drawerOpen by remember { mutableStateOf(false) }
     var volumeDialogChannelId by remember { mutableStateOf<String?>(null) }
+
+    // Permission launcher for rationale dialog
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        // showRationaleFor will be dismissed when launcher is triggered
+        // Refresh permission states
+        viewModel.refreshPermissionStates()
+    }
+
+    // Notification permission revocation warning
+    var notificationWarningShown by remember { mutableStateOf(false) }
+    LaunchedEffect(notificationPermissionGranted) {
+        if (!notificationPermissionGranted && !notificationWarningShown) {
+            notificationWarningShown = true
+            android.widget.Toast.makeText(
+                context,
+                "Background audio may stop without notification permission",
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+        }
+    }
 
     // Lifecycle observer for permission re-checking on resume
     DisposableEffect(lifecycleOwner) {
@@ -229,6 +256,23 @@ fun ChannelListScreen(
                             }
                         }
 
+                        // Location icon
+                        Icon(
+                            imageVector = if (locationPermissionGranted) {
+                                Icons.Default.LocationOn
+                            } else {
+                                Icons.Default.LocationOff
+                            },
+                            contentDescription = "Location sharing: ${if (locationPermissionGranted) "on" else "off"}",
+                            modifier = Modifier.size(18.dp),
+                            tint = if (locationPermissionGranted) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+
                         // Audio output device icon
                         Icon(
                             imageVector = when (currentOutputDevice) {
@@ -321,9 +365,8 @@ fun ChannelListScreen(
                         },
                         actionLabel = "Fix",
                         onAction = {
-                            // For now, open system settings until in-app permission section is built (Plan 02)
-                            val permissionManager = com.voiceping.android.data.permissions.PermissionManager(context)
-                            permissionManager.openAppSettings(context)
+                            // Navigate to in-app settings screen
+                            onSettings()
                         }
                     )
                 }
@@ -408,6 +451,19 @@ fun ChannelListScreen(
                 detectedKeyName = detectedKeyCode?.let { keyCodeToName(it) },
                 onDismiss = { viewModel.stopButtonDetection() },
                 onConfirm = { viewModel.confirmDetectedButton() }
+            )
+        }
+
+        // Permission rationale dialog
+        showRationaleFor?.let { permission ->
+            PermissionRationaleDialog(
+                permission = permission,
+                onDismiss = { viewModel.dismissRationale() },
+                onGrant = {
+                    viewModel.dismissRationale()
+                    viewModel.onRationaleGrantClicked(permission)
+                    permissionLauncher.launch(permission)
+                }
             )
         }
 
