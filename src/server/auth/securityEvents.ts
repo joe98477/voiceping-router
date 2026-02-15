@@ -97,12 +97,7 @@ export class SecurityEventsManager {
    * @param durationMs - Ban duration in milliseconds (undefined = permanent)
    * @param reason - Reason for ban
    */
-  async banUser(
-    userId: string,
-    bannedBy: string,
-    durationMs?: number,
-    reason?: string
-  ): Promise<void> {
+  async banUser(userId: string, bannedBy: string, durationMs?: number, reason?: string): Promise<void> {
     try {
       const client = this.getRedisClient();
 
@@ -236,7 +231,9 @@ export class SecurityEventsManager {
 
       return true;
     } catch (err) {
-      logger.error(`Failed to check ban status for user ${userId}: ${err instanceof Error ? err.message : String(err)}`);
+      logger.error(
+        `Failed to check ban status for user ${userId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
       // Fail open: if we can't check ban status, allow connection
       return false;
     }
@@ -258,11 +255,7 @@ export class SecurityEventsManager {
       const now = Date.now();
 
       // Get all users with score >= now (active bans)
-      const bannedUserIds = await client.zRangeByScore(
-        REDIS_KEYS.bannedUsers,
-        now,
-        Number.MAX_SAFE_INTEGER
-      );
+      const bannedUserIds = await client.zRangeByScore(REDIS_KEYS.bannedUsers, now, Number.MAX_SAFE_INTEGER);
 
       // Fetch ban details for each user
       const bans: BanInfo[] = [];
@@ -335,16 +328,11 @@ export class SecurityEventsManager {
       const since = options?.since || 0;
 
       // Get events from sorted set (newest first)
-      const events = await client.zRange(
-        REDIS_KEYS.securityEvents,
-        since,
-        Number.MAX_SAFE_INTEGER,
-        {
-          BY: 'SCORE',
-          REV: true,
-          LIMIT: { offset: 0, count: limit },
-        }
-      );
+      const events = await client.zRange(REDIS_KEYS.securityEvents, since, Number.MAX_SAFE_INTEGER, {
+        BY: 'SCORE',
+        REV: true,
+        LIMIT: { offset: 0, count: limit },
+      });
 
       // Parse events
       const parsedEvents = events.map((json) => JSON.parse(json) as SecurityEvent);

@@ -1,7 +1,7 @@
-import ChannelType = require("./channeltype");
-import MessageType = require("./messagetype");
+import ChannelType = require('./channeltype');
+import MessageType = require('./messagetype');
 
-export type numberOrString = number|string;
+export type numberOrString = number | string;
 
 export interface IMessage {
   channelType: ChannelType;
@@ -9,5 +9,5 @@ export interface IMessage {
   fromId: numberOrString;
   toId: numberOrString;
   messageId?: string;
-  payload: object|string;
+  payload: object | string;
 }

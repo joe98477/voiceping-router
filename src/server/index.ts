@@ -69,9 +69,9 @@ async function main() {
             uptime: process.uptime(),
             workers: workerPool.getWorkerCount(),
             connections: signalingServer?.getConnectedClients() || 0,
-          })
+          }),
         );
-      // SECURITY AUDIT: Dev-only - guarded by NODE_ENV check, disabled in production
+        // SECURITY AUDIT: Dev-only - guarded by NODE_ENV check, disabled in production
       } else if (req.url === '/dev/seed-test-data' && req.method === 'POST' && process.env.NODE_ENV !== 'production') {
         // Dev-only endpoint: Seed Redis with test users
         (async () => {
@@ -93,7 +93,10 @@ async function main() {
             // Seed channel-user mappings
             for (const channelId of ['test-channel-1', 'test-channel-2']) {
               const channelKey = `g.${channelId}.u`;
-              await redis.sAdd(channelKey, testUsers.map(u => u.userId));
+              await redis.sAdd(
+                channelKey,
+                testUsers.map((u) => u.userId),
+              );
             }
 
             // Seed event-channel mapping
@@ -102,14 +105,14 @@ async function main() {
             logger.info('Test data seeded successfully');
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: true, users: testUsers.map(u => u.userId) }));
+            res.end(JSON.stringify({ success: true, users: testUsers.map((u) => u.userId) }));
           } catch (err: any) {
             logger.error('Failed to seed test data:', err);
             res.writeHead(500, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Failed to seed test data', message: err.message }));
           }
         })();
-      // SECURITY AUDIT: Dev-only - guarded by NODE_ENV check, disabled in production
+        // SECURITY AUDIT: Dev-only - guarded by NODE_ENV check, disabled in production
       } else if (req.url === '/test' && req.method === 'GET' && process.env.NODE_ENV !== 'production') {
         // Serve test demo page (development only)
         const fs = require('fs');
@@ -125,7 +128,7 @@ async function main() {
           res.writeHead(200, { 'Content-Type': 'text/html' });
           res.end(data);
         });
-      // SECURITY AUDIT: Dev-only - guarded by NODE_ENV check, disabled in production
+        // SECURITY AUDIT: Dev-only - guarded by NODE_ENV check, disabled in production
       } else if (req.url === '/test/pttDemo.js' && req.method === 'GET' && process.env.NODE_ENV !== 'production') {
         // Serve compiled test page JavaScript
         const fs = require('fs');
@@ -141,7 +144,7 @@ async function main() {
           res.writeHead(200, { 'Content-Type': 'application/javascript' });
           res.end(data);
         });
-      // SECURITY AUDIT: Dev-only - guarded by NODE_ENV check, disabled in production
+        // SECURITY AUDIT: Dev-only - guarded by NODE_ENV check, disabled in production
       } else if (req.url === '/test/phase2' && req.method === 'GET' && process.env.NODE_ENV !== 'production') {
         // Serve Phase 2 E2E test page (development only)
         const fs = require('fs');
@@ -157,7 +160,7 @@ async function main() {
           res.writeHead(200, { 'Content-Type': 'text/html' });
           res.end(data);
         });
-      // SECURITY AUDIT: Dev-only - guarded by NODE_ENV check, disabled in production
+        // SECURITY AUDIT: Dev-only - guarded by NODE_ENV check, disabled in production
       } else if (req.url === '/test/phase2.js' && req.method === 'GET' && process.env.NODE_ENV !== 'production') {
         // Serve compiled Phase 2 test page JavaScript
         const fs = require('fs');
@@ -167,7 +170,9 @@ async function main() {
         fs.readFile(jsPath, 'utf8', (err: Error | null, data: string) => {
           if (err) {
             res.writeHead(404, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Phase 2 test page JavaScript not found. Run: npm run build:test-phase2' }));
+            res.end(
+              JSON.stringify({ error: 'Phase 2 test page JavaScript not found. Run: npm run build:test-phase2' }),
+            );
             return;
           }
           res.writeHead(200, { 'Content-Type': 'application/javascript' });
@@ -188,7 +193,7 @@ async function main() {
       sessionStore,
       (channelId, msg, excludeUserId) => signalingServer.broadcastToChannel(channelId, msg, excludeUserId),
       permissionManager,
-      auditLogger
+      auditLogger,
     );
 
     const signalingServer = new SignalingServer(server, handlers, permissionManager, auditLogger);
@@ -207,7 +212,7 @@ async function main() {
       (channelId, msg, excludeUserId) => signalingServer.broadcastToChannel(channelId, msg, excludeUserId),
       (userId, msg) => signalingServer.sendToUser(userId, msg),
       auditLogger,
-      handlers
+      handlers,
     );
     handlers.setDispatchHandlers(dispatchHandlers);
     logger.info('DispatchHandlers initialized');
@@ -216,7 +221,7 @@ async function main() {
     const adminHandlers = new AdminHandlers(
       auditLogger,
       (userId, reason) => signalingServer.disconnectUser(userId, reason),
-      securityEventsManager
+      securityEventsManager,
     );
     handlers.setAdminHandlers(adminHandlers);
     logger.info('AdminHandlers initialized');
@@ -225,31 +230,32 @@ async function main() {
     handlers.setSecurityEventsManager(securityEventsManager);
 
     // PermissionSyncManager
-    const permissionSyncManager = new PermissionSyncManager(
-      (userId, eventId, newChannelIds, action) => {
-        signalingServer.pushPermissionUpdate(userId, newChannelIds, action);
-      }
-    );
+    const permissionSyncManager = new PermissionSyncManager((userId, eventId, newChannelIds, action) => {
+      signalingServer.pushPermissionUpdate(userId, newChannelIds, action);
+    });
     await permissionSyncManager.start();
     logger.info('PermissionSyncManager started');
 
-    logger.info('Phase 2 modules initialized: PermissionManager, AuditLogger, RateLimiter, SecurityEvents, PermissionSync');
+    logger.info(
+      'Phase 2 modules initialized: PermissionManager, AuditLogger, RateLimiter, SecurityEvents, PermissionSync',
+    );
 
     // 7.6. Create location services (Phase 18)
     const locationStore = new LocationStore('./data/locations.db');
-    const locationBroadcaster = new LocationBroadcaster(
-      (message) => signalingServer.sendToAllDispatchUsers(message)
-    );
+    const locationBroadcaster = new LocationBroadcaster((message) => signalingServer.sendToAllDispatchUsers(message));
     handlers.setLocationServices(locationStore, locationBroadcaster);
     logger.info('Location services initialized');
 
     // Start hourly cleanup interval
-    const locationCleanupInterval = setInterval(() => {
-      const deleted = locationStore.cleanupOldLocations();
-      if (deleted > 0) {
-        logger.info(`Location cleanup: removed ${deleted} records older than 24h`);
-      }
-    }, 60 * 60 * 1000); // Every hour
+    const locationCleanupInterval = setInterval(
+      () => {
+        const deleted = locationStore.cleanupOldLocations();
+        if (deleted > 0) {
+          logger.info(`Location cleanup: removed ${deleted} records older than 24h`);
+        }
+      },
+      60 * 60 * 1000,
+    ); // Every hour
 
     // 8. Start HTTP server
     server.listen(config.server.port, config.server.host, () => {

@@ -22,12 +22,7 @@ interface MembershipUpdateEvent {
 /**
  * Permission change callback type
  */
-type PermissionChangeCallback = (
-  userId: string,
-  eventId: string,
-  newChannelIds: string[],
-  action: string
-) => void;
+type PermissionChangeCallback = (userId: string, eventId: string, newChannelIds: string[], action: string) => void;
 
 /**
  * Permission synchronization manager
@@ -159,7 +154,9 @@ export class PermissionSyncManager {
         return;
       }
 
-      logger.info(`Permission update: user=${event.userId}, event=${event.eventId}, action=${event.action}, channels=${event.channelIds.length}`);
+      logger.info(
+        `Permission update: user=${event.userId}, event=${event.eventId}, action=${event.action}, channels=${event.channelIds.length}`,
+      );
 
       // Call callback with extracted fields
       this.callback(event.userId, event.eventId, event.channelIds, event.action);

@@ -5,11 +5,7 @@
 
 import { RedisClientType } from 'redis';
 import { createLogger } from '../logger';
-import {
-  UserRole,
-  AuthenticatedUser,
-  PermissionSet,
-} from '../../shared/types';
+import { UserRole, AuthenticatedUser, PermissionSet } from '../../shared/types';
 
 const logger = createLogger('PermissionManager');
 
@@ -85,9 +81,7 @@ export class PermissionManager {
 
     // Check if channel is in user's assigned channels
     const hasAccess = user.channelIds.includes(channelId);
-    logger.debug(
-      `User ${user.userId} ${hasAccess ? 'can' : 'cannot'} join channel ${channelId}`
-    );
+    logger.debug(`User ${user.userId} ${hasAccess ? 'can' : 'cannot'} join channel ${channelId}`);
     return hasAccess;
   }
 
@@ -149,15 +143,11 @@ export class PermissionManager {
   async refreshPermissions(userId: string, eventId: string): Promise<string[]> {
     try {
       const channelIds = await this.getUserChannelsFromRedis(userId);
-      logger.debug(
-        `Refreshed permissions for user ${userId}: ${channelIds.length} channels`
-      );
+      logger.debug(`Refreshed permissions for user ${userId}: ${channelIds.length} channels`);
       return channelIds;
     } catch (err) {
       logger.error(
-        `Failed to refresh permissions for user ${userId}: ${
-          err instanceof Error ? err.message : String(err)
-        }`
+        `Failed to refresh permissions for user ${userId}: ${err instanceof Error ? err.message : String(err)}`,
       );
       // Return empty array on error (fail-safe: deny access)
       return [];
@@ -185,9 +175,7 @@ export class PermissionManager {
       return channels || [];
     } catch (err) {
       logger.error(
-        `Failed to get channels from Redis for user ${userId}: ${
-          err instanceof Error ? err.message : String(err)
-        }`
+        `Failed to get channels from Redis for user ${userId}: ${err instanceof Error ? err.message : String(err)}`,
       );
       return [];
     }

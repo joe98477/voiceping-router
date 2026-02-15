@@ -57,9 +57,7 @@ export class MicrophoneManager {
       if (error instanceof Error) {
         // Handle specific getUserMedia errors
         if (error.name === 'NotAllowedError') {
-          throw new Error(
-            'Microphone permission denied. Please allow microphone access in browser settings.'
-          );
+          throw new Error('Microphone permission denied. Please allow microphone access in browser settings.');
         } else if (error.name === 'NotFoundError') {
           throw new Error('No microphone found. Please connect a microphone.');
         } else if (error.name === 'NotReadableError') {

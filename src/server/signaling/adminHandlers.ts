@@ -30,7 +30,7 @@ export class AdminHandlers {
   constructor(
     auditLogger: AuditLogger,
     disconnectUser: DisconnectUserCallback,
-    securityEventsManager: SecurityEventsManager
+    securityEventsManager: SecurityEventsManager,
   ) {
     this.auditLogger = auditLogger;
     this.disconnectUser = disconnectUser;
@@ -140,7 +140,7 @@ export class AdminHandlers {
         targetUserId,
         ctx.userId, // bannedBy
         duration,
-        reason
+        reason,
       );
 
       // Force-disconnect banned user if currently connected
@@ -160,7 +160,9 @@ export class AdminHandlers {
         },
       });
 
-      logger.info(`User ${ctx.userId} banned ${targetUserId} (duration: ${duration || 'permanent'}, reason: ${reason || 'none'})`);
+      logger.info(
+        `User ${ctx.userId} banned ${targetUserId} (duration: ${duration || 'permanent'}, reason: ${reason || 'none'})`,
+      );
     } catch (err) {
       logger.error(`Error handling BAN_USER: ${err instanceof Error ? err.message : String(err)}`);
       throw err;

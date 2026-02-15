@@ -1,9 +1,9 @@
-import MessageType = require("./messagetype");
-import { packer } from "./packer";
-import * as recorder from "./recorder";
-import * as Server from "./server";
+import MessageType = require('./messagetype');
+import { packer } from './packer';
+import * as recorder from './recorder';
+import * as Server from './server';
 
-const ChannelType = require("./channeltype"); /* tslint:disable-line:no-var-requires */
+const ChannelType = require('./channeltype'); /* tslint:disable-line:no-var-requires */
 
 /* tslint:disable:object-literal-shorthand*/
 const VoicePing = {
@@ -11,7 +11,7 @@ const VoicePing = {
   MessageType: MessageType,
   Server: Server,
   decoder: packer,
-  mediaRecord: recorder
+  mediaRecord: recorder,
 };
 /* tslint:enable:object-literal-shorthand*/
 

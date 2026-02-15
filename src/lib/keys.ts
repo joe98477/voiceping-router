@@ -1,26 +1,26 @@
-import * as util from "util";
+import * as util from 'util';
 
-import config = require("./config");
-import { numberOrString } from "./types";
+import config = require('./config');
+import { numberOrString } from './types';
 
 const NETWORK = config.network;
 
-const REGISTER_DEVICES_COUNT = "c.r.d";
-const GROUPS_PUSH_COUNT = "p.g.c";
-const USERS_PUSH_COUNT = "p.c.u";
+const REGISTER_DEVICES_COUNT = 'c.r.d';
+const GROUPS_PUSH_COUNT = 'p.g.c';
+const USERS_PUSH_COUNT = 'p.c.u';
 
 // LISTS
-const USER_MESSAGES_KEY_FORMAT = "m.%s.u";
-const GROUP_MESSAGES_KEY_FORMAT = "%s._g_%s";
+const USER_MESSAGES_KEY_FORMAT = 'm.%s.u';
+const GROUP_MESSAGES_KEY_FORMAT = '%s._g_%s';
 // HASHES
 const UUIDS_KEY_FORMAT = `%s_us`;
-const USER_KEY_FORMAT = "u.%s";
-const USER_CURRENT_MESSAGE_KEY_FORMAT = "u.%s.m";
-const GROUP_KEY_FORMAT = "g.%s";
-const MESSAGE_KEY_FORMAT = "m.%s";
+const USER_KEY_FORMAT = 'u.%s';
+const USER_CURRENT_MESSAGE_KEY_FORMAT = 'u.%s.m';
+const GROUP_KEY_FORMAT = 'g.%s';
+const MESSAGE_KEY_FORMAT = 'm.%s';
 // SETS
-const USER_GROUPS_KEY_FORMAT = "u.%s.g";
-const GROUP_USERS_KEY_FORMAT = "g.%s.u";
+const USER_GROUPS_KEY_FORMAT = 'u.%s.g';
+const GROUP_USERS_KEY_FORMAT = 'g.%s.u';
 
 const UUIDS_KEY = util.format(UUIDS_KEY_FORMAT, NETWORK);
 
@@ -29,7 +29,6 @@ function keyForUsersInsideGroup(groupId: numberOrString): string {
 }
 
 export class Keys {
-
   public static forUUIDs() {
     return UUIDS_KEY;
   }
@@ -75,7 +74,7 @@ export class Keys {
   }
 
   public static forMessagesOfGroup(groupId: numberOrString): string {
-    return util.format(GROUP_MESSAGES_KEY_FORMAT, "", groupId);
+    return util.format(GROUP_MESSAGES_KEY_FORMAT, '', groupId);
   }
 
   public static forMessageWithId(messageId: string): string {
@@ -83,7 +82,7 @@ export class Keys {
   }
 
   // HASHES
-  private static readonly GROUP_CURRENT_MESSAGE_KEY_FORMAT = "g:%s:m";
+  private static readonly GROUP_CURRENT_MESSAGE_KEY_FORMAT = 'g:%s:m';
 
   private static keyForGroupsOfUser(userId: numberOrString): string {
     return util.format(USER_GROUPS_KEY_FORMAT, userId);

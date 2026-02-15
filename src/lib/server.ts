@@ -1,26 +1,26 @@
-import * as cluster from "cluster";
+import * as cluster from 'cluster';
 
-import * as dbug from "debug";
-import * as _ from "lodash";
-import * as Q from "q";
-import * as WebSocket from "ws";
-import * as jwt from "jwt-simple";
+import * as dbug from 'debug';
+import * as _ from 'lodash';
+import * as Q from 'q';
+import * as WebSocket from 'ws';
+import * as jwt from 'jwt-simple';
 
-import ChannelType = require("./channeltype");
-import Client, { IClients } from "./client";
-import config = require("./config");
+import ChannelType = require('./channeltype');
+import Client, { IClients } from './client';
+import config = require('./config');
 
-import logger = require("./logger");
-import MessageType = require("./messagetype");
-import { packer } from "./packer";
-import Redis = require("./redis");
-import States from "./states";
-import { IMessage, numberOrString } from "./types";
+import logger = require('./logger');
+import MessageType = require('./messagetype');
+import { packer } from './packer';
+import Redis = require('./redis');
+import States from './states';
+import { IMessage, numberOrString } from './types';
 
-const WORKER_NUMBER = cluster.worker ? cluster.worker.id : "-";
-const dbug1 = dbug("vp:router");
+const WORKER_NUMBER = cluster.worker ? cluster.worker.id : '-';
+const dbug1 = dbug('vp:router');
 function debug(msg: string) {
-  dbug1((cluster.worker ? `worker ${cluster.worker.id} ` : "") + msg);
+  dbug1((cluster.worker ? `worker ${cluster.worker.id} ` : '') + msg);
 }
 
 export interface IServer {
@@ -35,7 +35,6 @@ interface IConnection {
 
 // class Server implements IServer {
 class Server implements IServer {
-
   private clients: IClients = {};
   private sockets = {};
   private deviceTokens = {};
@@ -48,35 +47,39 @@ class Server implements IServer {
       port: 9000,
       server: null,
       verify: this.verifyClient,
-      ...options
+      ...options,
     };
 
-    if (opts.verify) { this.verify = opts.verify; }
+    if (opts.verify) {
+      this.verify = opts.verify;
+    }
 
     States.setMemored(opts.memo);
     States.periodicInspect();
-    if (WORKER_NUMBER.toString() === "1") {
-        Redis.periodicClean();
+    if (WORKER_NUMBER.toString() === '1') {
+      Redis.periodicClean();
     }
 
     // WSS & WS SETUP
     if (opts.server) {
       this.wss = new WebSocket.Server({ server: opts.server, verifyClient: this.verify.bind(this) });
-      logger.info("WebSocket.Server is created");
+      logger.info('WebSocket.Server is created');
     } else {
       this.wss = new WebSocket.Server({ port: opts.port, verifyClient: this.verify.bind(this) });
       logger.info(`WebSocket.Server is created at port ${opts.port}`);
     }
 
-    this.wss.on("connection", this.handleWssConnection.bind(this));
+    this.wss.on('connection', this.handleWssConnection.bind(this));
 
     Redis.subscribeMembershipUpdates((payload) => {
-      if (!payload || payload.action !== "set_user_channels") { return; }
+      if (!payload || payload.action !== 'set_user_channels') {
+        return;
+      }
       const userId = payload.userId;
       const channelIds = payload.channelIds || [];
       States.getGroupsOfUser(userId, (err, currentGroupIds) => {
         const current = currentGroupIds || [];
-        const next = channelIds.map((id) => id + "");
+        const next = channelIds.map((id) => id + '');
         current.forEach((groupId) => {
           if (!next.includes(groupId)) {
             States.removeUserFromGroup(userId, groupId);
@@ -123,15 +126,19 @@ class Server implements IServer {
 
   private handleClientUnregister = (client: Client) => {
     const clientId = client.id;
-    if (!this.clients[clientId]) { return; }
+    if (!this.clients[clientId]) {
+      return;
+    }
 
-    client.removeListener("message", this.handleClientMessage);
-    client.removeListener("unregister", this.handleClientUnregister);
+    client.removeListener('message', this.handleClientMessage);
+    client.removeListener('unregister', this.handleClientUnregister);
     delete this.clients[clientId];
     delete this.sockets[clientId];
-    logger.info(`UNREGISTERED id ${clientId} clients ${Object.keys(this.clients).length}` +
-                ` sockets ${Object.keys(this.sockets).length} wss ${this.wss.clients.size}`);
-  }
+    logger.info(
+      `UNREGISTERED id ${clientId} clients ${Object.keys(this.clients).length}` +
+        ` sockets ${Object.keys(this.sockets).length} wss ${this.wss.clients.size}`,
+    );
+  };
 
   private handleClientMessage = (msg: IMessage, client: Client) => {
     logger.info(`handleClientMessage id ${msg.fromId} to ${msg.toId} messageType ${msg.messageType}`);
@@ -144,15 +151,21 @@ class Server implements IServer {
     } else {
       this.sendMessageToUser(msg);
     }
-  }
+  };
 
-  private registerClient(this: Server, socket: WebSocket, id: numberOrString,
-                         key: string, deviceId: string, user: any) {
+  private registerClient(
+    this: Server,
+    socket: WebSocket,
+    id: numberOrString,
+    key: string,
+    deviceId: string,
+    user: any,
+  ) {
     let client = this.clients[id];
     if (!client) {
       client = new Client(id, user, this);
-      client.addListener("message", this.handleClientMessage);
-      client.addListener("unregister", this.handleClientUnregister);
+      client.addListener('message', this.handleClientMessage);
+      client.addListener('unregister', this.handleClientUnregister);
       this.clients[id] = client;
     }
 
@@ -160,18 +173,25 @@ class Server implements IServer {
     this.sockets[id] = socket;
 
     // tslint:disable-next-line:max-line-length
-    logger.info(`REGISTERED id ${client.id} clients ${Object.keys(this.clients).length} readyState ${socket.readyState} ` +
-                ` sockets ${Object.keys(this.sockets).length} wss ${this.wss.clients.size}`);
+    logger.info(
+      `REGISTERED id ${client.id} clients ${Object.keys(this.clients).length} readyState ${socket.readyState} ` +
+        ` sockets ${Object.keys(this.sockets).length} wss ${this.wss.clients.size}`,
+    );
   }
 
   private getConnectionFromHeaders(headers, log: boolean = false): IConnection {
-    let protocols = headers["sec-websocket-protocol"];
-    if (protocols) { protocols = protocols.split(",").map((entry) => entry.trim()).filter((entry) => entry); }
+    let protocols = headers['sec-websocket-protocol'];
+    if (protocols) {
+      protocols = protocols
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter((entry) => entry);
+    }
     const token0 = protocols ? protocols[0] : null;
-    const deviceId0  = protocols ? protocols[1] : null;
+    const deviceId0 = protocols ? protocols[1] : null;
     const token = headers.token || headers.voicepingtoken || token0;
     const deviceId = headers.device_id || headers.deviceid || deviceId0 || token;
-    const connection = { token, deviceId, key: headers["sec-websocket-key"] };
+    const connection = { token, deviceId, key: headers['sec-websocket-key'] };
     return connection;
   }
 
@@ -180,7 +200,7 @@ class Server implements IServer {
     try {
       const user = jwt.decode(token, config.auth.routerJwtSecret);
       if (user && user.exp && Date.now() / 1000 > user.exp) {
-        throw new Error("Token expired");
+        throw new Error('Token expired');
       }
       deferred.resolve(user);
     } catch (err) {
@@ -204,20 +224,25 @@ class Server implements IServer {
   private verifyClient(this: Server, info, verified) {
     const connection = this.getConnectionFromHeaders(info.req.headers, true);
     const token = connection.token;
-    if (!token) { return verified(false, 401, "Unauthorized"); }
+    if (!token) {
+      return verified(false, 401, 'Unauthorized');
+    }
     this.getUserFromToken(token)
       .then((user) => {
-        return verified(user, 200, "Authorized");
-      }).catch((err) => {
+        return verified(user, 200, 'Authorized');
+      })
+      .catch((err) => {
         logger.error(`verifyClient getUserFromToken ERR ${err}`);
-        return verified(false, 401, "Unauthorized User");
+        return verified(false, 401, 'Unauthorized User');
       });
   }
 
   private handleWssConnection(this: Server, ws: WebSocket, req) {
     const connection = this.getConnectionFromHeaders(req.headers);
     const token = connection.token;
-    if (!token) { return; }
+    if (!token) {
+      return;
+    }
 
     // If deviceId exists on redis, send duplicate login.
     this.getUserFromToken(token)
@@ -241,10 +266,10 @@ class Server implements IServer {
             });
           }
         });
-      }).catch((err) => {
+      })
+      .catch((err) => {
         logger.error(`handleWssConnection getUserFromToken ERR ${err}`);
       });
-
   }
 
   /**
@@ -278,29 +303,29 @@ class Server implements IServer {
     data: Buffer,
     senderId: numberOrString,
     recipientIds: Array<numberOrString>,
-    echo: boolean = false
+    echo: boolean = false,
   ) {
     if (!recipientIds || !(recipientIds instanceof Array) || recipientIds.length <= 0) {
       logger.info(`sendDataToRecipients EMPTY sender ${senderId}`);
       return;
     }
     for (const recipientId of recipientIds) {
-      if (!echo && recipientId.toString() === senderId.toString()) { continue; }
+      if (!echo && recipientId.toString() === senderId.toString()) {
+        continue;
+      }
       this.sendDataToUser(data, recipientId);
     }
   }
 
   private broadcastToGroupWithCheck(this: Server, msg: IMessage, userIds: Array<numberOrString>) {
-    const senderInGroup = userIds
-      ? userIds.map((u) => u.toString()).includes(msg.fromId.toString())
-      : false;
+    const senderInGroup = userIds ? userIds.map((u) => u.toString()).includes(msg.fromId.toString()) : false;
     if (!senderInGroup) {
       this.sendMessageToUser({
         channelType: ChannelType.GROUP,
         fromId: msg.fromId,
         messageType: MessageType.UNAUTHORIZED_GROUP,
-        payload: "Unauthorized Group",
-        toId: msg.fromId
+        payload: 'Unauthorized Group',
+        toId: msg.fromId,
       });
       return;
     }
@@ -330,7 +355,7 @@ class Server implements IServer {
         logger.info(`Redis.getGroupsOfUser id ${msg.fromId} groupIds ${groupIds}`);
       });
     }
-  }
+  };
 }
 
 module.exports = Server;

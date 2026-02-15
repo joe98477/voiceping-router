@@ -43,7 +43,7 @@ export class PttController {
     transportClient: TransportClient,
     microphoneManager: MicrophoneManager,
     audioFeedback: AudioFeedback,
-    options: PttControllerOptions
+    options: PttControllerOptions,
   ) {
     this.signalingClient = signalingClient;
     this.transportClient = transportClient;
@@ -79,9 +79,7 @@ export class PttController {
       // Step 2: Check microphone permission
       const permission = await this.microphoneManager.checkPermission();
       if (permission === 'denied') {
-        throw new Error(
-          'Microphone access denied. Please allow microphone access in browser settings.'
-        );
+        throw new Error('Microphone access denied. Please allow microphone access in browser settings.');
       }
 
       // Step 3: Get audio track from microphone
@@ -91,10 +89,7 @@ export class PttController {
       await this.transportClient.createSendTransport(this.options.channelId);
 
       // Step 5: Produce audio (starts paused)
-      this.producerId = await this.transportClient.produceAudio(
-        this.audioTrack,
-        this.options.channelId
-      );
+      this.producerId = await this.transportClient.produceAudio(this.audioTrack, this.options.channelId);
 
       // Step 6: Create receive transport
       await this.transportClient.createRecvTransport(this.options.channelId);
@@ -276,10 +271,7 @@ export class PttController {
       }
 
       // Request consumer from server
-      const { consumer, track } = await this.transportClient.consumeAudio(
-        producerId,
-        this.options.channelId
-      );
+      const { consumer, track } = await this.transportClient.consumeAudio(producerId, this.options.channelId);
 
       // Create HTML Audio element for playback
       const audioElement = document.createElement('audio');

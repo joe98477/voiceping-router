@@ -241,7 +241,7 @@ export class SignalingClient implements ISignalingClient {
     transportId: string,
     kind: string,
     rtpParameters: object,
-    channelId: string
+    channelId: string,
   ): Promise<SignalingMessage> {
     return this.request(SignalingType.PRODUCE, { transportId, kind, rtpParameters, channelId });
   }

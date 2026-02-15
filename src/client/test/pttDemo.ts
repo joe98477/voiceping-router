@@ -50,7 +50,10 @@ class UserPanel {
   private latencyDisplay: HTMLElement;
   private audioElement: HTMLAudioElement;
 
-  constructor(userId: number, private logger: Logger) {
+  constructor(
+    userId: number,
+    private logger: Logger,
+  ) {
     this.userId = userId;
 
     // Get DOM elements

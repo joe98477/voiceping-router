@@ -64,7 +64,7 @@ export class SignalingServer {
     server: http.Server,
     handlers: SignalingHandlers,
     permissionManager: PermissionManager,
-    auditLogger: AuditLogger
+    auditLogger: AuditLogger,
   ) {
     this.handlers = handlers;
     this.permissionManager = permissionManager;
@@ -105,7 +105,7 @@ export class SignalingServer {
    */
   private verifyClient(
     info: { origin: string; secure: boolean; req: http.IncomingMessage },
-    callback: (result: boolean, code?: number, message?: string) => void
+    callback: (result: boolean, code?: number, message?: string) => void,
   ): void {
     // Run async verification
     this.verifyClientAsync(info, callback).catch((err) => {
@@ -119,7 +119,7 @@ export class SignalingServer {
    */
   private async verifyClientAsync(
     info: { origin: string; secure: boolean; req: http.IncomingMessage },
-    callback: (result: boolean, code?: number, message?: string) => void
+    callback: (result: boolean, code?: number, message?: string) => void,
   ): Promise<void> {
     // Extract client IP for rate limiting
     const ip = info.req.socket.remoteAddress || 'unknown';
@@ -160,9 +160,7 @@ export class SignalingServer {
       const protocols = info.req.headers['sec-websocket-protocol'];
       if (protocols) {
         // sec-websocket-protocol header is comma-separated string
-        const protocolList = typeof protocols === 'string'
-          ? protocols.split(',').map(p => p.trim())
-          : protocols;
+        const protocolList = typeof protocols === 'string' ? protocols.split(',').map((p) => p.trim()) : protocols;
         for (const protocol of protocolList) {
           if (protocol === 'voiceping') continue;
           // Support both raw JWT and legacy "token-<jwt>" format
@@ -571,10 +569,13 @@ export class SignalingServer {
     for (const ctx of this.clients.values()) {
       if (ctx.userId === userId) {
         ctx.authorizedChannels = new Set(newChannelIds);
-        this.sendToClient(ctx.ws, createMessage(SignalingType.PERMISSION_UPDATE, {
-          channelIds: newChannelIds,
-          action,
-        }));
+        this.sendToClient(
+          ctx.ws,
+          createMessage(SignalingType.PERMISSION_UPDATE, {
+            channelIds: newChannelIds,
+            action,
+          }),
+        );
         logger.info(`Permission update pushed to ${userId}: ${action}`);
       }
     }
@@ -598,7 +599,9 @@ export class SignalingServer {
 
         // Heartbeat-based permission refresh
         this.refreshClientPermissions(ctx).catch((err) => {
-          logger.error(`Error refreshing permissions for ${ctx.userId}: ${err instanceof Error ? err.message : String(err)}`);
+          logger.error(
+            `Error refreshing permissions for ${ctx.userId}: ${err instanceof Error ? err.message : String(err)}`,
+          );
         });
       }
     }, 30000); // 30 second interval
@@ -682,7 +685,9 @@ export class SignalingServer {
         this.sendToClient(ctx.ws, updateMessage);
       }
     } catch (err) {
-      logger.error(`Failed to refresh permissions for ${ctx.userId}: ${err instanceof Error ? err.message : String(err)}`);
+      logger.error(
+        `Failed to refresh permissions for ${ctx.userId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 

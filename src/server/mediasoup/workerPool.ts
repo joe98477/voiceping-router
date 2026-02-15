@@ -126,9 +126,7 @@ export class WorkerPool {
     logger.info(`  Total routers: ${totalRouters}`);
 
     stats.forEach((stat) => {
-      logger.info(
-        `  Worker ${stat.workerId} (PID ${stat.pid}): ${stat.routerCount} routers`
-      );
+      logger.info(`  Worker ${stat.workerId} (PID ${stat.pid}): ${stat.routerCount} routers`);
     });
   }
 

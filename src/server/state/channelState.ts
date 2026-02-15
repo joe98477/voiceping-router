@@ -36,10 +36,7 @@ export class ChannelStateManager {
    */
   async initialize(): Promise<void> {
     try {
-      await Promise.all([
-        this.pubClient.connect(),
-        this.subClient.connect(),
-      ]);
+      await Promise.all([this.pubClient.connect(), this.subClient.connect()]);
       logger.info('Channel state manager initialized');
     } catch (err) {
       logger.error('Failed to initialize channel state manager:', err);
@@ -52,10 +49,7 @@ export class ChannelStateManager {
    */
   async shutdown(): Promise<void> {
     try {
-      await Promise.all([
-        this.pubClient.disconnect(),
-        this.subClient.disconnect(),
-      ]);
+      await Promise.all([this.pubClient.disconnect(), this.subClient.disconnect()]);
       logger.info('Channel state manager shut down');
     } catch (err) {
       logger.error('Error shutting down channel state manager:', err);
@@ -82,7 +76,7 @@ export class ChannelStateManager {
   async startPtt(
     channelId: string,
     userId: string,
-    userName: string
+    userName: string,
   ): Promise<{ success: boolean; state: ChannelState }> {
     try {
       // Attempt to acquire speaker lock
@@ -210,10 +204,7 @@ export class ChannelStateManager {
    * @param channelId - Channel to subscribe to
    * @param callback - Called when speaker changes
    */
-  async subscribeToChannel(
-    channelId: string,
-    callback: (state: ChannelState) => void
-  ): Promise<void> {
+  async subscribeToChannel(channelId: string, callback: (state: ChannelState) => void): Promise<void> {
     try {
       const eventKey = this.getEventKey(channelId);
 
@@ -266,10 +257,7 @@ export class ChannelStateManager {
   /**
    * Publish speaker changed event
    */
-  private async publishSpeakerChanged(
-    channelId: string,
-    state: ChannelState
-  ): Promise<void> {
+  private async publishSpeakerChanged(channelId: string, state: ChannelState): Promise<void> {
     try {
       const eventKey = this.getEventKey(channelId);
       await this.pubClient.publish(eventKey, JSON.stringify(state));

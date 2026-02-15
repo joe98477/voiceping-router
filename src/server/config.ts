@@ -21,10 +21,7 @@ const mediaCodecs = [
     preferredPayloadType: 111,
     clockRate: 48000,
     channels: 2,
-    rtcpFeedback: [
-      { type: 'nack' },
-      { type: 'transport-cc' },
-    ],
+    rtcpFeedback: [{ type: 'nack' }, { type: 'transport-cc' }],
     // Note: We'll configure mono in the SDP parameters at the transport/producer level
     // mediasoup requires channels: 2 in codec capabilities, but we can use mono for actual transmission
   },
@@ -116,10 +113,10 @@ export const config = {
 
   turn: parseTurnServer(process.env.TURN_SERVER)
     ? {
-      ...parseTurnServer(process.env.TURN_SERVER)!,
-      username: process.env.TURN_USERNAME || '',
-      password: process.env.TURN_PASSWORD || '',
-    }
+        ...parseTurnServer(process.env.TURN_SERVER)!,
+        username: process.env.TURN_USERNAME || '',
+        password: process.env.TURN_PASSWORD || '',
+      }
     : null,
 
   auth: {

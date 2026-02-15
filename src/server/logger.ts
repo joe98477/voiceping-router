@@ -12,7 +12,7 @@ const logFormat = winston.format.combine(
     const labelStr = label ? `[${label}]` : '';
     const metaStr = Object.keys(meta).length > 0 ? ` ${JSON.stringify(meta)}` : '';
     return `${timestamp} ${level.toUpperCase()} ${labelStr} ${message}${metaStr}`;
-  })
+  }),
 );
 
 const baseLogger = winston.createLogger({

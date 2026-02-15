@@ -72,7 +72,7 @@ export class SignalingHandlers {
     sessionStore: SessionStore,
     broadcastToChannel: BroadcastFunction,
     permissionManager: PermissionManager,
-    auditLogger: AuditLogger
+    auditLogger: AuditLogger,
   ) {
     this.routerManager = routerManager;
     this.transportManager = transportManager;
@@ -225,10 +225,7 @@ export class SignalingHandlers {
       // Subscribe to channel state events
       await this.channelStateManager.subscribeToChannel(channelId, (state: ChannelState) => {
         // Broadcast speaker change to all channel members
-        this.broadcastToChannel(
-          channelId,
-          createMessage(SignalingType.SPEAKER_CHANGED, state as any)
-        );
+        this.broadcastToChannel(channelId, createMessage(SignalingType.SPEAKER_CHANGED, state as any));
       });
 
       // Get current channel state
@@ -266,7 +263,7 @@ export class SignalingHandlers {
           userName: ctx.userName,
           userCount: updatedUserCount,
         }),
-        ctx.userId
+        ctx.userId,
       );
 
       logger.info(`User ${ctx.userId} joined channel ${channelId}`);
@@ -333,7 +330,7 @@ export class SignalingHandlers {
           userName: ctx.userName,
           userCount: leaveUserCount,
         }),
-        ctx.userId
+        ctx.userId,
       );
 
       logger.info(`User ${ctx.userId} left channel ${channelId}`);
@@ -384,11 +381,7 @@ export class SignalingHandlers {
         throw new Error('direction must be "send" or "recv"');
       }
 
-      const transportOptions = await this.transportManager.createWebRtcTransport(
-        channelId,
-        ctx.userId,
-        direction
-      );
+      const transportOptions = await this.transportManager.createWebRtcTransport(channelId, ctx.userId, direction);
 
       this.sendResponse(ctx, message.id, transportOptions);
 
@@ -445,7 +438,7 @@ export class SignalingHandlers {
         kind,
         rtpParameters,
         ctx.userId,
-        channelId
+        channelId,
       );
 
       // Track producer for PTT operations
@@ -520,7 +513,7 @@ export class SignalingHandlers {
         producerId,
         rtpCapabilities,
         ctx.userId,
-        channelId
+        channelId,
       );
 
       // Resume server-side consumer so RTP flows from producer to client
@@ -581,7 +574,7 @@ export class SignalingHandlers {
         this.broadcastToChannel(
           channelId,
           createMessage(SignalingType.SPEAKER_CHANGED, { ...result.state, producerId } as any),
-          ctx.userId
+          ctx.userId,
         );
       } else {
         // Lock denied - send PTT_DENIED to requesting client
@@ -676,11 +669,7 @@ export class SignalingHandlers {
       this.sendResponse(ctx, message.id, { success: true, state });
 
       // Broadcast speaker change to channel
-      this.broadcastToChannel(
-        channelId,
-        createMessage(SignalingType.SPEAKER_CHANGED, state as any),
-        ctx.userId
-      );
+      this.broadcastToChannel(channelId, createMessage(SignalingType.SPEAKER_CHANGED, state as any), ctx.userId);
 
       logger.info(`PTT stopped for ${ctx.userId} in channel ${channelId}`);
     } catch (err) {
@@ -846,7 +835,11 @@ export class SignalingHandlers {
           },
         });
 
-        this.sendError(ctx, message.id, 'Permission denied: Force disconnect is only available to Dispatch or Admin users');
+        this.sendError(
+          ctx,
+          message.id,
+          'Permission denied: Force disconnect is only available to Dispatch or Admin users',
+        );
         return;
       }
 
@@ -1148,10 +1141,7 @@ export class SignalingHandlers {
 
           // Broadcast speaker change
           const updatedState = await this.channelStateManager.getChannelState(channelId);
-          this.broadcastToChannel(
-            channelId,
-            createMessage(SignalingType.SPEAKER_CHANGED, updatedState as any)
-          );
+          this.broadcastToChannel(channelId, createMessage(SignalingType.SPEAKER_CHANGED, updatedState as any));
         }
       }
 
@@ -1177,7 +1167,7 @@ export class SignalingHandlers {
             action: 'user-disconnected',
             userId: ctx.userId,
             userName: ctx.userName,
-          })
+          }),
         );
       }
 
@@ -1186,7 +1176,9 @@ export class SignalingHandlers {
 
       logger.info(`Cleanup complete for user ${ctx.userId}`);
     } catch (err) {
-      logger.error(`Error during disconnect cleanup for ${ctx.userId}: ${err instanceof Error ? err.message : String(err)}`);
+      logger.error(
+        `Error during disconnect cleanup for ${ctx.userId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -1213,7 +1205,9 @@ export class SignalingHandlers {
 
       if (force || !isTransmitting) {
         // Remove immediately
-        logger.info(`Immediately removing ${ctx.userId} from channel ${channelId} (force=${force}, transmitting=${isTransmitting})`);
+        logger.info(
+          `Immediately removing ${ctx.userId} from channel ${channelId} (force=${force}, transmitting=${isTransmitting})`,
+        );
 
         // Synthesize a LEAVE_CHANNEL message for internal handling
         const leaveMessage: SignalingMessage = {
@@ -1270,7 +1264,9 @@ export class SignalingHandlers {
         this.sendResponse(ctx, undefined, updateMessage);
       }
     } catch (err) {
-      logger.error(`Error handling permission revocation for ${ctx.userId} in channel ${channelId}: ${err instanceof Error ? err.message : String(err)}`);
+      logger.error(
+        `Error handling permission revocation for ${ctx.userId} in channel ${channelId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -1287,7 +1283,8 @@ export class SignalingHandlers {
       response.id = messageId;
     }
 
-    if (ctx.ws.readyState === 1) { // WebSocket.OPEN
+    if (ctx.ws.readyState === 1) {
+      // WebSocket.OPEN
       ctx.ws.send(JSON.stringify(response));
     }
   }
@@ -1305,7 +1302,8 @@ export class SignalingHandlers {
       errorMessage.id = messageId;
     }
 
-    if (ctx.ws.readyState === 1) { // WebSocket.OPEN
+    if (ctx.ws.readyState === 1) {
+      // WebSocket.OPEN
       ctx.ws.send(JSON.stringify(errorMessage));
     }
   }

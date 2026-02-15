@@ -47,7 +47,7 @@ export class ProducerConsumerManager {
     kind: mediasoupTypes.MediaKind,
     rtpParameters: mediasoupTypes.RtpParameters,
     userId: string,
-    channelId: string
+    channelId: string,
   ): Promise<string> {
     const transport = this.transportManager.getTransport(transportId);
 
@@ -86,7 +86,7 @@ export class ProducerConsumerManager {
     producerId: string,
     rtpCapabilities: mediasoupTypes.RtpCapabilities,
     userId: string,
-    channelId: string
+    channelId: string,
   ): Promise<{
     id: string;
     producerId: string;
@@ -282,7 +282,7 @@ export class ProducerConsumerManager {
 
     if (producersToClose.length > 0 || consumersToClose.length > 0) {
       logger.info(
-        `Closed ${producersToClose.length} producers and ${consumersToClose.length} consumers for user ${userId} in channel ${channelId}`
+        `Closed ${producersToClose.length} producers and ${consumersToClose.length} consumers for user ${userId} in channel ${channelId}`,
       );
     }
   }
@@ -316,7 +316,7 @@ export class ProducerConsumerManager {
 
     if (producersToClose.length > 0 || consumersToClose.length > 0) {
       logger.info(
-        `Closed ${producersToClose.length} producers and ${consumersToClose.length} consumers for user ${userId}`
+        `Closed ${producersToClose.length} producers and ${consumersToClose.length} consumers for user ${userId}`,
       );
     }
   }

@@ -96,9 +96,7 @@ export class AuditLogger {
     // Run async operation without blocking caller
     this.logAsync(event).catch((err) => {
       // Never throw from log() method
-      logger.error(
-        `Audit logging failed: ${err instanceof Error ? err.message : String(err)}`
-      );
+      logger.error(`Audit logging failed: ${err instanceof Error ? err.message : String(err)}`);
     });
   }
 
@@ -106,9 +104,7 @@ export class AuditLogger {
    * Internal async log implementation
    * Wrapped in try/catch by log() method
    */
-  private async logAsync(
-    event: Partial<AuditEvent> & { action: AuditAction }
-  ): Promise<void> {
+  private async logAsync(event: Partial<AuditEvent> & { action: AuditAction }): Promise<void> {
     try {
       const client = this.getRedisClient();
 
@@ -153,9 +149,7 @@ export class AuditLogger {
       logger.debug(`Audit event logged: ${auditEvent.action} by ${auditEvent.actorId}`);
     } catch (err) {
       // Catch all errors - audit logging must never break core functionality
-      logger.error(
-        `Failed to write audit event: ${err instanceof Error ? err.message : String(err)}`
-      );
+      logger.error(`Failed to write audit event: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -178,11 +172,7 @@ export class AuditLogger {
       // Parse and return
       return events.map((json) => JSON.parse(json) as AuditEvent);
     } catch (err) {
-      logger.error(
-        `Failed to get recent audit events: ${
-          err instanceof Error ? err.message : String(err)
-        }`
-      );
+      logger.error(`Failed to get recent audit events: ${err instanceof Error ? err.message : String(err)}`);
       return [];
     }
   }
@@ -209,9 +199,7 @@ export class AuditLogger {
       return events.map((json) => JSON.parse(json) as AuditEvent);
     } catch (err) {
       logger.error(
-        `Failed to get audit events for actor ${actorId}: ${
-          err instanceof Error ? err.message : String(err)
-        }`
+        `Failed to get audit events for actor ${actorId}: ${err instanceof Error ? err.message : String(err)}`,
       );
       return [];
     }
@@ -251,11 +239,7 @@ export class AuditLogger {
 
       logger.info(`Exported ${events.length} audit events to control-plane`);
     } catch (err) {
-      logger.error(
-        `Failed to export audit events: ${
-          err instanceof Error ? err.message : String(err)
-        }`
-      );
+      logger.error(`Failed to export audit events: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 }

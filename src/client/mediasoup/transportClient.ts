@@ -165,7 +165,7 @@ export class TransportClient {
   async consumeAudio(
     producerId: string,
     channelId: string,
-    rtpCapabilities?: object
+    rtpCapabilities?: object,
   ): Promise<{ consumer: Consumer; track: MediaStreamTrack }> {
     if (!this.recvTransport) {
       throw new Error('Receive transport not created. Call createRecvTransport() first.');

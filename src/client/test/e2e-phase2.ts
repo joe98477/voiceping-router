@@ -180,11 +180,7 @@ class TestPanel {
   private banBtn: HTMLButtonElement | null = null;
   private unbanBtn: HTMLButtonElement | null = null;
 
-  constructor(
-    role: 'ADMIN' | 'DISPATCH' | 'GENERAL',
-    userId: string,
-    prefix: string
-  ) {
+  constructor(role: 'ADMIN' | 'DISPATCH' | 'GENERAL', userId: string, prefix: string) {
     this.role = role;
     this.userId = userId;
     this.logger = new Logger(`${prefix}Log`);
@@ -582,8 +578,8 @@ generateTokenBtn.addEventListener('click', () => {
   const eventId = (document.getElementById('tokenEventId') as HTMLInputElement).value;
   const channelIds = (document.getElementById('tokenChannelIds') as HTMLInputElement).value
     .split(',')
-    .map(c => c.trim())
-    .filter(c => c.length > 0);
+    .map((c) => c.trim())
+    .filter((c) => c.length > 0);
 
   if (!userId) {
     alert('User ID is required');

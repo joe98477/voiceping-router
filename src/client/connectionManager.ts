@@ -264,7 +264,7 @@ export class ConnectionManager {
       const audioElement = new Audio();
       audioElement.srcObject = new MediaStream([result.track]);
       audioElement.autoplay = true;
-      await audioElement.play().catch(err => {
+      await audioElement.play().catch((err) => {
         console.warn('Audio autoplay blocked:', err);
       });
 
@@ -307,7 +307,7 @@ export class ConnectionManager {
 
       // Check for denial (server sends success: false for denials)
       if (response.data && response.data.denied) {
-        const speakerName = response.data.currentSpeakerName as string || 'Another user';
+        const speakerName = (response.data.currentSpeakerName as string) || 'Another user';
         throw new Error(`${speakerName} is speaking`);
       }
 
@@ -331,8 +331,8 @@ export class ConnectionManager {
       // Self-update: notify UI that we are the speaker
       if (this.options.onSpeakerChanged) {
         const state = response.data?.state as Record<string, unknown> | undefined;
-        const userName = state?.speakerName as string || 'You';
-        const userId = state?.currentSpeaker as string || null;
+        const userName = (state?.speakerName as string) || 'You';
+        const userId = (state?.currentSpeaker as string) || null;
         this.options.onSpeakerChanged(userId, userName);
       }
     } catch (error) {

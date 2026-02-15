@@ -28,7 +28,7 @@ enum MessageType {
   INTERACTIVE_ACK = 24,
   CONNECTION_TEST = 25,
   CONNECTION_ACK = 26,
-  UNAUTHORIZED_GROUP = 27
+  UNAUTHORIZED_GROUP = 27,
 }
 
 export = MessageType;

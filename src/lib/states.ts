@@ -1,14 +1,14 @@
-import * as cluster from "cluster";
-import * as dbug from "debug";
-import * as jwt from "jwt-simple";
+import * as cluster from 'cluster';
+import * as dbug from 'debug';
+import * as jwt from 'jwt-simple';
 
-import config = require("./config");
-import { Keys } from "./keys";
-import { IMessage, numberOrString } from "./types";
+import config = require('./config');
+import { Keys } from './keys';
+import { IMessage, numberOrString } from './types';
 
-const dbug1 = dbug("vp:states");
+const dbug1 = dbug('vp:states');
 function debug(msg: string) {
-  dbug1((cluster.worker ? `worker ${cluster.worker.id} ` : "") + msg);
+  dbug1((cluster.worker ? `worker ${cluster.worker.id} ` : '') + msg);
 }
 
 const SECRET = config.secretKey;
@@ -33,7 +33,6 @@ interface IMessage2 {
 }
 
 export default class States {
-
   public static setMemored(memo) {
     memored = memo;
   }
@@ -58,26 +57,32 @@ export default class States {
   public static addUserToGroup(
     userId: numberOrString,
     groupId: numberOrString,
-    callback?: (err: Error, succeed: boolean) => void
+    callback?: (err: Error, succeed: boolean) => void,
   ) {
-    userId = userId + "";
-    groupId = groupId + "";
+    userId = userId + '';
+    groupId = groupId + '';
     debug(`*** STORE in addUserToGroup groupId:${groupId} userIds:${userId} ***`);
-    States.getUsersInsideGroup(groupId, function(err, userIds) {
+    States.getUsersInsideGroup(groupId, function (err, userIds) {
       if (userIds && userIds instanceof Array) {
-        if (!userIds.includes(userId)) { userIds.push(userId); }
+        if (!userIds.includes(userId)) {
+          userIds.push(userId);
+        }
       } else {
         userIds = [userId];
       }
       States.setUsersInsideGroup(groupId, userIds);
-      States.getGroupsOfUser(userId, function(error, groupIds) {
+      States.getGroupsOfUser(userId, function (error, groupIds) {
         if (groupIds && groupIds instanceof Array) {
-          if (!groupIds.includes(groupId)) { groupIds.push(groupId); }
+          if (!groupIds.includes(groupId)) {
+            groupIds.push(groupId);
+          }
         } else {
           groupIds = [groupId];
         }
         States.setGroupsOfUser(userId, groupIds);
-        if (callback) { return callback(null, true); }
+        if (callback) {
+          return callback(null, true);
+        }
       });
     });
   }
@@ -85,56 +90,59 @@ export default class States {
   public static removeUserFromGroup(
     userId: numberOrString,
     groupId: numberOrString,
-    callback?: (err: Error, succeed: boolean) => void
+    callback?: (err: Error, succeed: boolean) => void,
   ) {
-    userId = userId + "";
-    groupId = groupId + "";
-    States.getUsersInsideGroup(groupId, function(err, userIds) {
+    userId = userId + '';
+    groupId = groupId + '';
+    States.getUsersInsideGroup(groupId, function (err, userIds) {
       if (userIds && userIds instanceof Array) {
         userIds = userIds.filter((id) => id !== userId);
       } else {
         userIds = [];
       }
       States.setUsersInsideGroup(groupId, userIds);
-      States.getGroupsOfUser(userId, function(error, groupIds) {
+      States.getGroupsOfUser(userId, function (error, groupIds) {
         if (groupIds && groupIds instanceof Array) {
           groupIds = groupIds.filter((id) => id !== groupId);
         } else {
           groupIds = [];
         }
         States.setGroupsOfUser(userId, groupIds);
-        if (callback) { return callback(null, true); }
+        if (callback) {
+          return callback(null, true);
+        }
       });
     });
   }
 
   public static setUsersInsideGroup(
-    groupId: number|string, userIds: Array<number|string>,
-    callback?: (err, succeed) => void) {
-    groupId = groupId + "";
-    userIds = userIds.map((userId) => userId + "");
+    groupId: number | string,
+    userIds: Array<number | string>,
+    callback?: (err, succeed) => void,
+  ) {
+    groupId = groupId + '';
+    userIds = userIds.map((userId) => userId + '');
     usersInsideGroupsSet[groupId] = userIds;
     if (!!memored) {
-      memored.store(Keys.forUsersInsideGroup(groupId), userIds, function() {
+      memored.store(Keys.forUsersInsideGroup(groupId), userIds, function () {
         debug(`STORE in setUsersInsideGroup groupId:${groupId} userIds:${JSON.stringify(userIds)}`);
       });
     }
-    if (!!callback) { return callback(null, true); }
+    if (!!callback) {
+      return callback(null, true);
+    }
     return;
   }
 
   public static getUsersInsideGroup(
-    groupId: number|string,
-    callback: (
-      err: Error,
-      userIds: Array<number|string>
-    ) => void
+    groupId: number | string,
+    callback: (err: Error, userIds: Array<number | string>) => void,
   ) {
-    groupId = groupId + "";
+    groupId = groupId + '';
     if (!memored) {
       return callback(null, usersInsideGroupsSet[groupId]);
     } else {
-      memored.read(Keys.forUsersInsideGroup(groupId), function(err, userIds) {
+      memored.read(Keys.forUsersInsideGroup(groupId), function (err, userIds) {
         usersInsideGroupsSet[groupId] = userIds;
         debug(`STORE in getUsersInsideGroup groupId:${groupId} userIds:${JSON.stringify(userIds)}`);
         return callback(null, userIds);
@@ -143,26 +151,30 @@ export default class States {
   }
 
   public static setGroupsOfUser(
-    userId: number|string, groupIds: Array<number|string>,
-    callback?: (err, succeed) => void) {
-    userId = userId + "";
-    groupIds = groupIds.map((groupId) => groupId + "");
+    userId: number | string,
+    groupIds: Array<number | string>,
+    callback?: (err, succeed) => void,
+  ) {
+    userId = userId + '';
+    groupIds = groupIds.map((groupId) => groupId + '');
     groupsOfUsersSet[userId] = groupIds;
     if (!!memored) {
-      memored.store(Keys.forGroupsOfUser(userId), groupIds, function() {
+      memored.store(Keys.forGroupsOfUser(userId), groupIds, function () {
         debug(`STORE in setGroupsOfUser userId:${userId} userIds:${JSON.stringify(groupIds)}`);
       });
     }
-    if (!!callback) { return callback(null, true); }
+    if (!!callback) {
+      return callback(null, true);
+    }
     return;
   }
 
-  public static getGroupsOfUser(userId: number|string, callback: (err, groupIds) => void) {
-    userId = userId + "";
+  public static getGroupsOfUser(userId: number | string, callback: (err, groupIds) => void) {
+    userId = userId + '';
     if (!memored) {
       return callback(null, groupsOfUsersSet[userId]);
     } else {
-      memored.read(Keys.forGroupsOfUser(userId), function(err, groupIds) {
+      memored.read(Keys.forGroupsOfUser(userId), function (err, groupIds) {
         groupsOfUsersSet[userId] = groupIds;
         return callback(null, groupIds);
       });
@@ -170,9 +182,11 @@ export default class States {
   }
 
   public static setCurrentMessageOfUser(
-    userId: numberOrString, msg: IMessage,
-    callback?: (err: Error, succeed: boolean) => void) {
-    userId = userId + "";
+    userId: numberOrString,
+    msg: IMessage,
+    callback?: (err: Error, succeed: boolean) => void,
+  ) {
+    userId = userId + '';
     const now = Date.now();
     const message: IMessage2 = {
       audioTime: now,
@@ -180,48 +194,52 @@ export default class States {
       fromId: msg.fromId,
       messageType: msg.messageType,
       startTime: now,
-      toId: msg.toId
+      toId: msg.toId,
     };
     if (!memored) {
       usersCurrentMessagesSet[userId] = message;
-      if (callback) { return callback(null, true); }
+      if (callback) {
+        return callback(null, true);
+      }
       return;
     } else {
-      memored.store(Keys.forCurrentMessageOfUser(userId), message, function() {
+      memored.store(Keys.forCurrentMessageOfUser(userId), message, function () {
         debug(`STORE in setCurrentMessageOfUser userId:${userId} msg:${JSON.stringify(msg)}`);
         usersCurrentMessagesSet[userId] = message;
-        if (callback) { return callback(null, true); }
+        if (callback) {
+          return callback(null, true);
+        }
         return;
       });
     }
   }
 
-  public static removeCurrentMessageOfUser(
-    userId: numberOrString,
-    callback?: (err: Error, succeed: boolean) => void) {
-    userId = userId + "";
+  public static removeCurrentMessageOfUser(userId: numberOrString, callback?: (err: Error, succeed: boolean) => void) {
+    userId = userId + '';
     if (!memored) {
       usersCurrentMessagesSet[userId] = null;
-      if (callback) { return callback(null, true); }
+      if (callback) {
+        return callback(null, true);
+      }
       return;
     } else {
-      memored.remove(Keys.forCurrentMessageOfUser(userId), function() {
+      memored.remove(Keys.forCurrentMessageOfUser(userId), function () {
         usersCurrentMessagesSet[userId] = null;
-        if (callback) { return callback(null, true); }
+        if (callback) {
+          return callback(null, true);
+        }
         return;
       });
     }
   }
 
-  public static getCurrentMessageOfGroup(
-    groupId: numberOrString,
-    callback: (err: Error, msg: IMessage2) => void) {
-    groupId = groupId + "";
+  public static getCurrentMessageOfGroup(groupId: numberOrString, callback: (err: Error, msg: IMessage2) => void) {
+    groupId = groupId + '';
     if (!memored) {
       const msg: IMessage2 = groupsCurrentMessagesSet[groupId];
       return callback(null, msg);
     } else {
-      memored.read(Keys.forCurrentMessageOfGroup(groupId), function(err, message) {
+      memored.read(Keys.forCurrentMessageOfGroup(groupId), function (err, message) {
         const msg: IMessage2 = message;
         groupsCurrentMessagesSet[groupId] = msg;
         return callback(null, msg);
@@ -230,9 +248,11 @@ export default class States {
   }
 
   public static setCurrentMessageOfGroup(
-    groupId: numberOrString, msg: IMessage,
-    callback?: (err: Error, succeed: boolean) => void) {
-    groupId = groupId + "";
+    groupId: numberOrString,
+    msg: IMessage,
+    callback?: (err: Error, succeed: boolean) => void,
+  ) {
+    groupId = groupId + '';
     const now = Date.now();
     const message: IMessage2 = {
       audioTime: now,
@@ -240,17 +260,21 @@ export default class States {
       fromId: msg.fromId,
       messageType: msg.messageType,
       startTime: now,
-      toId: msg.toId
+      toId: msg.toId,
     };
     if (!memored) {
       groupsCurrentMessagesSet[groupId] = message;
-      if (callback) { return callback(null, true); }
+      if (callback) {
+        return callback(null, true);
+      }
       return;
     } else {
-      memored.store(Keys.forCurrentMessageOfGroup(groupId), message, function() {
+      memored.store(Keys.forCurrentMessageOfGroup(groupId), message, function () {
         debug(`STORE in setCurrentMessageOfGroup groupId:${groupId} msg:${JSON.stringify(msg)}`);
         groupsCurrentMessagesSet[groupId] = message;
-        if (callback) { return callback(null, true); }
+        if (callback) {
+          return callback(null, true);
+        }
         return;
       });
     }
@@ -258,16 +282,21 @@ export default class States {
 
   public static removeCurrentMessageOfGroup(
     groupId: numberOrString,
-    callback?: (err: Error, succeed: boolean) => void) {
-    groupId = groupId + "";
+    callback?: (err: Error, succeed: boolean) => void,
+  ) {
+    groupId = groupId + '';
     if (!memored) {
       groupsCurrentMessagesSet[groupId] = null;
-      if (callback) { return callback(null, true); }
+      if (callback) {
+        return callback(null, true);
+      }
       return;
     } else {
-      memored.remove(Keys.forCurrentMessageOfGroup(groupId), function() {
+      memored.remove(Keys.forCurrentMessageOfGroup(groupId), function () {
         groupsCurrentMessagesSet[groupId] = null;
-        if (callback) { return callback(null, true); }
+        if (callback) {
+          return callback(null, true);
+        }
         return;
       });
     }
@@ -275,8 +304,9 @@ export default class States {
 
   public static getBusyStateOfGroup(
     groupId: numberOrString,
-    callback: (err: Error, busyWithUserId: numberOrString) => void) {
-    groupId = groupId + "";
+    callback: (err: Error, busyWithUserId: numberOrString) => void,
+  ) {
+    groupId = groupId + '';
     if (!memored) {
       const message: IMessage2 = groupsCurrentMessagesSet[groupId];
       debug(`getBusyStateOfGroup => groupId: ${groupId} no memored, message: ${JSON.stringify(message)}`);
@@ -286,7 +316,7 @@ export default class States {
         callback(null, 0);
       }
     } else {
-      memored.read(Keys.forCurrentMessageOfGroup(groupId), function(err, message) {
+      memored.read(Keys.forCurrentMessageOfGroup(groupId), function (err, message) {
         debug(`getBusyStateOfGroup => groupId: ${groupId} with memored, message: ${JSON.stringify(message)}`);
         groupsCurrentMessagesSet[groupId] = message;
         if (!!message && message.fromId) {
@@ -299,18 +329,24 @@ export default class States {
   }
 
   public static setBusyStateOfGroup(
-    groupId: numberOrString, busyWithUserId: numberOrString,
-    callback?: (err: Error, busyWithUserId: numberOrString) => void) {
-    groupId = groupId + "";
-    busyWithUserId = busyWithUserId + "";
-    if (!busyWithUserId || busyWithUserId === "" || busyWithUserId === "0") {
+    groupId: numberOrString,
+    busyWithUserId: numberOrString,
+    callback?: (err: Error, busyWithUserId: numberOrString) => void,
+  ) {
+    groupId = groupId + '';
+    busyWithUserId = busyWithUserId + '';
+    if (!busyWithUserId || busyWithUserId === '' || busyWithUserId === '0') {
       delete groupsCurrentMessagesSet[groupId];
       if (!memored) {
-        if (callback) { return callback(null, busyWithUserId); }
+        if (callback) {
+          return callback(null, busyWithUserId);
+        }
         return;
       }
-      memored.remove(Keys.forCurrentMessageOfGroup(groupId), function() {
-        if (callback) { return callback(null, busyWithUserId); }
+      memored.remove(Keys.forCurrentMessageOfGroup(groupId), function () {
+        if (callback) {
+          return callback(null, busyWithUserId);
+        }
         return;
       });
     } else {
@@ -318,26 +354,32 @@ export default class States {
       const busyMessage: IMessage2 = {
         audioTime: now,
         fromId: busyWithUserId,
-        startTime: now
+        startTime: now,
       };
       if (!memored) {
         const message = groupsCurrentMessagesSet[groupId];
         if (!message || message.fromId !== busyWithUserId) {
           groupsCurrentMessagesSet[groupId] = busyMessage;
         }
-        if (callback) { return callback(null, busyWithUserId); }
+        if (callback) {
+          return callback(null, busyWithUserId);
+        }
         return;
       } else {
-        memored.read(Keys.forCurrentMessageOfGroup(groupId), function(err, message) {
+        memored.read(Keys.forCurrentMessageOfGroup(groupId), function (err, message) {
           if (!message || message.fromId !== busyWithUserId) {
-            memored.store(Keys.forCurrentMessageOfGroup(groupId), busyMessage, function() {
+            memored.store(Keys.forCurrentMessageOfGroup(groupId), busyMessage, function () {
               debug(`STORE in setBusyStateOfGroup groupId:${groupId} busyWithUserId:${busyWithUserId}`);
               groupsCurrentMessagesSet[groupId] = busyMessage;
-              if (callback) { return callback(null, busyWithUserId); }
+              if (callback) {
+                return callback(null, busyWithUserId);
+              }
               return;
             });
           } else {
-            if (callback) { return callback(null, message.fromId); }
+            if (callback) {
+              return callback(null, message.fromId);
+            }
             return;
           }
         });
@@ -345,70 +387,81 @@ export default class States {
     }
   }
 
-  public static removeBusyStateOfGroup(groupId: numberOrString,
-                                       callback?: (err: Error, busyWithUserId: numberOrString) => void) {
-    groupId = groupId + "";
+  public static removeBusyStateOfGroup(
+    groupId: numberOrString,
+    callback?: (err: Error, busyWithUserId: numberOrString) => void,
+  ) {
+    groupId = groupId + '';
     States.setBusyStateOfGroup(groupId, 0, callback);
   }
 
   public static updateAudioTimeOfGroup(groupId: numberOrString, callback?: (err: Error, succeed: boolean) => void) {
-    groupId = groupId + "";
-    States.getCurrentMessageOfGroup(groupId, function(err, message) {
+    groupId = groupId + '';
+    States.getCurrentMessageOfGroup(groupId, function (err, message) {
       if (message) {
         message.audioTime = Date.now();
       } else {
-        if (callback) { return callback(null, false); }
+        if (callback) {
+          return callback(null, false);
+        }
         return;
       }
 
       if (!memored) {
         groupsCurrentMessagesSet[groupId] = message;
-        if (callback) { return callback(null, true); }
+        if (callback) {
+          return callback(null, true);
+        }
         return;
       } else {
-        memored.store(Keys.forCurrentMessageOfGroup(groupId), message, function() {
+        memored.store(Keys.forCurrentMessageOfGroup(groupId), message, function () {
           debug(`STORE in updateAudioTimeOfGroup groupId:${groupId} message:${JSON.stringify(message)}`);
           groupsCurrentMessagesSet[groupId] = message;
-          if (callback) { return callback(null, true); }
+          if (callback) {
+            return callback(null, true);
+          }
           return;
         });
       }
-
     });
   }
 
   public static getAudioTimeOfGroup(groupId: numberOrString, callback: (err: Error, audioTime: number) => void) {
-    groupId = groupId + "";
-    States.getCurrentMessageOfGroup(groupId, function(err, message) {
+    groupId = groupId + '';
+    States.getCurrentMessageOfGroup(groupId, function (err, message) {
       let audioTime = null;
-      if (message && message.audioTime) { audioTime = message.audioTime; }
+      if (message && message.audioTime) {
+        audioTime = message.audioTime;
+      }
       callback(null, audioTime);
     });
   }
 
-  public static removeKeyUsersInsideGroup(
-    groupId: number|string,
-    callback?: (err, succeed) => void) {
-      groupId = groupId + "";
-      if (!memored) {
+  public static removeKeyUsersInsideGroup(groupId: number | string, callback?: (err, succeed) => void) {
+    groupId = groupId + '';
+    if (!memored) {
+      usersInsideGroupsSet[groupId] = undefined;
+      return callback(null, true);
+    } else {
+      memored.remove(Keys.forUsersInsideGroup(groupId), () => {
         usersInsideGroupsSet[groupId] = undefined;
+        debug(`STORE in removeKeyUsersInsideGroup groupId:${groupId}`);
         return callback(null, true);
-      } else {
-        memored.remove(Keys.forUsersInsideGroup(groupId), () => {
-          usersInsideGroupsSet[groupId] = undefined;
-          debug(`STORE in removeKeyUsersInsideGroup groupId:${groupId}`);
-          return callback(null, true);
-        });
-      }
+      });
+    }
   }
 
   public static periodicInspect() {
-    if (inspectInterval) { return; }
+    if (inspectInterval) {
+      return;
+    }
 
-    inspectInterval = setInterval(function() {
-      debug(`inspectInterval: ${Object.keys(groupsCurrentMessagesSet).length}:` +
-                  ` ${JSON.stringify(groupsCurrentMessagesSet)}`);
-      Object.keys(groupsCurrentMessagesSet).forEach(function(groupId) {
+    inspectInterval = setInterval(function () {
+      debug(
+        `inspectInterval: ${Object.keys(groupsCurrentMessagesSet).length}:` +
+          ` ${JSON.stringify(groupsCurrentMessagesSet)}`,
+      );
+      Object.keys(groupsCurrentMessagesSet).forEach(function (groupId) {
         const message: IMessage2 = groupsCurrentMessagesSet[groupId];
         if (!!message) {
           const userId = message.fromId;
@@ -418,9 +471,11 @@ export default class States {
             if (duration > GROUPS_BUSY_TIMEOUT) {
               States.removeBusyStateOfGroup(groupId);
 
-              debug(`GROUPS_BUSY_TIMEOUT userId: ${userId} takes ${duration}` +
-                          ` more than ${GROUPS_BUSY_TIMEOUT} talking,` +
-                          ` channel is no longer busy`);
+              debug(
+                `GROUPS_BUSY_TIMEOUT userId: ${userId} takes ${duration}` +
+                  ` more than ${GROUPS_BUSY_TIMEOUT} talking,` +
+                  ` channel is no longer busy`,
+              );
             }
           }
         }

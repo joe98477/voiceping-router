@@ -20,9 +20,7 @@ export class AudioFeedback {
   async preload(): Promise<void> {
     const defaultTones = ['transmit-start', 'transmit-stop', 'busy-tone'];
 
-    const loadPromises = defaultTones.map((toneName) =>
-      this.loadTone(toneName, `${this.basePath}/${toneName}.mp3`)
-    );
+    const loadPromises = defaultTones.map((toneName) => this.loadTone(toneName, `${this.basePath}/${toneName}.mp3`));
 
     await Promise.allSettled(loadPromises);
     console.log('Audio feedback tones preloaded');
@@ -79,19 +77,15 @@ export class AudioFeedback {
 
     // Reset to start and play
     audio.currentTime = 0;
-    audio
-      .play()
-      .catch((error) => {
-        // Handle autoplay policy restrictions
-        if (error.name === 'NotAllowedError') {
-          console.warn(
-            `Autoplay blocked for tone ${toneName}. Queueing for next user interaction.`
-          );
-          this.queuedTones.push(toneName);
-        } else {
-          console.error(`Failed to play tone ${toneName}:`, error);
-        }
-      });
+    audio.play().catch((error) => {
+      // Handle autoplay policy restrictions
+      if (error.name === 'NotAllowedError') {
+        console.warn(`Autoplay blocked for tone ${toneName}. Queueing for next user interaction.`);
+        this.queuedTones.push(toneName);
+      } else {
+        console.error(`Failed to play tone ${toneName}:`, error);
+      }
+    });
   }
 
   /**
@@ -161,9 +155,7 @@ export class AudioFeedback {
       await this.loadTone(toneName, eventPath);
       console.log(`Event-specific tone loaded: ${toneName} for event ${eventId}`);
     } catch (error) {
-      console.warn(
-        `Event-specific tone not found, using default: ${toneName}`
-      );
+      console.warn(`Event-specific tone not found, using default: ${toneName}`);
       // Fall back to default tone (already loaded in preload)
     }
   }

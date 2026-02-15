@@ -16,7 +16,7 @@ export enum SignalingType {
   CREATE_TRANSPORT = 'create-transport',
   CONNECT_TRANSPORT = 'connect-transport',
   PRODUCE = 'produce',
-  PRODUCER_ACK = 'producer-ack',  // Server confirms audio stream received
+  PRODUCER_ACK = 'producer-ack', // Server confirms audio stream received
   CONSUME = 'consume',
 
   // PTT control
@@ -82,11 +82,7 @@ export interface SignalingResponse extends SignalingMessage {
 /**
  * Create a properly typed signaling message
  */
-export function createMessage(
-  type: SignalingType,
-  data?: Record<string, unknown>,
-  id?: string
-): SignalingMessage {
+export function createMessage(type: SignalingType, data?: Record<string, unknown>, id?: string): SignalingMessage {
   const message: SignalingMessage = { type };
 
   if (id !== undefined) {

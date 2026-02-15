@@ -32,7 +32,7 @@ export class TransportManager {
   async createWebRtcTransport(
     channelId: string,
     userId: string,
-    direction: 'send' | 'recv'
+    direction: 'send' | 'recv',
   ): Promise<TransportOptions> {
     const router = await this.routerManager.getOrCreateRouter(channelId);
 
@@ -63,7 +63,9 @@ export class TransportManager {
       logger.info(`Transport ${transport.id} ICE state changed to ${iceState}`);
     });
 
-    logger.info(`Created ${direction} transport ${transport.id} for user ${userId} in channel ${channelId} with DTLS state: ${transport.dtlsState}`);
+    logger.info(
+      `Created ${direction} transport ${transport.id} for user ${userId} in channel ${channelId} with DTLS state: ${transport.dtlsState}`,
+    );
 
     return {
       id: transport.id,
@@ -113,7 +115,7 @@ export class TransportManager {
   getUserChannelTransport(
     userId: string,
     channelId: string,
-    direction: 'send' | 'recv'
+    direction: 'send' | 'recv',
   ): mediasoupTypes.WebRtcTransport | null {
     const key = `${userId}:${channelId}:${direction}`;
     return this.transports.get(key) || null;
@@ -149,9 +151,7 @@ export class TransportManager {
     const { minMs, maxMs } = config.jitterBuffer;
 
     if (bufferMs < minMs || bufferMs > maxMs) {
-      logger.warn(
-        `Jitter buffer ${bufferMs}ms out of range [${minMs}, ${maxMs}], clamping to range`
-      );
+      logger.warn(`Jitter buffer ${bufferMs}ms out of range [${minMs}, ${maxMs}], clamping to range`);
       bufferMs = Math.max(minMs, Math.min(maxMs, bufferMs));
     }
 

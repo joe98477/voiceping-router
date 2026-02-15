@@ -39,18 +39,10 @@ export class SessionStore {
       const client = getRedisClient();
 
       // Store session in hash
-      await client.hSet(
-        SessionStore.SESSIONS_KEY,
-        userId,
-        JSON.stringify(session)
-      );
+      await client.hSet(SessionStore.SESSIONS_KEY, userId, JSON.stringify(session));
 
       // Set expiry tracking key with TTL
-      await client.set(
-        this.getSessionExpiryKey(userId),
-        '1',
-        { EX: SessionStore.SESSION_TTL_SECONDS }
-      );
+      await client.set(this.getSessionExpiryKey(userId), '1', { EX: SessionStore.SESSION_TTL_SECONDS });
 
       console.info(`Session added for user ${userId}`);
     } catch (err) {
@@ -176,11 +168,7 @@ export class SessionStore {
       const session = await this.getSession(userId);
       if (session && !session.channels.includes(channelId)) {
         session.channels.push(channelId);
-        await client.hSet(
-          SessionStore.SESSIONS_KEY,
-          userId,
-          JSON.stringify(session)
-        );
+        await client.hSet(SessionStore.SESSIONS_KEY, userId, JSON.stringify(session));
       }
 
       console.info(`User ${userId} added to channel ${channelId}`);
@@ -207,11 +195,7 @@ export class SessionStore {
       const session = await this.getSession(userId);
       if (session) {
         session.channels = session.channels.filter((ch) => ch !== channelId);
-        await client.hSet(
-          SessionStore.SESSIONS_KEY,
-          userId,
-          JSON.stringify(session)
-        );
+        await client.hSet(SessionStore.SESSIONS_KEY, userId, JSON.stringify(session));
       }
 
       console.info(`User ${userId} removed from channel ${channelId}`);
@@ -228,10 +212,7 @@ export class SessionStore {
    * @param userId - User ID
    * @param channels - List of channels user is in (from session)
    */
-  private async removeUserFromAllChannels(
-    userId: string,
-    channels: string[]
-  ): Promise<void> {
+  private async removeUserFromAllChannels(userId: string, channels: string[]): Promise<void> {
     try {
       const client = getRedisClient();
 

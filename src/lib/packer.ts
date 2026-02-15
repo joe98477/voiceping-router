@@ -1,8 +1,8 @@
-import * as dbug from "debug";
-import * as notepack from "notepack";
-import logger = require("./logger");
-import { IMessage } from "./types";
-const ChannelType = require("./channeltype"); // tslint:disable-line:no-var-requires
+import * as dbug from 'debug';
+import * as notepack from 'notepack';
+import logger = require('./logger');
+import { IMessage } from './types';
+const ChannelType = require('./channeltype'); // tslint:disable-line:no-var-requires
 
 /* tslint:disable:object-literal-sort-keys */
 const MessageIndex = {
@@ -11,21 +11,15 @@ const MessageIndex = {
   FROM_ID: 2,
   TO_ID: 3,
   MESSAGE_ID: 4,
-  BUFFER: 5
+  BUFFER: 5,
 };
 /* tslint:enable:object-literal-sort-keys */
 
-const debug = dbug("vp:packer");
+const debug = dbug('vp:packer');
 
-type PackCallback = (
-  error: Error,
-  data: Buffer
-) => void;
+type PackCallback = (error: Error, data: Buffer) => void;
 
-type UnpackCallback = (
-  error: Error,
-  message: IMessage
-) => void;
+type UnpackCallback = (error: Error, message: IMessage) => void;
 
 const normalizeBinaryPayload = (payload: any): any => {
   if (!payload) {
@@ -46,7 +40,7 @@ const normalizeBinaryPayload = (payload: any): any => {
   if (Array.isArray(payload)) {
     return Buffer.from(payload);
   }
-  if (typeof payload === "object") {
+  if (typeof payload === 'object') {
     const keys = Object.keys(payload);
     if (keys.length === 0) {
       return payload;
@@ -79,23 +73,33 @@ const normalizeIncomingData = (data: any): Buffer => {
   if (ArrayBuffer.isView(data)) {
     return Buffer.from(data.buffer as ArrayBuffer);
   }
-  if (typeof data === "string") {
-    return Buffer.from(data, "binary");
+  if (typeof data === 'string') {
+    return Buffer.from(data, 'binary');
   }
   return Buffer.from(data);
 };
 
 class Packer {
-
   public pack(message: IMessage, callback: PackCallback): void {
     let encoded: Buffer = null;
     try {
       if (message.messageId) {
-        encoded = notepack.encode([message.channelType, message.messageType,
-          message.fromId, message.toId, message.messageId, message.payload]);
+        encoded = notepack.encode([
+          message.channelType,
+          message.messageType,
+          message.fromId,
+          message.toId,
+          message.messageId,
+          message.payload,
+        ]);
       } else {
-        encoded = notepack.encode([message.channelType, message.messageType,
-          message.fromId, message.toId, message.payload]);
+        encoded = notepack.encode([
+          message.channelType,
+          message.messageType,
+          message.fromId,
+          message.toId,
+          message.payload,
+        ]);
       }
     } catch (e) {
       return callback(e, null);
@@ -111,7 +115,7 @@ class Packer {
     } catch (exception) {
       if (exception instanceof Error) {
         const err = exception;
-        if (exception.hasOwnProperty("message")) {
+        if (exception.hasOwnProperty('message')) {
           logger.error(err.message);
         } else {
           logger.error(err.message);
@@ -122,42 +126,42 @@ class Packer {
           messageId: null,
           messageType: 0,
           payload: null,
-          toId: 0
+          toId: 0,
         });
       }
 
       logger.error(exception);
-      return callback(Error("Invalid message format"), {
+      return callback(Error('Invalid message format'), {
         channelType: 0,
         fromId: 0,
         messageId: null,
         messageType: 0,
         payload: null,
-        toId: 0
+        toId: 0,
       });
     }
 
-    const fromId: number|string = decoded[MessageIndex.FROM_ID];
-    let toId: number|string = decoded[MessageIndex.TO_ID];
-    let channelId: number|string = toId;
+    const fromId: number | string = decoded[MessageIndex.FROM_ID];
+    let toId: number | string = decoded[MessageIndex.TO_ID];
+    let channelId: number | string = toId;
     let messageId: string = null;
-    let buffer: object|string = null;
+    let buffer: object | string = null;
     const channelType: number = decoded[MessageIndex.CHANNEL_TYPE];
     const messageType: number = decoded[MessageIndex.MESSAGE_TYPE];
 
     if (isNaN(messageType)) {
-      debug("Invalid message type");
-      logger.info("Invalid message type");
-      return callback(Error("Invalid message type"), {
+      debug('Invalid message type');
+      logger.info('Invalid message type');
+      return callback(Error('Invalid message type'), {
         channelType,
         fromId,
         messageId,
         messageType,
         payload: buffer,
-        toId: channelId
+        toId: channelId,
       });
     }
-    if (decoded.length < (MessageIndex.BUFFER + 1)) {
+    if (decoded.length < MessageIndex.BUFFER + 1) {
       // If a decoded doesn't have a message_id, interpret the message_id field as buffer
       buffer = decoded[MessageIndex.MESSAGE_ID];
     } else {
@@ -177,7 +181,7 @@ class Packer {
         messageId,
         messageType,
         payload: buffer,
-        toId
+        toId,
       });
     }
 
@@ -188,16 +192,16 @@ class Packer {
         messageId,
         messageType,
         payload: buffer,
-        toId: channelId
+        toId: channelId,
       });
     }
-    return callback(Error("Invalid message format"), {
+    return callback(Error('Invalid message format'), {
       channelType: 0,
       fromId: 0,
       messageId: null,
       messageType: 0,
       payload: null,
-      toId: 0
+      toId: 0,
     });
   }
 }

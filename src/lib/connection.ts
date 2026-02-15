@@ -1,17 +1,17 @@
-import * as cluster from "cluster";
-import * as EventEmitter from "events";
+import * as cluster from 'cluster';
+import * as EventEmitter from 'events';
 
-import * as dbug from "debug";
-import * as WebSocket from "ws";
+import * as dbug from 'debug';
+import * as WebSocket from 'ws';
 
-import logger = require("./logger");
-import MessageType = require("./messagetype");
-import { packer } from "./packer";
-import { IMessage, numberOrString } from "./types";
+import logger = require('./logger');
+import MessageType = require('./messagetype');
+import { packer } from './packer';
+import { IMessage, numberOrString } from './types';
 
-const dbug1 = dbug("vp:connection");
+const dbug1 = dbug('vp:connection');
 function debug(msg: string) {
-  dbug1((cluster.worker ? `worker ${cluster.worker.id} ` : "") + msg);
+  dbug1((cluster.worker ? `worker ${cluster.worker.id} ` : '') + msg);
 }
 
 export default class Connection extends EventEmitter {
@@ -31,21 +31,21 @@ export default class Connection extends EventEmitter {
     this.socket = socket;
     this.timestamp = Date.now();
 
-    socket.addListener("close", this.handleSocketClose);
-    socket.addListener("error", this.handleSocketError);
-    socket.addListener("message", this.handleSocketMessage);
-    socket.addListener("ping", this.handleSocketPing);
-    socket.addListener("pong", this.handleSocketPong);
+    socket.addListener('close', this.handleSocketClose);
+    socket.addListener('error', this.handleSocketError);
+    socket.addListener('message', this.handleSocketMessage);
+    socket.addListener('ping', this.handleSocketPing);
+    socket.addListener('pong', this.handleSocketPong);
   }
 
   public ping(this: Connection) {
     if (this.socket.readyState === WebSocket.OPEN) {
       try {
-        this.socket.ping("voiceping:" + this.clientId, false, true);
+        this.socket.ping('voiceping:' + this.clientId, false, true);
       } catch (exception) {
-        debug(`id ${this.clientId} key ${this.key}` +
-              ` PING ERR ${JSON.stringify(exception)}` +
-              ` device ${this.deviceId}`);
+        debug(
+          `id ${this.clientId} key ${this.key}` + ` PING ERR ${JSON.stringify(exception)}` + ` device ${this.deviceId}`,
+        );
       }
     }
   }
@@ -55,13 +55,13 @@ export default class Connection extends EventEmitter {
       debug(`id ${this.clientId} SEND readyState: ${this.socket.readyState}, msg: ${JSON.stringify(msg)}`);
     }
     if (this.socket.readyState === WebSocket.OPEN) {
-        try {
-          this.socket.send(data);
-        } catch (exception) {
-          debug(`id ${this.clientId} key ${this.key}` +
-                ` SEND ERR ${JSON.stringify(exception)}` +
-                ` device ${this.deviceId}`);
-        }
+      try {
+        this.socket.send(data);
+      } catch (exception) {
+        debug(
+          `id ${this.clientId} key ${this.key}` + ` SEND ERR ${JSON.stringify(exception)}` + ` device ${this.deviceId}`,
+        );
+      }
     }
   }
 
@@ -69,9 +69,11 @@ export default class Connection extends EventEmitter {
     debug(`id ${this.clientId} SEND_MESSAGE ${JSON.stringify(msg)}`);
     packer.pack(msg, (err, packed) => {
       if (err) {
-        debug(`id ${this.clientId} key ${this.key}` +
-              ` PACK ERR ${err} ${JSON.stringify(msg)}` +
-              ` device ${this.deviceId}`);
+        debug(
+          `id ${this.clientId} key ${this.key}` +
+            ` PACK ERR ${err} ${JSON.stringify(msg)}` +
+            ` device ${this.deviceId}`,
+        );
         return;
       }
       this.send(packed, msg);
@@ -86,80 +88,93 @@ export default class Connection extends EventEmitter {
   // (WEB)SOCKET (WS) EVENT HANDLERS
 
   private handleSocketClose = (code, reason) => {
-    debug(`id ${this.clientId} key ${this.key}` +
-          ` handleSocketClose code ${code} reason ${reason}` +
-          ` device ${this.deviceId}`);
+    debug(
+      `id ${this.clientId} key ${this.key}` +
+        ` handleSocketClose code ${code} reason ${reason}` +
+        ` device ${this.deviceId}`,
+    );
 
-    this.socket.removeListener("close", this.handleSocketClose);
-    this.socket.removeListener("error", this.handleSocketError);
-    this.socket.removeListener("message", this.handleSocketMessage);
-    this.socket.removeListener("ping", this.handleSocketPing);
-    this.socket.removeListener("pong", this.handleSocketPong);
+    this.socket.removeListener('close', this.handleSocketClose);
+    this.socket.removeListener('error', this.handleSocketError);
+    this.socket.removeListener('message', this.handleSocketMessage);
+    this.socket.removeListener('ping', this.handleSocketPing);
+    this.socket.removeListener('pong', this.handleSocketPong);
 
-    this.emit("close", this);
-  }
+    this.emit('close', this);
+  };
 
   private handleSocketError = (reason, code) => {
-    debug(`id ${this.clientId} key ${this.key}` +
-          ` handleSocketError code ${code} reason ${reason}` +
-          ` device ${this.deviceId}`);
-  }
+    debug(
+      `id ${this.clientId} key ${this.key}` +
+        ` handleSocketError code ${code} reason ${reason}` +
+        ` device ${this.deviceId}`,
+    );
+  };
 
   private handleSocketMessage = (data: any) => {
     debug(`*************************************`);
-    let rawSummary = "";
+    let rawSummary = '';
     const dataAny: any = data;
-    if (typeof dataAny === "string") {
+    if (typeof dataAny === 'string') {
       const preview = dataAny.length > 120 ? `${dataAny.slice(0, 120)}...` : dataAny;
       rawSummary = `text length ${dataAny.length} preview ${preview}`;
     } else {
-      const buffer =
-        Buffer.isBuffer(dataAny) ? dataAny :
-        (dataAny instanceof Uint8Array ? Buffer.from(dataAny) :
-        (dataAny instanceof ArrayBuffer ? Buffer.from(new Uint8Array(dataAny)) : null));
+      const buffer = Buffer.isBuffer(dataAny)
+        ? dataAny
+        : dataAny instanceof Uint8Array
+          ? Buffer.from(dataAny)
+          : dataAny instanceof ArrayBuffer
+            ? Buffer.from(new Uint8Array(dataAny))
+            : null;
       if (buffer) {
-        const sample = buffer.slice(0, 24).toString("hex");
-        rawSummary = `binary length ${buffer.length} hex ${sample}${buffer.length > 24 ? "..." : ""}`;
+        const sample = buffer.slice(0, 24).toString('hex');
+        rawSummary = `binary length ${buffer.length} hex ${sample}${buffer.length > 24 ? '...' : ''}`;
       } else {
         rawSummary = `unknown payload type`;
       }
     }
-    debug(`id ${this.clientId} key ${this.key}` +
-              ` handleSocketMessage RAW ${rawSummary}` +
-              ` device ${this.deviceId}` +
-              ` socketState ${this.socket.readyState}`);
+    debug(
+      `id ${this.clientId} key ${this.key}` +
+        ` handleSocketMessage RAW ${rawSummary}` +
+        ` device ${this.deviceId}` +
+        ` socketState ${this.socket.readyState}`,
+    );
     packer.unpack(data, (err: Error, msg: IMessage) => {
       if (err) {
-        debug(`id ${this.clientId} key ${this.key}` +
-              ` UNPACK ERR ${err} ${JSON.stringify(msg)}` +
-              ` device ${this.deviceId}`);
+        debug(
+          `id ${this.clientId} key ${this.key}` +
+            ` UNPACK ERR ${err} ${JSON.stringify(msg)}` +
+            ` device ${this.deviceId}`,
+        );
         return;
       }
-      debug(`id ${this.clientId} key ${this.key}` +
+      debug(
+        `id ${this.clientId} key ${this.key}` +
           ` handleSocketMessage device ${this.deviceId}` +
           ` socketState ${this.socket.readyState}` +
-          ` msg: ${JSON.stringify(msg)}`);
+          ` msg: ${JSON.stringify(msg)}`,
+      );
 
-      this.emit("message", msg);
+      this.emit('message', msg);
     });
-  }
+  };
 
   private handleSocketPing = (data: Buffer) => {
     this.timestamp = Date.now();
     let payload;
-    if (data instanceof Buffer) { payload = data.toString(); }
-    debug(`id ${this.clientId} key ${this.key}` +
-          ` handleSocketPing ${payload}` +
-          ` device ${this.deviceId}`);
-  }
+    if (data instanceof Buffer) {
+      payload = data.toString();
+    }
+    debug(`id ${this.clientId} key ${this.key}` + ` handleSocketPing ${payload}` + ` device ${this.deviceId}`);
+  };
 
   private handleSocketPong = (data: Buffer) => {
     this.timestamp = Date.now();
     let payload;
-    if (data instanceof Buffer) { payload = data.toString(); }
-    debug(`id ${this.clientId} key ${this.key}` +
-          ` handleSocketPong ${payload}` +
-          ` device ${this.deviceId}`);
-    this.emit("pong", payload);
-  }
+    if (data instanceof Buffer) {
+      payload = data.toString();
+    }
+    debug(`id ${this.clientId} key ${this.key}` + ` handleSocketPong ${payload}` + ` device ${this.deviceId}`);
+    this.emit('pong', payload);
+  };
 }

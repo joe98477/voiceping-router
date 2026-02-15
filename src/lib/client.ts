@@ -1,24 +1,24 @@
-import * as cluster from "cluster";
-import * as EventEmitter from "events";
+import * as cluster from 'cluster';
+import * as EventEmitter from 'events';
 
-import * as dbug from "debug";
-import * as Q from "q";
-import * as WebSocket from "ws";
+import * as dbug from 'debug';
+import * as Q from 'q';
+import * as WebSocket from 'ws';
 
-import ChannelType = require("./channeltype");
-import config = require("./config");
-import Connection from "./connection";
-import logger = require("./logger");
-import MessageType = require("./messagetype");
-import Recorder from "./recorder";
-import Redis = require("./redis");
-import { IServer } from "./server";
-import States from "./states";
-import { IMessage, numberOrString } from "./types";
+import ChannelType = require('./channeltype');
+import config = require('./config');
+import Connection from './connection';
+import logger = require('./logger');
+import MessageType = require('./messagetype');
+import Recorder from './recorder';
+import Redis = require('./redis');
+import { IServer } from './server';
+import States from './states';
+import { IMessage, numberOrString } from './types';
 
-const dbug1 = dbug("vp:client");
+const dbug1 = dbug('vp:client');
 function debug(msg: string) {
-  dbug1((cluster.worker ? `worker ${cluster.worker.id} ` : "") + msg);
+  dbug1((cluster.worker ? `worker ${cluster.worker.id} ` : '') + msg);
 }
 
 const MAXIMUM_IDLE_DURATION: number = config.message.maximumIdleDuration;
@@ -29,7 +29,6 @@ interface IConnections {
 }
 
 export default class Client extends EventEmitter {
-
   public id: numberOrString;
   private user: any;
   private pingInterval: NodeJS.Timer;
@@ -45,28 +44,34 @@ export default class Client extends EventEmitter {
 
   public registerSocket(this: Client, socket: WebSocket, key: string, deviceId: string) {
     const connection = new Connection(key, socket, deviceId, this.id);
-    connection.addListener("close", this.handleConnectionClose);
-    connection.addListener("message", this.handleConnectionMessage);
-    connection.addListener("pong", this.handleConnectionPong);
+    connection.addListener('close', this.handleConnectionClose);
+    connection.addListener('message', this.handleConnectionMessage);
+    connection.addListener('pong', this.handleConnectionPong);
     this.connections[key] = connection;
 
     this.isLoginDuplicated(deviceId, key, (err, data) => {
       const { duplicated, oldDeviceId, newDeviceId } = data;
 
-      logger.info(`id ${this.id} key ${key} isLoginDuplicated duplicate: ${duplicated}, ` +
-        `oldDeviceId: ${oldDeviceId}, newDeviceId: ${newDeviceId}, ERR: ${err ? err.message : null }`);
+      logger.info(
+        `id ${this.id} key ${key} isLoginDuplicated duplicate: ${duplicated}, ` +
+          `oldDeviceId: ${oldDeviceId}, newDeviceId: ${newDeviceId}, ERR: ${err ? err.message : null}`,
+      );
 
       if (duplicated) {
-        logger.info(`id ${this.id} key ${key} DUPLICATE_LOGIN device ${deviceId}` +
-        ` connections ${Object.keys(this.connections).length}`);
+        logger.info(
+          `id ${this.id} key ${key} DUPLICATE_LOGIN device ${deviceId}` +
+            ` connections ${Object.keys(this.connections).length}`,
+        );
         this.sendLoginDuplicatedMessageFromKeyWithDeviceId(duplicated, key, oldDeviceId, newDeviceId, undefined);
         Redis.setDeviceIdOfUser(this.id, deviceId);
       }
 
       this.periodicPing();
 
-      debug(`id ${this.id} key ${key} REGISTERED device ${deviceId}` +
-            ` connections ${Object.keys(this.connections).length}`);
+      debug(
+        `id ${this.id} key ${key} REGISTERED device ${deviceId}` +
+          ` connections ${Object.keys(this.connections).length}`,
+      );
 
       this.closeConnectionsExceptKey(key);
     });
@@ -80,7 +85,9 @@ export default class Client extends EventEmitter {
 
   public message(this: Client, message: IMessage, key0?: string) {
     Object.keys(this.connections).forEach((key) => {
-      if (key0 && key0 === key) { return; }
+      if (key0 && key0 === key) {
+        return;
+      }
       this.connections[key].message(message);
     });
   }
@@ -101,29 +108,35 @@ export default class Client extends EventEmitter {
 
   private closeConnectionsExceptKey(this: Client, key0: string) {
     Object.keys(this.connections).forEach((key) => {
-      if (key0 === key) { return; }
+      if (key0 === key) {
+        return;
+      }
       const connection = this.connections[key];
       this.unregisterConnection(connection);
     });
   }
 
   private unregisterConnection(this: Client, connection: Connection) {
-    connection.removeListener("close", this.handleConnectionClose);
-    connection.removeListener("message", this.handleConnectionMessage);
-    connection.removeListener("pong", this.handleConnectionPong);
+    connection.removeListener('close', this.handleConnectionClose);
+    connection.removeListener('message', this.handleConnectionMessage);
+    connection.removeListener('pong', this.handleConnectionPong);
     connection.close();
 
     delete this.connections[connection.key];
-    debug(`id ${this.id} key ${connection.key} UNREGISTERED device ${connection.deviceId}` +
-          ` connections ${Object.keys(this.connections).length}`);
+    debug(
+      `id ${this.id} key ${connection.key} UNREGISTERED device ${connection.deviceId}` +
+        ` connections ${Object.keys(this.connections).length}`,
+    );
   }
 
   private periodicPing(this: Client) {
-    if (this.pingInterval) { return; }
+    if (this.pingInterval) {
+      return;
+    }
     const connections = Object.keys(this.connections).length;
     if (connections <= 0) {
       this.unregister();
-      this.emit("unregister", this);
+      this.emit('unregister', this);
       return;
     }
 
@@ -154,27 +167,29 @@ export default class Client extends EventEmitter {
     });
   }
 
-  private isLoginDuplicated(this: Client, deviceId: string, key: string,
-                            callback: (err: Error, data: any) => void) {
-
+  private isLoginDuplicated(this: Client, deviceId: string, key: string, callback: (err: Error, data: any) => void) {
     Redis.getDeviceIdOfUser(this.id, (err, deviceId1) => {
-      const duplicated = !(deviceId && deviceId.length > 0 &&
-                           deviceId1 && deviceId1 === deviceId);
+      const duplicated = !(deviceId && deviceId.length > 0 && deviceId1 && deviceId1 === deviceId);
       debug(`id ${this.id} isLoginDuplicated: ${duplicated}, deviceId: ${deviceId}`);
       return callback(err, { duplicated, oldDeviceId: deviceId1, newDeviceId: deviceId });
     });
   }
 
-  private sendLoginDuplicatedMessageFromKeyWithDeviceId(this: Client, isDuplicate: boolean, key: string,
-                                                        oldDeviceId: string, newDeviceId: string,
-                                                        callback: () => void) {
+  private sendLoginDuplicatedMessageFromKeyWithDeviceId(
+    this: Client,
+    isDuplicate: boolean,
+    key: string,
+    oldDeviceId: string,
+    newDeviceId: string,
+    callback: () => void,
+  ) {
     debug(`id ${this.id} key ${key} sendLoginDuplicatedWithDeviceId ${newDeviceId}`);
     const msg = {
       channelType: ChannelType.PRIVATE,
       fromId: 0,
       messageType: MessageType.LOGIN_DUPLICATED,
       payload: `userId ${this.id} has logged in from another deviceId ${newDeviceId}`,
-      toId: this.id
+      toId: this.id,
     };
     this.message(msg, key);
   }
@@ -206,7 +221,7 @@ export default class Client extends EventEmitter {
   private handlePrivateAudioMessage(this: Client, msg: IMessage) {
     Recorder.resume(msg);
     // this.server.sendMessageToUser(msg);
-    this.emit("message", msg, this);
+    this.emit('message', msg, this);
   }
 
   private handlePrivateStartMessage(this: Client, msg: IMessage) {
@@ -217,16 +232,16 @@ export default class Client extends EventEmitter {
     States.setCurrentMessageOfUser(msg.fromId, msg);
 
     // this.server.sendMessageToUser(msg);
-    this.emit("message", msg, this);
+    this.emit('message', msg, this);
   }
 
   private acknowledgePrivateStartMessage(this: Client, msg: IMessage) {
-    const payload = msg.payload || "Acknowledged";
+    const payload = msg.payload || 'Acknowledged';
     this.message({
       ...msg,
       channelType: msg.channelType,
       messageType: MessageType.START_ACK,
-      payload
+      payload,
     });
   }
 
@@ -242,15 +257,15 @@ export default class Client extends EventEmitter {
 
         const payload = JSON.stringify({
           duration,
-          message_id: messageId
+          message_id: messageId,
         });
 
         const msg1 = {
           ...msg,
-          payload
+          payload,
         };
 
-        this.emit("message", msg1, this);
+        this.emit('message', msg1, this);
 
         States.removeCurrentMessageOfUser(msg.fromId);
         if (msg.channelType === ChannelType.GROUP) {
@@ -262,13 +277,14 @@ export default class Client extends EventEmitter {
             const currentStartTime = currentMessage && currentMessage.startTime ? currentMessage.startTime : null;
             const shouldRemove =
               !currentFromId ||
-              (currentFromId === msg.fromId.toString() &&
-                (!currentStartTime || currentStartTime <= stopReceivedAt));
+              (currentFromId === msg.fromId.toString() && (!currentStartTime || currentStartTime <= stopReceivedAt));
             if (shouldRemove) {
               States.removeCurrentMessageOfGroup(msg.toId);
             } else {
-              debug(`id ${this.id} Skip removing current group state for ${msg.toId}` +
-                    ` startTime ${currentStartTime} stopReceivedAt ${stopReceivedAt}`);
+              debug(
+                `id ${this.id} Skip removing current group state for ${msg.toId}` +
+                  ` startTime ${currentStartTime} stopReceivedAt ${stopReceivedAt}`,
+              );
             }
           });
           Redis.getCurrentMessageOfGroup(msg.toId, (redisErr, currentMessage) => {
@@ -276,17 +292,18 @@ export default class Client extends EventEmitter {
               debug(`id ${this.id} Failed to read current group redis for ${msg.toId}: ${redisErr.message}`);
             }
             const currentFromId = currentMessage && currentMessage.fromId ? currentMessage.fromId.toString() : null;
-            const currentStartTime = currentMessage && currentMessage.startTime ?
-              Number(currentMessage.startTime) : null;
+            const currentStartTime =
+              currentMessage && currentMessage.startTime ? Number(currentMessage.startTime) : null;
             const shouldRemove =
               !currentFromId ||
-              (currentFromId === msg.fromId.toString() &&
-                (!currentStartTime || currentStartTime <= stopReceivedAt));
+              (currentFromId === msg.fromId.toString() && (!currentStartTime || currentStartTime <= stopReceivedAt));
             if (shouldRemove) {
               Redis.removeCurrentMessageOfGroup(msg.toId);
             } else {
-              debug(`id ${this.id} Skip removing current group redis for ${msg.toId}` +
-                    ` startTime ${currentStartTime} stopReceivedAt ${stopReceivedAt}`);
+              debug(
+                `id ${this.id} Skip removing current group redis for ${msg.toId}` +
+                  ` startTime ${currentStartTime} stopReceivedAt ${stopReceivedAt}`,
+              );
             }
           });
         }
@@ -304,35 +321,35 @@ export default class Client extends EventEmitter {
       ...msg,
       messageId,
       messageType: MessageType.STOP_ACK,
-      payload: "Acknowledged"
+      payload: 'Acknowledged',
     });
   }
 
   private handleDeliveredMessage(this: Client, msg: IMessage) {
-    this.emit("message", msg, this);
+    this.emit('message', msg, this);
 
     let messages = [];
     try {
       messages = JSON.parse(msg.payload as string);
     } catch (exception) {
       debug(`id ${this.id} handleDeliveredMessage JSON.parse ERR ${exception} ${JSON.stringify(msg)}`);
-      if (typeof msg.payload === "string") {
+      if (typeof msg.payload === 'string') {
         messages = [msg.payload];
       }
     }
   }
 
   private handleReadMessage(this: Client, msg: IMessage) {
-      this.emit("message", msg, this);
+    this.emit('message', msg, this);
   }
 
   private handleImageMessage(this: Client, msg: IMessage) {
     Recorder.save(msg, (err, messageId) => {
-      if (err) { logger.error(`Failed to save image at recorder. err: ${err}`); }
+      if (err) {
+        logger.error(`Failed to save image at recorder. err: ${err}`);
+      }
       States.getUsersInsideGroup(msg.toId, (err1, userIds1) => {
-        const isSenderInGroup = userIds1
-          ? userIds1.map((u) => u.toString()).includes(msg.fromId.toString())
-          : false;
+        const isSenderInGroup = userIds1 ? userIds1.map((u) => u.toString()).includes(msg.fromId.toString()) : false;
         if (!isSenderInGroup) {
           this.send27ToMe(msg);
         }
@@ -359,25 +376,23 @@ export default class Client extends EventEmitter {
 
       const payload = JSON.stringify({
         message_id: messageId,
-        text
+        text,
       });
       const msg1 = {
         ...msg,
-        payload
+        payload,
       };
 
       if (msg.channelType === ChannelType.GROUP) {
         States.getUsersInsideGroup(msg.toId, (err1, userIds1) => {
-          const isSenderInGroup = userIds1
-            ? userIds1.map((u) => u.toString()).includes(msg.fromId.toString())
-            : false;
+          const isSenderInGroup = userIds1 ? userIds1.map((u) => u.toString()).includes(msg.fromId.toString()) : false;
           if (!isSenderInGroup) {
             this.send27ToMe(msg);
           }
         });
       }
 
-      this.emit("message", msg1, this);
+      this.emit('message', msg1, this);
     });
   }
 
@@ -386,10 +401,9 @@ export default class Client extends EventEmitter {
       channelType: msg.channelType,
       fromId: msg.fromId,
       messageId,
-      messageType: (msg.messageType === MessageType.INTERACTIVE ?
-                    MessageType.INTERACTIVE_ACK : MessageType.TEXT_ACK),
-      payload: "Acknowledged",
-      toId: msg.toId
+      messageType: msg.messageType === MessageType.INTERACTIVE ? MessageType.INTERACTIVE_ACK : MessageType.TEXT_ACK,
+      payload: 'Acknowledged',
+      toId: msg.toId,
     });
   }
 
@@ -397,7 +411,9 @@ export default class Client extends EventEmitter {
 
   private handleGroupMessage(this: Client, msg: IMessage) {
     // tslint:disable-next-line:max-line-length
-    debug(`id ${this.id} handleGroupMessage => channelType: ${msg.channelType}, messageType: ${msg.messageType}, from: ${msg.fromId}, to: ${msg.toId}`);
+    debug(
+      `id ${this.id} handleGroupMessage => channelType: ${msg.channelType}, messageType: ${msg.messageType}, from: ${msg.fromId}, to: ${msg.toId}`,
+    );
     switch (msg.messageType) {
       case MessageType.TEXT:
         this.handleTextMessage(msg);
@@ -426,7 +442,7 @@ export default class Client extends EventEmitter {
       case MessageType.READ:
         break;
       case MessageType.CONNECTION:
-        this.emit("message", msg, this);
+        this.emit('message', msg, this);
         break;
       case MessageType.CONNECTION_TEST:
         this.handleConnectionTest(msg);
@@ -442,47 +458,56 @@ export default class Client extends EventEmitter {
     States.updateAudioTimeOfGroup(msg.toId);
     Redis.updateAudioTimeOfGroup(msg.toId, Date.now());
     Recorder.resume(msg, (err, messageId, duration) => {
-      if (err) { debug(`id: ${this.id} recorder.resume: err: ${err} messageId: ${messageId}` +
-                       ` duration: ${duration}`); }
-      this.emit("message", msg, this);
+      if (err) {
+        debug(`id: ${this.id} recorder.resume: err: ${err} messageId: ${messageId}` + ` duration: ${duration}`);
+      }
+      this.emit('message', msg, this);
     });
   }
 
   private handleGroupStartMessage(this: Client, msg: IMessage) {
     this.acknowledgeGroupStartMessage(msg, (err, acknowledged) => {
-      if (err) { debug(`id: ${this.id} acknowledgeGroupMessage: groupId: ${msg.toId}` +
-                       ` id: ${msg.fromId} err: ${err}`); }
-      if (!acknowledged) { return; }
+      if (err) {
+        debug(`id: ${this.id} acknowledgeGroupMessage: groupId: ${msg.toId}` + ` id: ${msg.fromId} err: ${err}`);
+      }
+      if (!acknowledged) {
+        return;
+      }
 
       Recorder.start(msg);
 
       States.getUsersInsideGroup(msg.toId, (err1, userIds1) => {
         debug(`handleGroupStartMessage - getUsersInsideGroup groupId: ${msg.toId} users: ${JSON.stringify(userIds1)}`);
-        const isSenderInGroup = userIds1
-          ? userIds1.map((u) => u.toString()).includes(msg.fromId.toString())
-          : false;
+        const isSenderInGroup = userIds1 ? userIds1.map((u) => u.toString()).includes(msg.fromId.toString()) : false;
         if (!isSenderInGroup) {
           this.send27ToMe(msg);
           this.sendStartFailedToMe(msg);
         }
       });
 
-      this.emit("message", msg, this);
+      this.emit('message', msg, this);
     });
   }
 
-  private acknowledgeGroupStartMessage(this: Client, msg: IMessage, callback:
-    (error: Error, acknowledged: boolean) => void): void {
+  private acknowledgeGroupStartMessage(
+    this: Client,
+    msg: IMessage,
+    callback: (error: Error, acknowledged: boolean) => void,
+  ): void {
     debug(`id ${this.id} acknowledgeGroupStartMessage => ${JSON.stringify(msg)}`);
     if (msg.messageType !== MessageType.START) {
       // don't send ACK, callback pass through.
-      if (callback) { return callback(null, true); }
+      if (callback) {
+        return callback(null, true);
+      }
     }
 
     debug(`id ${this.id} Starting to check busy status`);
     Q.Promise((resolve, reject) => {
       States.getBusyStateOfGroup(msg.toId, (err, busyWithUserId) => {
-        if (err) { return reject(err); }
+        if (err) {
+          return reject(err);
+        }
         if (!busyWithUserId) {
           debug(`id ${this.id} States.getBusyStateOfGroup ${msg.toId} is not busy`);
         } else if (busyWithUserId === msg.fromId) {
@@ -492,65 +517,72 @@ export default class Client extends EventEmitter {
         }
         return resolve(busyWithUserId);
       });
-    }).then((busyWithUserId: numberOrString) => {
-      return Q.Promise((resolve, reject) => {
-        if (!busyWithUserId || busyWithUserId === msg.fromId) {
-          return resolve(false);
-        } else {
-          States.getAudioTimeOfGroup(msg.toId, (err, audioTime) => {
-            if (!audioTime) {
-              debug(`id ${this.id} States.getAudioTimeOfGroup ${msg.toId} audioTime ${audioTime}`);
-              return resolve(false);
-            }
-            const idleDuration = Date.now() - audioTime;
-            if (idleDuration < MAXIMUM_IDLE_DURATION) {
-              return resolve(true);
-            } else {
-              debug(`id ${this.id} States.getBusyStateOfGroup ${msg.toId} is busyWithUserId ${busyWithUserId}` +
-                          ` with MAXIMUM_IDLE_DURATION ${idleDuration}`);
-              return resolve(false);
-            }
-          });
-        }
-      });
-    }).then((busy: boolean) => {
-      if (!busy) {
-        States.setCurrentMessageOfGroup(msg.toId, msg);
-        Redis.setCurrentMessageOfGroup(msg.toId, {
-          audioTime: Date.now(),
-          channelType: msg.channelType,
-          fromId: msg.fromId,
-          messageType: msg.messageType,
-          startTime: Date.now(),
-          toId: msg.toId
+    })
+      .then((busyWithUserId: numberOrString) => {
+        return Q.Promise((resolve, reject) => {
+          if (!busyWithUserId || busyWithUserId === msg.fromId) {
+            return resolve(false);
+          } else {
+            States.getAudioTimeOfGroup(msg.toId, (err, audioTime) => {
+              if (!audioTime) {
+                debug(`id ${this.id} States.getAudioTimeOfGroup ${msg.toId} audioTime ${audioTime}`);
+                return resolve(false);
+              }
+              const idleDuration = Date.now() - audioTime;
+              if (idleDuration < MAXIMUM_IDLE_DURATION) {
+                return resolve(true);
+              } else {
+                debug(
+                  `id ${this.id} States.getBusyStateOfGroup ${msg.toId} is busyWithUserId ${busyWithUserId}` +
+                    ` with MAXIMUM_IDLE_DURATION ${idleDuration}`,
+                );
+                return resolve(false);
+              }
+            });
+          }
         });
-      }
+      })
+      .then(
+        (busy: boolean) => {
+          if (!busy) {
+            States.setCurrentMessageOfGroup(msg.toId, msg);
+            Redis.setCurrentMessageOfGroup(msg.toId, {
+              audioTime: Date.now(),
+              channelType: msg.channelType,
+              fromId: msg.fromId,
+              messageType: msg.messageType,
+              startTime: Date.now(),
+              toId: msg.toId,
+            });
+          }
 
-      let payload: string;
-      let messageType: number;
-      if (busy) {
-        debug(`id ${this.id} Response START_FAILED`);
-        payload = "Busy";
-        messageType = MessageType.START_FAILED;
-      } else {
-        debug(`id ${this.id} Response START_ACK`);
-        payload = msg.payload ? msg.payload.toString() : "Acknowledged";
-        messageType = MessageType.START_ACK;
-      }
+          let payload: string;
+          let messageType: number;
+          if (busy) {
+            debug(`id ${this.id} Response START_FAILED`);
+            payload = 'Busy';
+            messageType = MessageType.START_FAILED;
+          } else {
+            debug(`id ${this.id} Response START_ACK`);
+            payload = msg.payload ? msg.payload.toString() : 'Acknowledged';
+            messageType = MessageType.START_ACK;
+          }
 
-      this.message({
-        channelType: msg.channelType,
-        fromId: msg.fromId,
-        messageType,
-        payload,
-        toId: msg.toId
-      });
+          this.message({
+            channelType: msg.channelType,
+            fromId: msg.fromId,
+            messageType,
+            payload,
+            toId: msg.toId,
+          });
 
-      callback(null, !busy);
-    }, (err) => {
-      debug(`id ${this.id} acknowledgeGroupStartMessage groupId ${msg.toId} ERR ${err}`);
-      return callback(null, false);
-    });
+          callback(null, !busy);
+        },
+        (err) => {
+          debug(`id ${this.id} acknowledgeGroupStartMessage groupId ${msg.toId} ERR ${err}`);
+          return callback(null, false);
+        },
+      );
   }
 
   private handleConnectionTest(this: Client, msg: IMessage) {
@@ -559,17 +591,17 @@ export default class Client extends EventEmitter {
       fromId: 0,
       messageType: MessageType.CONNECTION_ACK,
       payload: msg.payload,
-      toId: msg.fromId
+      toId: msg.fromId,
     };
-    this.emit("message", connectionTestAckMsg, this);
+    this.emit('message', connectionTestAckMsg, this);
   }
 
   // CONNECTION EVENT HANDLERS
 
   private handleConnectionClose = (connection: Connection) => {
     delete this.connections[connection.key];
-    this.emit("unregister", this);
-  }
+    this.emit('unregister', this);
+  };
 
   private handleConnectionMessage = (msg: IMessage) => {
     try {
@@ -583,12 +615,12 @@ export default class Client extends EventEmitter {
     } catch (error) {
       console.error(error);
     }
-  }
+  };
 
   private handleConnectionPong = (payload: string) => {
     debug(`id ${this.id} handleConnectionPong ${payload}`);
-    this.emit("pong");
-  }
+    this.emit('pong');
+  };
 
   private send27ToMe = (msg: IMessage) => {
     debug(`id ${this.id} Sending UNAUTHORIZED_GROUP to user: ${msg.fromId} group: ${msg.toId}`);
@@ -596,10 +628,10 @@ export default class Client extends EventEmitter {
       channelType: ChannelType.GROUP,
       fromId: msg.fromId,
       messageType: MessageType.UNAUTHORIZED_GROUP,
-      payload: "Unauthorized Group",
-      toId: msg.toId
+      payload: 'Unauthorized Group',
+      toId: msg.toId,
     });
-  }
+  };
 
   private sendStartFailedToMe = (msg: IMessage) => {
     debug(`id ${this.id} Sending START_FAILED to user: ${msg.fromId} group: ${msg.toId}`);
@@ -607,10 +639,10 @@ export default class Client extends EventEmitter {
       channelType: ChannelType.GROUP,
       fromId: msg.fromId,
       messageType: MessageType.START_FAILED,
-      payload: "Ack Failed",
-      toId: msg.toId
+      payload: 'Ack Failed',
+      toId: msg.toId,
     });
-  }
+  };
 }
 
 export interface IClients {

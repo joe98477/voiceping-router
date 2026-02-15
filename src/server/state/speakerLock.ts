@@ -35,7 +35,7 @@ function getLockKey(channelId: string): string {
 export async function acquireSpeakerLock(
   channelId: string,
   userId: string,
-  userName: string
+  userName: string,
 ): Promise<SpeakerLockResult> {
   try {
     const client = getRedisClient();
@@ -91,10 +91,7 @@ export async function acquireSpeakerLock(
  * @param userId - User attempting to release lock
  * @returns true if released, false if not the lock holder
  */
-export async function releaseSpeakerLock(
-  channelId: string,
-  userId: string
-): Promise<boolean> {
+export async function releaseSpeakerLock(channelId: string, userId: string): Promise<boolean> {
   try {
     const client = getRedisClient();
     const key = getLockKey(channelId);
@@ -137,10 +134,7 @@ export async function releaseSpeakerLock(
  * @param userId - User requesting refresh (must be current holder)
  * @returns true if refreshed, false if not holder or lock doesn't exist
  */
-export async function refreshSpeakerLock(
-  channelId: string,
-  userId: string
-): Promise<boolean> {
+export async function refreshSpeakerLock(channelId: string, userId: string): Promise<boolean> {
   try {
     const client = getRedisClient();
     const key = getLockKey(channelId);
@@ -178,9 +172,7 @@ export async function refreshSpeakerLock(
  * @param channelId - Channel to query
  * @returns Current speaker info or null if no active speaker
  */
-export async function getCurrentSpeaker(
-  channelId: string
-): Promise<{ userId: string; userName: string } | null> {
+export async function getCurrentSpeaker(channelId: string): Promise<{ userId: string; userName: string } | null> {
   try {
     const client = getRedisClient();
     const key = getLockKey(channelId);

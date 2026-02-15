@@ -1,24 +1,24 @@
-import * as redis from "redis";
-import config = require("./config");
+import * as redis from 'redis';
+import config = require('./config');
 
-import { Keys } from "./keys";
-import logger = require("./logger");
-import { numberOrString } from "./types";
+import { Keys } from './keys';
+import logger = require('./logger');
+import { numberOrString } from './types';
 
 const client = redis.createClient(config.redis.port, config.redis.host, {
-  auth_pass: config.redis.password
+  auth_pass: config.redis.password,
 });
 
 const subscriber = redis.createClient(config.redis.port, config.redis.host, {
-  auth_pass: config.redis.password
+  auth_pass: config.redis.password,
 });
 
-client.on("error", function(err) {
-  logger.error("Redis: client.on.error: ", err);
+client.on('error', function (err) {
+  logger.error('Redis: client.on.error: ', err);
 });
 
-subscriber.on("error", function(err) {
-  logger.error("Redis: subscriber.on.error: ", err);
+subscriber.on('error', function (err) {
+  logger.error('Redis: subscriber.on.error: ', err);
 });
 
 const CLEAN_INTERVAL = config.redis.cleanInterval;
@@ -30,167 +30,190 @@ let cleanInterval: NodeJS.Timer;
 let cleanGroup: number = 1;
 
 class Redis {
-
   public static incrementRegisterDevicesCount(callback: (err: Error, registerDevicesCount: number) => void) {
-    client.incr(Keys.forRegisterDevicesCount, function(err, registerDevicesCount) {
+    client.incr(Keys.forRegisterDevicesCount, function (err, registerDevicesCount) {
       return callback(err, registerDevicesCount);
     });
   }
 
   public static incrementGroupsPushCount(callback: (err: Error, groupsPushCount: number) => void) {
-    client.incr(Keys.forGroupsPushCount, function(err, groupsPushCount) {
+    client.incr(Keys.forGroupsPushCount, function (err, groupsPushCount) {
       return callback(err, groupsPushCount);
     });
   }
 
   public static incrementUsersPushCount(callback: (err: Error, usersPushCount: number) => void) {
-    client.incr(Keys.forUsersPushCount, function(err, usersPushCount) {
+    client.incr(Keys.forUsersPushCount, function (err, usersPushCount) {
       return callback(err, usersPushCount);
     });
   }
 
-  public static getUserWithToken(
-    token: string,
-    callback: (err: Error, user: any) => void) {
-
-    client.hget(Keys.forUUIDs(), token, function(err, user) {
-      if (err) { return callback(err, null); }
+  public static getUserWithToken(token: string, callback: (err: Error, user: any) => void) {
+    client.hget(Keys.forUUIDs(), token, function (err, user) {
+      if (err) {
+        return callback(err, null);
+      }
       return callback(null, JSON.parse(user));
     });
   }
 
-  public static getDeviceTokensOfUsers(userIds: numberOrString[],
-                                       callback: (err: Error, deviceTokens: string[]) => void) {
+  public static getDeviceTokensOfUsers(
+    userIds: numberOrString[],
+    callback: (err: Error, deviceTokens: string[]) => void,
+  ) {
     const multi = client.multi();
-    userIds.forEach(function(userId) {
-      multi.hget(Keys.forUser(userId), "deviceToken");
+    userIds.forEach(function (userId) {
+      multi.hget(Keys.forUser(userId), 'deviceToken');
     });
 
-    multi.exec(function(err, replies) {
-      if (err) { return callback(err, null); }
+    multi.exec(function (err, replies) {
+      if (err) {
+        return callback(err, null);
+      }
       return callback(null, replies);
     });
   }
 
-  public static getDeviceTokenOfUser(userId: numberOrString,
-                                     callback: (err: Error, deviceToken: string) => void) {
-    client.hget(Keys.forUser(userId), "deviceToken", function(err, deviceToken) {
-      if (err) { return callback(err, null); }
+  public static getDeviceTokenOfUser(userId: numberOrString, callback: (err: Error, deviceToken: string) => void) {
+    client.hget(Keys.forUser(userId), 'deviceToken', function (err, deviceToken) {
+      if (err) {
+        return callback(err, null);
+      }
       return callback(null, deviceToken);
     });
   }
 
   public static setDeviceTokenOfUser(
-    userId: numberOrString, deviceToken: string,
-    callback: (err: Error, succeed: boolean) => void
+    userId: numberOrString,
+    deviceToken: string,
+    callback: (err: Error, succeed: boolean) => void,
   ) {
-    client.hset(Keys.forUser(userId), "deviceToken", deviceToken, function(err, reply) {
-      if (err) { return callback(err, null); }
+    client.hset(Keys.forUser(userId), 'deviceToken', deviceToken, function (err, reply) {
+      if (err) {
+        return callback(err, null);
+      }
       return callback(null, true);
     });
   }
 
-  public static removeDeviceTokenOfUser(userId: numberOrString,
-                                        callback: (err: Error, succeed: boolean) => void) {
-
-    client.hdel(Keys.forUser(userId), "deviceToken", function(err, reply) {
-      if (err) { return callback(err, false); }
+  public static removeDeviceTokenOfUser(userId: numberOrString, callback: (err: Error, succeed: boolean) => void) {
+    client.hdel(Keys.forUser(userId), 'deviceToken', function (err, reply) {
+      if (err) {
+        return callback(err, false);
+      }
       return callback(null, true);
     });
   }
 
-  public static getUserNameOfUser(userId: numberOrString,
-                                  callback: (err: Error, userName: string) => void) {
-    client.hget(Keys.forUser(userId), "userName", function(err, userName) {
-      if (err) { return callback(err, null); }
+  public static getUserNameOfUser(userId: numberOrString, callback: (err: Error, userName: string) => void) {
+    client.hget(Keys.forUser(userId), 'userName', function (err, userName) {
+      if (err) {
+        return callback(err, null);
+      }
       return callback(null, userName);
     });
   }
 
   public static setUserNameOfUser(
-    userId: numberOrString, userName: string, userUuid: string,
-    callback: (err: Error, succeed: boolean) => void) {
-
-    client.hmset(
-      Keys.forUser(userId),
-      "userName", userName,
-      "lastSeen", Date.now(),
-      function(err1, deviceId1) {
-
-        if (err1) { return callback(err1, false); }
-        return callback(null, true);
-      });
+    userId: numberOrString,
+    userName: string,
+    userUuid: string,
+    callback: (err: Error, succeed: boolean) => void,
+  ) {
+    client.hmset(Keys.forUser(userId), 'userName', userName, 'lastSeen', Date.now(), function (err1, deviceId1) {
+      if (err1) {
+        return callback(err1, false);
+      }
+      return callback(null, true);
+    });
   }
 
-  public static getDeviceIdOfUser(userId: numberOrString,
-                                  callback: (err: Error, deviceId: string) => void) {
-    client.hget(Keys.forUser(userId), "deviceId", function(err, deviceId) {
-      if (err) { return callback(err, null); }
+  public static getDeviceIdOfUser(userId: numberOrString, callback: (err: Error, deviceId: string) => void) {
+    client.hget(Keys.forUser(userId), 'deviceId', function (err, deviceId) {
+      if (err) {
+        return callback(err, null);
+      }
       return callback(null, deviceId);
     });
   }
 
   public static setDeviceIdOfUser(
-    userId: numberOrString, deviceId: string,
-    callback?: (err: Error, succeed: boolean) => void) {
-
+    userId: numberOrString,
+    deviceId: string,
+    callback?: (err: Error, succeed: boolean) => void,
+  ) {
     client.hmset(
       Keys.forUser(userId),
-      "deviceId", deviceId,
+      'deviceId',
+      deviceId,
 
-      function(err1, deviceId1) {
-
+      function (err1, deviceId1) {
         if (err1) {
-          if (callback) { return callback(err1, false); }
+          if (callback) {
+            return callback(err1, false);
+          }
         }
-        if (callback) { return callback(null, true); }
-      });
+        if (callback) {
+          return callback(null, true);
+        }
+      },
+    );
   }
 
-  public static getLastSeenOfUser(userId: numberOrString,
-                                  callback: (err: Error, lastSeen: number) => void) {
-    client.hget(Keys.forUser(userId), "lastSeen", function(err, lastSeen) {
-      if (err) { return callback(err, 0); }
+  public static getLastSeenOfUser(userId: numberOrString, callback: (err: Error, lastSeen: number) => void) {
+    client.hget(Keys.forUser(userId), 'lastSeen', function (err, lastSeen) {
+      if (err) {
+        return callback(err, 0);
+      }
       return callback(null, Number(lastSeen));
     });
   }
 
-  public static getStatusOfUser(userId: numberOrString,
-                                callback: (err: Error, status: string) => void) {
-    client.hget(Keys.forUser(userId), "status", function(err, status) {
-      if (err) { return callback(err, null); }
+  public static getStatusOfUser(userId: numberOrString, callback: (err: Error, status: string) => void) {
+    client.hget(Keys.forUser(userId), 'status', function (err, status) {
+      if (err) {
+        return callback(err, null);
+      }
       return callback(null, status);
     });
   }
 
   public static setStatusOfUser(
-    userId: numberOrString, status: string,
-    callback: (err: Error, status: string) => void) {
-
-    client.hset(Keys.forUser(userId), "status", status, function(err1, status1) {
-      if (err1) { return callback(err1, null); }
+    userId: numberOrString,
+    status: string,
+    callback: (err: Error, status: string) => void,
+  ) {
+    client.hset(Keys.forUser(userId), 'status', status, function (err1, status1) {
+      if (err1) {
+        return callback(err1, null);
+      }
       return callback(null, status);
     });
   }
 
   public static setGroupsOfUser(
-    userId: numberOrString, groupIds: number[],
-    callback: (err: Error, succeed: boolean) => void) {
-
-    client.del(Keys.forGroupsOfUser(userId), function(err, reply) {
+    userId: numberOrString,
+    groupIds: number[],
+    callback: (err: Error, succeed: boolean) => void,
+  ) {
+    client.del(Keys.forGroupsOfUser(userId), function (err, reply) {
       if (!groupIds || groupIds.length === 0) {
         return callback(null, true);
       }
-      client.sadd(Keys.forGroupsOfUser(userId), groupIds, function(err1, reply1) {
-        if (err1) { return callback(err1, false); }
+      client.sadd(Keys.forGroupsOfUser(userId), groupIds, function (err1, reply1) {
+        if (err1) {
+          return callback(err1, false);
+        }
 
         const multi = client.multi();
-        groupIds.forEach(function(groupId) {
+        groupIds.forEach(function (groupId) {
           multi.sadd(Keys.forUsersInsideGroup(groupId), userId);
         });
 
-        multi.exec(function(err2, replies2) {
-          if (err2) { return callback(err2, null); }
+        multi.exec(function (err2, replies2) {
+          if (err2) {
+            return callback(err2, null);
+          }
           return callback(null, true);
         });
         return callback(null, true);
@@ -198,155 +221,182 @@ class Redis {
     });
   }
 
-  public static getGroupsOfUser(
-    userId: numberOrString,
-    callback: (err: Error, groupIds: number[]) => void) {
-
-    client.smembers(Keys.forGroupsOfUser(userId), function(err, groupIds) {
-      if (err) { return callback(err, null); }
+  public static getGroupsOfUser(userId: numberOrString, callback: (err: Error, groupIds: number[]) => void) {
+    client.smembers(Keys.forGroupsOfUser(userId), function (err, groupIds) {
+      if (err) {
+        return callback(err, null);
+      }
       return callback(null, groupIds);
     });
   }
 
-  public static setGroup(
-    groupId: numberOrString, name: string,
-    callback?: (err: Error, succeed: boolean) => void) {
-
-    client.hmset(
-      Keys.forGroup(groupId),
-      "name", name,
-      "lastUpdated", Date.now(),
-      function(err1, deviceId1) {
-        if (err1) { return callback(err1, false); }
-        return callback(null, true);
+  public static setGroup(groupId: numberOrString, name: string, callback?: (err: Error, succeed: boolean) => void) {
+    client.hmset(Keys.forGroup(groupId), 'name', name, 'lastUpdated', Date.now(), function (err1, deviceId1) {
+      if (err1) {
+        return callback(err1, false);
       }
-    );
+      return callback(null, true);
+    });
   }
 
-  public static getLastUpdatedOfGroup(groupId: numberOrString,
-                                      callback: (err: Error, status: string) => void) {
-    client.hget(Keys.forGroup(groupId), "lastUpdated", function(err, status) {
-      if (err) { return callback(err, null); }
+  public static getLastUpdatedOfGroup(groupId: numberOrString, callback: (err: Error, status: string) => void) {
+    client.hget(Keys.forGroup(groupId), 'lastUpdated', function (err, status) {
+      if (err) {
+        return callback(err, null);
+      }
       return callback(null, status);
     });
   }
 
   public static setUsersInsideGroup(
-    groupId: numberOrString, userIds: number[],
-    callback: (err: Error, succeed: boolean) => void) {
-
-    client.del(Keys.forUsersInsideGroup(groupId), function(err, reply) {
+    groupId: numberOrString,
+    userIds: number[],
+    callback: (err: Error, succeed: boolean) => void,
+  ) {
+    client.del(Keys.forUsersInsideGroup(groupId), function (err, reply) {
       if (!userIds || userIds.length === 0) {
         return callback(null, true);
       }
-      client.sadd(Keys.forUsersInsideGroup(groupId), userIds, function(err1, reply1) {
-        if (err1) { return callback(err1, false); }
+      client.sadd(Keys.forUsersInsideGroup(groupId), userIds, function (err1, reply1) {
+        if (err1) {
+          return callback(err1, false);
+        }
 
         const multi = client.multi();
-        userIds.forEach(function(userId) {
+        userIds.forEach(function (userId) {
           multi.sadd(Keys.forGroupsOfUser(userId), groupId);
         });
 
-        multi.exec(function(err2, replies2) {
-          if (err2) { return callback(err2, null); }
+        multi.exec(function (err2, replies2) {
+          if (err2) {
+            return callback(err2, null);
+          }
           return callback(null, true);
         });
       });
     });
   }
 
-  public static getUsersInsideGroup(
-    groupId: numberOrString,
-    callback: (err: Error, userIds: number[]) => void) {
-
-    client.smembers(Keys.forUsersInsideGroup(groupId), function(err, userIds) {
-      if (err) { return callback(err, null); }
+  public static getUsersInsideGroup(groupId: numberOrString, callback: (err: Error, userIds: number[]) => void) {
+    client.smembers(Keys.forUsersInsideGroup(groupId), function (err, userIds) {
+      if (err) {
+        return callback(err, null);
+      }
       return callback(null, userIds);
     });
   }
 
   public static addUserToGroup(
-    userId: numberOrString, groupId: numberOrString,
-    callback?: (err: Error, succeed: boolean) => void) {
-
+    userId: numberOrString,
+    groupId: numberOrString,
+    callback?: (err: Error, succeed: boolean) => void,
+  ) {
     const multi = client.multi();
     multi.sadd(Keys.forGroupsOfUser(userId), groupId);
     multi.sadd(Keys.forUsersInsideGroup(groupId), userId);
-    multi.exec(function(err, replies) {
-      if (!callback) { return; }
-      if (err) { return callback(err, null); }
+    multi.exec(function (err, replies) {
+      if (!callback) {
+        return;
+      }
+      if (err) {
+        return callback(err, null);
+      }
       return callback(null, !!replies);
     });
   }
 
   public static removeUserFromGroup(
-    userId: numberOrString, groupId: numberOrString,
-    callback: (err: Error, succeed: boolean) => void) {
-
+    userId: numberOrString,
+    groupId: numberOrString,
+    callback: (err: Error, succeed: boolean) => void,
+  ) {
     const multi = client.multi();
     multi.srem(Keys.forGroupsOfUser(userId), groupId);
     multi.srem(Keys.forUsersInsideGroup(groupId), userId);
-    multi.exec(function(err, replies) {
-      if (err) { return callback(err, null); }
+    multi.exec(function (err, replies) {
+      if (err) {
+        return callback(err, null);
+      }
       return callback(null, !!replies);
     });
   }
 
-  public static addMessageToGroup(messageId: string, groupId: numberOrString,
-                                  callback: (err: Error, succeed: boolean) => void) {
+  public static addMessageToGroup(
+    messageId: string,
+    groupId: numberOrString,
+    callback: (err: Error, succeed: boolean) => void,
+  ) {
     const multi = client.multi();
     const key = Keys.forMessagesOfGroup(groupId);
     multi.lpush(key, messageId);
-    multi.exec(function(err, reply) {
-      if (err) { return callback(err, false); }
+    multi.exec(function (err, reply) {
+      if (err) {
+        return callback(err, false);
+      }
       return callback(null, true);
     });
   }
 
-  public static addMessageToUser(messageId: string, userId: numberOrString,
-                                 callback: (err: Error, succeed: boolean) => void) {
+  public static addMessageToUser(
+    messageId: string,
+    userId: numberOrString,
+    callback: (err: Error, succeed: boolean) => void,
+  ) {
     const multi = client.multi();
     const key = Keys.forMessagesOfUser(userId);
     logger.info(`Redis addMessageToUser key: ${key}`);
     multi.lpush(key, messageId);
-    multi.exec(function(err, reply) {
+    multi.exec(function (err, reply) {
       logger.info(`Redis addMessageToUser RESULT key: ${key}, reply: ${JSON.stringify(reply)}`);
-      if (err) { return callback(err, false); }
+      if (err) {
+        return callback(err, false);
+      }
       return callback(null, true);
     });
   }
 
   public static getMessagesOfUser(userId: numberOrString, callback: (err: Error, messageIds: string[]) => void) {
     logger.info(`Redis getMessagesOfUser key: ${Keys.forMessagesOfUser(userId)}`);
-    client.lrange(Keys.forMessagesOfUser(userId), 0, 9, function(err, messageIds) {
+    client.lrange(Keys.forMessagesOfUser(userId), 0, 9, function (err, messageIds) {
       // tslint:disable-next-line:max-line-length
-      logger.info(`Redis getMessagesOfUser RESULT key: ${Keys.forMessagesOfUser(userId)}, reply: ${JSON.stringify(messageIds)}`);
-      if (err) { return callback(err, null); }
+      logger.info(
+        `Redis getMessagesOfUser RESULT key: ${Keys.forMessagesOfUser(userId)}, reply: ${JSON.stringify(messageIds)}`,
+      );
+      if (err) {
+        return callback(err, null);
+      }
       return callback(null, messageIds);
     });
   }
 
-  public static removeMessagesFromUser(messages: string[], userId: numberOrString,
-                                       callback: (err: Error, succeed: boolean) => void) {
+  public static removeMessagesFromUser(
+    messages: string[],
+    userId: numberOrString,
+    callback: (err: Error, succeed: boolean) => void,
+  ) {
     const multi = client.multi();
     if (messages && messages.length > 0) {
-      messages.forEach(function(message) {
+      messages.forEach(function (message) {
         multi.lrem(Keys.forMessagesOfUser(userId), 0, message);
       });
     }
 
-    multi.exec(function(err, replies) {
-      if (err) { return callback(err, false); }
+    multi.exec(function (err, replies) {
+      if (err) {
+        return callback(err, false);
+      }
       return callback(null, true);
     });
   }
 
   public static getBusyStateOfGroup(
     groupId: numberOrString,
-    callback: (err: Error, busyWithUserId: numberOrString) => void
+    callback: (err: Error, busyWithUserId: numberOrString) => void,
   ) {
-    client.hget(Keys.forCurrentMessageOfGroup(groupId), function(err, busyWithUserId) {
-      if (err) { return callback(err, null); }
+    client.hget(Keys.forCurrentMessageOfGroup(groupId), function (err, busyWithUserId) {
+      if (err) {
+        return callback(err, null);
+      }
       return callback(null, busyWithUserId);
     });
   }
@@ -361,65 +411,79 @@ class Redis {
       startTime?: number;
       toId?: numberOrString;
     },
-    callback?: (err: Error, succeed: boolean) => void
+    callback?: (err: Error, succeed: boolean) => void,
   ) {
     const payload = {
-      audioTime: message.audioTime ? String(message.audioTime) : "",
-      channelType: message.channelType !== undefined ? String(message.channelType) : "",
-      fromId: message.fromId ? String(message.fromId) : "",
-      messageType: message.messageType !== undefined ? String(message.messageType) : "",
-      startTime: message.startTime ? String(message.startTime) : "",
-      toId: message.toId !== undefined ? String(message.toId) : ""
+      audioTime: message.audioTime ? String(message.audioTime) : '',
+      channelType: message.channelType !== undefined ? String(message.channelType) : '',
+      fromId: message.fromId ? String(message.fromId) : '',
+      messageType: message.messageType !== undefined ? String(message.messageType) : '',
+      startTime: message.startTime ? String(message.startTime) : '',
+      toId: message.toId !== undefined ? String(message.toId) : '',
     };
-    client.hmset(Keys.forCurrentMessageOfGroup(groupId), payload, function(err) {
-      if (callback) { return callback(err, !err); }
+    client.hmset(Keys.forCurrentMessageOfGroup(groupId), payload, function (err) {
+      if (callback) {
+        return callback(err, !err);
+      }
     });
   }
 
   public static updateAudioTimeOfGroup(
     groupId: numberOrString,
     audioTime: number,
-    callback?: (err: Error, succeed: boolean) => void
+    callback?: (err: Error, succeed: boolean) => void,
   ) {
-    client.hset(Keys.forCurrentMessageOfGroup(groupId), "audioTime", String(audioTime), function(err) {
-      if (callback) { return callback(err, !err); }
+    client.hset(Keys.forCurrentMessageOfGroup(groupId), 'audioTime', String(audioTime), function (err) {
+      if (callback) {
+        return callback(err, !err);
+      }
     });
   }
 
   public static getCurrentMessageOfGroup(
     groupId: numberOrString,
-    callback: (err: Error, message: {
-      audioTime?: string;
-      channelType?: string;
-      fromId?: string;
-      messageType?: string;
-      startTime?: string;
-      toId?: string;
-    }) => void
+    callback: (
+      err: Error,
+      message: {
+        audioTime?: string;
+        channelType?: string;
+        fromId?: string;
+        messageType?: string;
+        startTime?: string;
+        toId?: string;
+      },
+    ) => void,
   ) {
-    client.hgetall(Keys.forCurrentMessageOfGroup(groupId), function(err, message) {
-      if (err) { return callback(err, null); }
+    client.hgetall(Keys.forCurrentMessageOfGroup(groupId), function (err, message) {
+      if (err) {
+        return callback(err, null);
+      }
       return callback(null, message);
     });
   }
 
   public static removeCurrentMessageOfGroup(
     groupId: numberOrString,
-    callback?: (err: Error, succeed: boolean) => void
+    callback?: (err: Error, succeed: boolean) => void,
   ) {
-    client.del(Keys.forCurrentMessageOfGroup(groupId), function(err) {
-      if (callback) { return callback(err, !err); }
+    client.del(Keys.forCurrentMessageOfGroup(groupId), function (err) {
+      if (callback) {
+        return callback(err, !err);
+      }
     });
   }
 
   public static setBusyStateOfGroup(
-    groupId: numberOrString, busyWithUserId: numberOrString,
-    callback: (err: Error, busyWithUserId: numberOrString) => void) {
-
-    Redis.getBusyStateOfGroup(groupId, function(err1, busyWithUserId1) {
+    groupId: numberOrString,
+    busyWithUserId: numberOrString,
+    callback: (err: Error, busyWithUserId: numberOrString) => void,
+  ) {
+    Redis.getBusyStateOfGroup(groupId, function (err1, busyWithUserId1) {
       if (!busyWithUserId1 || busyWithUserId1 !== busyWithUserId) {
-        client.hset(Keys.forCurrentMessageOfGroup(groupId), "fromId", busyWithUserId, function(err2, busyWithUserId2) {
-          if (err2) { return callback(err2, null); }
+        client.hset(Keys.forCurrentMessageOfGroup(groupId), 'fromId', busyWithUserId, function (err2, busyWithUserId2) {
+          if (err2) {
+            return callback(err2, null);
+          }
           return callback(null, busyWithUserId);
         });
       } else {
@@ -428,21 +492,23 @@ class Redis {
     });
   }
 
-  public static removeKeyUsersInsideGroup(
-    groupId: numberOrString, callback: (err: Error, succeed: boolean) => void) {
-
+  public static removeKeyUsersInsideGroup(groupId: numberOrString, callback: (err: Error, succeed: boolean) => void) {
     client.del(Keys.forUsersInsideGroup(groupId), (err, reply) => {
-      if (err) { return callback(err, false); }
+      if (err) {
+        return callback(err, false);
+      }
       return callback(null, true);
     });
   }
 
   public static subscribeMembershipUpdates(
-    callback: (payload: { eventId: string, userId: string, channelIds: string[], action: string }) => void
+    callback: (payload: { eventId: string; userId: string; channelIds: string[]; action: string }) => void,
   ) {
-    subscriber.subscribe("vp:membership_updates");
-    subscriber.on("message", function(channel, message) {
-      if (channel !== "vp:membership_updates") { return; }
+    subscriber.subscribe('vp:membership_updates');
+    subscriber.on('message', function (channel, message) {
+      if (channel !== 'vp:membership_updates') {
+        return;
+      }
       try {
         const payload = JSON.parse(message);
         return callback(payload);
@@ -454,13 +520,15 @@ class Redis {
   }
 
   public static periodicClean() {
-    if (cleanInterval) { return; }
-    cleanInterval = setInterval(function() {
+    if (cleanInterval) {
+      return;
+    }
+    cleanInterval = setInterval(function () {
       const group = cleanGroup;
       const key = Keys.forMessagesOfGroup(group);
       if (CLEAN_LOG_ENABLED) {
-        client.lrange(key, 0, 200, function(err1, messageIds1) {
-          client.lrange(key, 0, 49, function(err2, messageIds2) {
+        client.lrange(key, 0, 200, function (err1, messageIds1) {
+          client.lrange(key, 0, 49, function (err2, messageIds2) {
             if (err1 || err2) {
               logger.info(`periodicClean before group ${group} err ${err1} err2 ${err2}`);
             } else {
@@ -470,15 +538,15 @@ class Redis {
         });
       }
       if (!DRY_CLEAN_ENABLED) {
-        client.ltrim(key, 0, 49, function(err, reply) {
+        client.ltrim(key, 0, 49, function (err, reply) {
           if (err) {
             logger.info(`periodicClean ltrim group ${group} err ${err}`);
           } else {
             logger.info(`periodicClean ltrim group ${group} ${reply}`);
           }
           if (CLEAN_LOG_ENABLED) {
-            client.lrange(key, 0, 200, function(err1, messageIds1) {
-              client.lrange(key, 0, 49, function(err2, messageIds2) {
+            client.lrange(key, 0, 200, function (err1, messageIds1) {
+              client.lrange(key, 0, 49, function (err2, messageIds2) {
                 if (err1 || err2) {
                   logger.info(`periodicClean after group ${group} err ${err1} err2 ${err2}`);
                 } else {

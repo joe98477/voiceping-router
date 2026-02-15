@@ -1,10 +1,9 @@
 export enum ErrorType {
   General,
-  AudioTimeout
+  AudioTimeout,
 }
 
 export class VPError extends Error {
-
   private errorType1: ErrorType;
 
   constructor(errorType: ErrorType, ...params) {
@@ -14,11 +13,11 @@ export class VPError extends Error {
     this.name = this.constructor.name;
 
     // Maintains proper stack trace for where our error was thrown (only available in V8)
-    if (typeof Error.captureStackTrace === "function") {
+    if (typeof Error.captureStackTrace === 'function') {
       // Error.captureStackTrace(this, VPError);
       Error.captureStackTrace(this, this.constructor);
     } else {
-      this.stack = (new Error(...params)).stack;
+      this.stack = new Error(...params).stack;
     }
 
     // Custom debugging information

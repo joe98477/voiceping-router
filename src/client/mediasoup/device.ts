@@ -50,7 +50,7 @@ export class MediasoupDevice {
       if (error instanceof Error) {
         if (error.message.includes('UnsupportedError')) {
           throw new Error(
-            'Your browser does not support the required WebRTC codecs. Please use a modern browser like Chrome, Firefox, or Safari.'
+            'Your browser does not support the required WebRTC codecs. Please use a modern browser like Chrome, Firefox, or Safari.',
           );
         }
         throw new Error(`Failed to load mediasoup device: ${error.message}`);

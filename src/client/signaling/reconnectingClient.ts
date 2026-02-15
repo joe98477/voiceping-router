@@ -52,11 +52,7 @@ export class ReconnectingSignalingClient implements ISignalingClient {
   // SignalingType event handlers - stored here so they survive reconnection
   private signalingEventHandlers = new Map<string, Set<EventHandler>>();
 
-  constructor(
-    url: string,
-    token: string,
-    config: Partial<ReconnectionConfig> = {}
-  ) {
+  constructor(url: string, token: string, config: Partial<ReconnectionConfig> = {}) {
     this.url = url;
     this.token = token;
     this.config = {
@@ -174,16 +170,14 @@ export class ReconnectingSignalingClient implements ISignalingClient {
     // Calculate delay with exponential backoff
     const baseDelay = Math.min(
       this.config.initialDelay * Math.pow(this.config.backoffMultiplier, this.reconnectAttempts),
-      this.config.maxDelay
+      this.config.maxDelay,
     );
 
     // Add jitter to prevent thundering herd
     const jitter = this.config.jitter ? Math.random() * 500 : 0;
     this.currentDelay = baseDelay + jitter;
 
-    console.log(
-      `Reconnecting in ${Math.round(this.currentDelay)}ms (attempt ${this.reconnectAttempts + 1})`
-    );
+    console.log(`Reconnecting in ${Math.round(this.currentDelay)}ms (attempt ${this.reconnectAttempts + 1})`);
 
     this.reconnectTimer = setTimeout(() => {
       this.attemptReconnection();
@@ -253,7 +247,7 @@ export class ReconnectingSignalingClient implements ISignalingClient {
     type: SignalingType,
     data: Record<string, unknown> | undefined,
     resolve: (message: SignalingMessage) => void,
-    reject: (error: Error) => void
+    reject: (error: Error) => void,
   ): void {
     // Check queue size limit
     if (this.messageQueue.length >= this.MAX_QUEUE_SIZE) {
@@ -288,8 +282,10 @@ export class ReconnectingSignalingClient implements ISignalingClient {
     // Filter out stale PTT messages
     const now = Date.now();
     const validMessages = this.messageQueue.filter((msg) => {
-      if ((msg.type === SignalingType.PTT_START || msg.type === SignalingType.PTT_STOP) &&
-          now - msg.timestamp > this.STALE_MESSAGE_THRESHOLD) {
+      if (
+        (msg.type === SignalingType.PTT_START || msg.type === SignalingType.PTT_STOP) &&
+        now - msg.timestamp > this.STALE_MESSAGE_THRESHOLD
+      ) {
         console.warn(`Dropping stale PTT message: ${msg.type}`);
         msg.reject(new Error('PTT message too old, dropped'));
         return false;
@@ -441,7 +437,7 @@ export class ReconnectingSignalingClient implements ISignalingClient {
     transportId: string,
     kind: string,
     rtpParameters: object,
-    channelId: string
+    channelId: string,
   ): Promise<SignalingMessage> {
     return this.request(SignalingType.PRODUCE, { transportId, kind, rtpParameters, channelId });
   }

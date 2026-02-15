@@ -99,7 +99,7 @@ async function seedRedisTestData(redis: RedisClientType, users: UserConnection[]
 
   // Seed event-channel mapping
   const eventKey = 'e.test-event-1.g';
-  const allChannels = Array.from(new Set(users.flatMap(u => u.channels)));
+  const allChannels = Array.from(new Set(users.flatMap((u) => u.channels)));
   await redis.sAdd(eventKey, allChannels);
 
   console.log(`Seeded ${users.length} users across ${allChannels.length} channels`);
@@ -115,7 +115,7 @@ async function cleanupRedisTestData(redis: RedisClientType, users: UserConnectio
   }
 
   // Remove channel keys
-  const allChannels = Array.from(new Set(users.flatMap(u => u.channels)));
+  const allChannels = Array.from(new Set(users.flatMap((u) => u.channels)));
   for (const channelId of allChannels) {
     await redis.del(`g.${channelId}.u`);
   }
@@ -222,11 +222,13 @@ async function joinChannel(user: UserConnection, channelId: string): Promise<num
 
     user.ws.on('message', messageHandler);
 
-    user.ws.send(JSON.stringify({
-      type: SignalingType.JOIN_CHANNEL,
-      id: messageId,
-      data: { channelId },
-    }));
+    user.ws.send(
+      JSON.stringify({
+        type: SignalingType.JOIN_CHANNEL,
+        id: messageId,
+        data: { channelId },
+      }),
+    );
   });
 }
 
@@ -249,7 +251,10 @@ async function startPtt(user: UserConnection, channelId: string, priority: boole
       try {
         const message = JSON.parse(data.toString());
         // Look for success response (either ack or speaker-changed)
-        if (message.id === messageId || (message.type === SignalingType.SPEAKER_CHANGED && message.data?.currentSpeaker === user.userId)) {
+        if (
+          message.id === messageId ||
+          (message.type === SignalingType.SPEAKER_CHANGED && message.data?.currentSpeaker === user.userId)
+        ) {
           clearTimeout(timeout);
           user.ws?.off('message', messageHandler);
           const lockTime = Date.now() - startTime;
@@ -263,11 +268,13 @@ async function startPtt(user: UserConnection, channelId: string, priority: boole
 
     user.ws.on('message', messageHandler);
 
-    user.ws.send(JSON.stringify({
-      type: priority ? SignalingType.PRIORITY_PTT_START : SignalingType.PTT_START,
-      id: messageId,
-      data: { channelId },
-    }));
+    user.ws.send(
+      JSON.stringify({
+        type: priority ? SignalingType.PRIORITY_PTT_START : SignalingType.PTT_START,
+        id: messageId,
+        data: { channelId },
+      }),
+    );
   });
 }
 
@@ -279,10 +286,12 @@ async function stopPtt(user: UserConnection, channelId: string, priority: boolea
       return;
     }
 
-    user.ws.send(JSON.stringify({
-      type: priority ? SignalingType.PRIORITY_PTT_STOP : SignalingType.PTT_STOP,
-      data: { channelId },
-    }));
+    user.ws.send(
+      JSON.stringify({
+        type: priority ? SignalingType.PRIORITY_PTT_STOP : SignalingType.PTT_STOP,
+        data: { channelId },
+      }),
+    );
 
     // Don't wait for response
     setTimeout(resolve, 100);
@@ -292,7 +301,9 @@ async function stopPtt(user: UserConnection, channelId: string, priority: boolea
 // Phase A: Connection phase
 async function testConnectionPhase(users: UserConnection[]): Promise<void> {
   console.log('\n=== PHASE A: Connection Phase ===');
-  console.log(`Connecting ${NUM_USERS} users over ${RAMP_DURATION_MS}ms (${NUM_USERS / (RAMP_DURATION_MS / 1000)} users/sec)...`);
+  console.log(
+    `Connecting ${NUM_USERS} users over ${RAMP_DURATION_MS}ms (${NUM_USERS / (RAMP_DURATION_MS / 1000)} users/sec)...`,
+  );
 
   const delayBetweenUsers = RAMP_DURATION_MS / NUM_USERS;
   const results: Array<{ success: boolean; user: UserConnection }> = [];
@@ -312,12 +323,12 @@ async function testConnectionPhase(users: UserConnection[]): Promise<void> {
 
     // Delay before next connection
     if (i < users.length - 1) {
-      await new Promise(resolve => setTimeout(resolve, delayBetweenUsers));
+      await new Promise((resolve) => setTimeout(resolve, delayBetweenUsers));
     }
   }
 
-  const successful = results.filter(r => r.success).length;
-  const failed = results.filter(r => !r.success).length;
+  const successful = results.filter((r) => r.success).length;
+  const failed = results.filter((r) => !r.success).length;
 
   console.log(`Connections: ${successful} successful, ${failed} failed`);
 }
@@ -328,7 +339,7 @@ async function testChannelJoinPhase(users: UserConnection[]): Promise<void> {
   console.log('Users joining assigned channels...');
 
   const joinPromises = users
-    .filter(u => u.connected)
+    .filter((u) => u.connected)
     .map(async (user) => {
       try {
         for (const channelId of user.channels) {
@@ -350,7 +361,7 @@ async function testPttLoadPhase(users: UserConnection[]): Promise<void> {
   console.log('\n=== PHASE C: PTT Load Phase ===');
   console.log('10% of users starting PTT simultaneously on different channels...');
 
-  const connectedUsers = users.filter(u => u.connected);
+  const connectedUsers = users.filter((u) => u.connected);
   const pttUsers = connectedUsers.slice(0, Math.floor(connectedUsers.length * 0.1));
 
   // Group by channel to ensure different channels
@@ -390,8 +401,8 @@ async function testDispatchPriorityPhase(users: UserConnection[]): Promise<numbe
   console.log('\n=== PHASE D: Dispatch Priority Phase ===');
   console.log('Testing Dispatch user interrupting General user...');
 
-  const dispatchUser = users.find(u => u.connected && u.role === UserRole.DISPATCH);
-  const generalUser = users.find(u => u.connected && u.role === UserRole.GENERAL);
+  const dispatchUser = users.find((u) => u.connected && u.role === UserRole.DISPATCH);
+  const generalUser = users.find((u) => u.connected && u.role === UserRole.GENERAL);
 
   if (!dispatchUser || !generalUser) {
     console.log('Skipping: Missing required user roles');
@@ -406,7 +417,7 @@ async function testDispatchPriorityPhase(users: UserConnection[]): Promise<numbe
     console.log(`General user ${generalUser.userId} started PTT`);
 
     // Wait a moment
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise((resolve) => setTimeout(resolve, 500));
 
     // Dispatch user interrupts with priority PTT
     const startTime = Date.now();
@@ -428,9 +439,9 @@ async function testDispatchPriorityPhase(users: UserConnection[]): Promise<numbe
 // Phase E: Permission revocation phase
 async function testPermissionRevocationPhase(users: UserConnection[], redis: RedisClientType): Promise<number | null> {
   console.log('\n=== PHASE E: Permission Revocation Phase ===');
-  console.log('Revoking 5 users\' channel access...');
+  console.log("Revoking 5 users' channel access...");
 
-  const connectedUsers = users.filter(u => u.connected);
+  const connectedUsers = users.filter((u) => u.connected);
   const usersToRevoke = connectedUsers.slice(0, 5);
 
   const startTime = Date.now();
@@ -450,10 +461,10 @@ async function testPermissionRevocationPhase(users: UserConnection[], redis: Red
   let allDisconnected = false;
 
   while (elapsed < maxWaitTime && !allDisconnected) {
-    await new Promise(resolve => setTimeout(resolve, checkInterval));
+    await new Promise((resolve) => setTimeout(resolve, checkInterval));
     elapsed += checkInterval;
 
-    allDisconnected = usersToRevoke.every(u => !u.connected || u.ws?.readyState !== WebSocket.OPEN);
+    allDisconnected = usersToRevoke.every((u) => !u.connected || u.ws?.readyState !== WebSocket.OPEN);
 
     if (allDisconnected) {
       const revocationTime = Date.now() - startTime;
@@ -474,8 +485,8 @@ async function testDisconnectPhase(users: UserConnection[]): Promise<void> {
   const startTime = Date.now();
 
   const disconnectPromises = users
-    .filter(u => u.connected && u.ws)
-    .map(user => {
+    .filter((u) => u.connected && u.ws)
+    .map((user) => {
       return new Promise<void>((resolve) => {
         user.ws?.on('close', () => {
           user.connected = false;
@@ -495,27 +506,22 @@ async function testDisconnectPhase(users: UserConnection[]): Promise<void> {
 function displayMetrics(users: UserConnection[], dispatchInterruptTime: number | null): TestMetrics {
   console.log('\n=== TEST METRICS ===\n');
 
-  const connectedUsers = users.filter(u => u.connected || u.connectionTime > 0);
+  const connectedUsers = users.filter((u) => u.connected || u.connectionTime > 0);
   const successfulConnections = connectedUsers.length;
   const failedConnections = NUM_USERS - successfulConnections;
 
   // Connection metrics
-  const connectionTimes = connectedUsers.map(u => u.connectionTime).filter(t => t > 0);
-  const avgConnectionTime = connectionTimes.length > 0
-    ? connectionTimes.reduce((a, b) => a + b, 0) / connectionTimes.length
-    : 0;
+  const connectionTimes = connectedUsers.map((u) => u.connectionTime).filter((t) => t > 0);
+  const avgConnectionTime =
+    connectionTimes.length > 0 ? connectionTimes.reduce((a, b) => a + b, 0) / connectionTimes.length : 0;
 
   // Join metrics
-  const allJoinTimes = users.flatMap(u => u.joinTimes).filter(t => t > 0);
-  const avgJoinTime = allJoinTimes.length > 0
-    ? allJoinTimes.reduce((a, b) => a + b, 0) / allJoinTimes.length
-    : 0;
+  const allJoinTimes = users.flatMap((u) => u.joinTimes).filter((t) => t > 0);
+  const avgJoinTime = allJoinTimes.length > 0 ? allJoinTimes.reduce((a, b) => a + b, 0) / allJoinTimes.length : 0;
 
   // PTT metrics
-  const pttLockTimes = users.map(u => u.pttLockTime).filter((t): t is number => t !== null && t > 0);
-  const avgPttLockTime = pttLockTimes.length > 0
-    ? pttLockTimes.reduce((a, b) => a + b, 0) / pttLockTimes.length
-    : 0;
+  const pttLockTimes = users.map((u) => u.pttLockTime).filter((t): t is number => t !== null && t > 0);
+  const avgPttLockTime = pttLockTimes.length > 0 ? pttLockTimes.reduce((a, b) => a + b, 0) / pttLockTimes.length : 0;
 
   const metrics: TestMetrics = {
     connectionSuccessRate: (successfulConnections / NUM_USERS) * 100,

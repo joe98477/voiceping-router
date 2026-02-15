@@ -60,7 +60,7 @@ export class DispatchHandlers {
     broadcastToChannel: BroadcastFunction,
     sendToUser: SendToUserFunction,
     auditLogger: AuditLogger,
-    signalingHandlers: SignalingHandlers
+    signalingHandlers: SignalingHandlers,
   ) {
     this.channelStateManager = channelStateManager;
     this.producerConsumerManager = producerConsumerManager;
@@ -140,7 +140,7 @@ export class DispatchHandlers {
           this.broadcastToChannel(
             channelId,
             createMessage(SignalingType.SPEAKER_CHANGED, result.state as any),
-            ctx.userId
+            ctx.userId,
           );
         }
 
@@ -154,10 +154,7 @@ export class DispatchHandlers {
         logger.info(`Priority PTT: interrupting General user ${currentState.currentSpeaker} in channel ${channelId}`);
 
         // Pause current speaker's producer
-        const currentProducerId = this.signalingHandlers.getUserProducerId(
-          currentState.currentSpeaker,
-          channelId
-        );
+        const currentProducerId = this.signalingHandlers.getUserProducerId(currentState.currentSpeaker, channelId);
 
         if (currentProducerId) {
           await this.producerConsumerManager.pauseProducer(currentProducerId);
@@ -181,7 +178,7 @@ export class DispatchHandlers {
               channelId,
               interruptedBy: ctx.userName,
               message: `Dispatch ${ctx.userName} has priority`,
-            })
+            }),
           );
 
           // Audit log interruption
@@ -220,10 +217,12 @@ export class DispatchHandlers {
           this.broadcastToChannel(
             channelId,
             createMessage(SignalingType.SPEAKER_CHANGED, result.state as any),
-            ctx.userId
+            ctx.userId,
           );
 
-          logger.info(`Priority PTT started for ${ctx.userId} in channel ${channelId} (interrupted ${currentState.currentSpeaker})`);
+          logger.info(
+            `Priority PTT started for ${ctx.userId} in channel ${channelId} (interrupted ${currentState.currentSpeaker})`,
+          );
         }
 
         return;
@@ -231,7 +230,9 @@ export class DispatchHandlers {
 
       // Case 3: Channel busy with another Dispatch user - deny
       if (currentSpeakerCtx && currentSpeakerCtx.role === UserRole.DISPATCH) {
-        logger.info(`Priority PTT denied: another Dispatch user ${currentState.currentSpeaker} is speaking in channel ${channelId}`);
+        logger.info(
+          `Priority PTT denied: another Dispatch user ${currentState.currentSpeaker} is speaking in channel ${channelId}`,
+        );
 
         this.auditLogger.log({
           action: AuditAction.PTT_DENIED,
@@ -259,9 +260,10 @@ export class DispatchHandlers {
       }
 
       // Case 4: Unknown speaker role - deny as fallback
-      logger.warn(`Priority PTT: unknown current speaker role for ${currentState.currentSpeaker} in channel ${channelId}`);
+      logger.warn(
+        `Priority PTT: unknown current speaker role for ${currentState.currentSpeaker} in channel ${channelId}`,
+      );
       this.sendError(ctx, message.id, 'Cannot determine current speaker role');
-
     } catch (err) {
       logger.error(`Error handling PRIORITY_PTT_START: ${err instanceof Error ? err.message : String(err)}`);
       this.sendError(ctx, message.id, err instanceof Error ? err.message : 'Failed to start priority PTT');
@@ -311,11 +313,7 @@ export class DispatchHandlers {
       this.sendResponse(ctx, message.id, { success: true, state });
 
       // Broadcast speaker change
-      this.broadcastToChannel(
-        channelId,
-        createMessage(SignalingType.SPEAKER_CHANGED, state as any),
-        ctx.userId
-      );
+      this.broadcastToChannel(channelId, createMessage(SignalingType.SPEAKER_CHANGED, state as any), ctx.userId);
 
       logger.info(`Priority PTT stopped for ${ctx.userId} in channel ${channelId}`);
     } catch (err) {
@@ -353,9 +351,15 @@ export class DispatchHandlers {
 
       // Validate hold duration (2-second guard against accidental activation)
       if (!holdDuration || holdDuration < config.dispatch.emergencyBroadcastHoldMs) {
-        logger.warn(`Emergency broadcast denied for ${ctx.userId}: insufficient hold duration (${holdDuration}ms < ${config.dispatch.emergencyBroadcastHoldMs}ms)`);
+        logger.warn(
+          `Emergency broadcast denied for ${ctx.userId}: insufficient hold duration (${holdDuration}ms < ${config.dispatch.emergencyBroadcastHoldMs}ms)`,
+        );
 
-        this.sendError(ctx, message.id, `Hold button for ${config.dispatch.emergencyBroadcastHoldMs}ms to activate emergency broadcast`);
+        this.sendError(
+          ctx,
+          message.id,
+          `Hold button for ${config.dispatch.emergencyBroadcastHoldMs}ms to activate emergency broadcast`,
+        );
         return;
       }
 
@@ -375,7 +379,9 @@ export class DispatchHandlers {
         return;
       }
 
-      logger.info(`Emergency broadcast starting for ${ctx.userId} on ${channelIds.length} channels in event ${ctx.eventId}`);
+      logger.info(
+        `Emergency broadcast starting for ${ctx.userId} on ${channelIds.length} channels in event ${ctx.eventId}`,
+      );
 
       // Pause ALL active speakers across all channels
       const pausedSpeakers = new Map<string, string>();
@@ -396,7 +402,7 @@ export class DispatchHandlers {
               channelId,
               interruptedBy: ctx.userName,
               message: `Emergency broadcast by Dispatch ${ctx.userName}`,
-            })
+            }),
           );
 
           pausedSpeakers.set(channelId, state.currentSpeaker);
@@ -459,7 +465,7 @@ export class DispatchHandlers {
             dispatchUserId: ctx.userId,
             dispatchUserName: ctx.userName,
             channelId,
-          })
+          }),
         );
       }
 
@@ -546,7 +552,7 @@ export class DispatchHandlers {
             dispatchUserId: ctx.userId,
             dispatchUserName: ctx.userName,
             channelId,
-          })
+          }),
         );
       }
 
@@ -616,7 +622,8 @@ export class DispatchHandlers {
       response.id = messageId;
     }
 
-    if (ctx.ws.readyState === 1) { // WebSocket.OPEN
+    if (ctx.ws.readyState === 1) {
+      // WebSocket.OPEN
       ctx.ws.send(JSON.stringify(response));
     }
   }
@@ -634,7 +641,8 @@ export class DispatchHandlers {
       errorMessage.id = messageId;
     }
 
-    if (ctx.ws.readyState === 1) { // WebSocket.OPEN
+    if (ctx.ws.readyState === 1) {
+      // WebSocket.OPEN
       ctx.ws.send(JSON.stringify(errorMessage));
     }
   }
