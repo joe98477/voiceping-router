@@ -9,19 +9,19 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 
 ## Current Position
 
-Phase: 18 of 20 (Location Tracking)
-Plan: 03 of 03 complete
-Status: Complete
-Last activity: 2026-02-15 — Completed 18-03-PLAN.md (Android Location Service Integration)
+Phase: 19 of 20 (Security Hardening & Code Quality)
+Plan: 02 of 03 complete
+Status: In Progress
+Last activity: 2026-02-15 — Completed 19-01-PLAN.md (TLS Enforcement & Cleartext Traffic Blocking)
 
-Progress: [█████████████████████████░░░] 88% (68/77 plans complete across all milestones)
+Progress: [█████████████████████████░░░] 90% (69/77 plans complete across all milestones)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 68 (v1.0: 24, v2.0: 26, v3.0: 10, v4.0: 8)
-- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~4.0 min, v4.0 ~6.5 min
-- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.67 hours, v4.0 ~0.65 hours
+- Total plans completed: 69 (v1.0: 24, v2.0: 26, v3.0: 10, v4.0: 9)
+- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~4.0 min, v4.0 ~6.2 min
+- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.67 hours, v4.0 ~0.73 hours
 
 **By Milestone:**
 
@@ -30,7 +30,7 @@ Progress: [███████████████████████
 | v1.0 WebRTC Rebuild | 4 | 24/24 | Complete (2026-02-07) |
 | v2.0 Android Client | 6 | 26/26 | Complete (2026-02-13) |
 | v3.0 mediasoup Integration | 5 | 10/10 | Complete (2026-02-15) |
-| v4.0 Production Hardening | 5 | 8/13 | In progress |
+| v4.0 Production Hardening | 5 | 9/13 | In progress |
 
 **Recent Trend:**
 - v3.0 complete: 10 plans, 5 phases (11-15), real mediasoup audio verified on physical device
@@ -50,6 +50,8 @@ Progress: [███████████████████████
 | Phase 18 P01 | 263s | 2 | 8 |
 | Phase 18 P02 | 783s | 2 | 10 |
 | Phase 18 P03 | 349s | 2 | 11 |
+| Phase 19 P02 | 310s | 2 | 5 |
+| Phase 19 P01 | 352 | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -88,6 +90,11 @@ Recent decisions affecting v4.0 work:
 - Phase 18-03: Reconnect flush sends location-batch (not individual updates, reduces server overhead)
 - Phase 18-03: PTT-triggered location wrapped in try/catch (prevent location errors from breaking PTT)
 - Phase 18-03: currentLocation StateFlow updated before deduplication (shows all GPS fixes in debug screen)
+- Phase 19-02: Hardcoded JWT secret default accepted as MEDIUM risk (production MUST override via ROUTER_JWT_SECRET env var)
+- Phase 19-02: WebSocket rate limiting deferred to Phase 20 (authenticated connections, natural throttling, proxy-level protection)
+- Phase 19-02: DTLS validation via fingerprint count logging (non-blocking, mediasoup enforces internally)
+- [Phase 19]: TLS errors show user-visible error instead of silent retry (VPN/network/cert issues require user action)
+- [Phase 19]: Defense-in-depth: server rejects cleartext WS in production even behind reverse proxy
 
 ### Pending Todos
 
@@ -109,10 +116,10 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-15
-Stopped at: Completed 18-03-PLAN.md (Android Location Service Integration)
+Stopped at: Completed 19-01-PLAN.md (TLS Enforcement & Cleartext Traffic Blocking)
 Resume file: None
 
-**Next action:** Begin Phase 19 (Security Audit & Hardening) - research and planning phase.
+**Next action:** Continue Phase 19 Plan 03 (Code Quality Improvements).
 
 **Previous Milestones:**
 - v1.0 WebRTC Audio Rebuild + Web UI — SHIPPED 2026-02-07
@@ -131,7 +138,10 @@ Resume file: None
   - 18-01: Location Tracking Foundation ✅
   - 18-02: Server-Side Location Infrastructure ✅
   - 18-03: Android Location Service Integration ✅
-- v4.0 Phase 19 (Security Audit & Hardening): 0/3 plans (next)
+- v4.0 Phase 19 (Security Audit & Hardening): 2/3 plans in progress
+  - 19-01: TLS Enforcement & Cleartext Traffic Blocking ✅
+  - 19-02: API Endpoint & DTLS Encryption Audit ✅
+  - 19-03: Code Quality Improvements (next)
 
 ---
-*Last updated: 2026-02-15 after Phase 18-03 completion*
+*Last updated: 2026-02-15 after Phase 19-01 completion*
