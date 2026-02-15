@@ -1,0 +1,17 @@
+#!/bin/sh
+
+# Run lint-staged for server TypeScript code (prettier + eslint)
+npx lint-staged
+
+# Run ktlint format on staged Android Kotlin files
+if git diff --cached --name-only | grep -q '\.kt$'; then
+  cd android && ./gradlew ktlintFormat --daemon 2>/dev/null
+  cd ..
+  git diff --name-only android/ | xargs -r git add
+fi
+
+# Run detekt security rules on Android code
+if git diff --cached --name-only | grep -q '\.kt$'; then
+  cd android && ./gradlew detekt --daemon 2>/dev/null || exit 1
+  cd ..
+fi
