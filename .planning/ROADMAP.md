@@ -118,8 +118,8 @@ See: `.planning/milestones/v3.0-ROADMAP.md` for full details.
 **Plans**: 2 plans
 
 Plans:
-- [ ] 16-01: PermissionManager singleton with denial tracking and Settings redirect
-- [ ] 16-02: First-launch education flow and contextual rationale dialogs
+- [x] 16-01: PermissionManager singleton with denial tracking and Settings redirect
+- [x] 16-02: First-launch education flow and contextual rationale dialogs
 
 #### Phase 17: Audio Reliability
 **Goal**: Fix intermittent PTT silence and harden audio stream timing
@@ -213,7 +213,7 @@ Phases execute in numeric order: 1 → 2 → 3 → ... → 20
 | 13. SendTransport | v3.0 | 2/2 | Complete | 2026-02-13 |
 | 14. Lifecycle | v3.0 | 2/2 | Complete | 2026-02-13 |
 | 15. Validation | v3.0 | 2/2 | Complete | 2026-02-15 |
-| 16. Permission Management | v4.0 | 0/2 | Not started | - |
+| 16. Permission Management | v4.0 | 2/2 | Complete | 2026-02-15 |
 | 17. Audio Reliability | v4.0 | 0/3 | Not started | - |
 | 18. Location Tracking | v4.0 | 0/3 | Not started | - |
 | 19. Security Hardening & Code Quality | v4.0 | 0/3 | Not started | - |
@@ -221,4 +221,4 @@ Phases execute in numeric order: 1 → 2 → 3 → ... → 20
 
 ---
 *Roadmap created: 2026-02-06*
-*Last updated: 2026-02-15 after v4.0 roadmap creation*
+*Last updated: 2026-02-15 after Phase 16 completion*
