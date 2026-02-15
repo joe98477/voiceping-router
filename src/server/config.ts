@@ -145,4 +145,8 @@ export const config = {
     maxMs: 80,
     defaultMs: 60,
   },
+
+  power: {
+    wakeLockTimeoutSeconds: parseInt(process.env.WAKELOCK_TIMEOUT_SECONDS || '300', 10),
+  },
 };

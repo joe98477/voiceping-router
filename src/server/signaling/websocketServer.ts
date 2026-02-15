@@ -283,11 +283,12 @@ export class SignalingServer {
       },
     });
 
-    // Send CHANNEL_LIST message with authorized channels
+    // Send CHANNEL_LIST message with authorized channels and power config
     const channelListMessage = createMessage(SignalingType.CHANNEL_LIST, {
       channels: Array.from(clientContext.authorizedChannels),
       role,
       globalRole,
+      wakeLockTimeoutSeconds: config.power.wakeLockTimeoutSeconds,
     });
     this.sendToClient(socket, channelListMessage);
 
