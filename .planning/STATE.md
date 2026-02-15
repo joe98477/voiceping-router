@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 ## Current Position
 
 Phase: 16 of 20 (Permission Management)
-Plan: 01 of 02 complete
-Status: In progress
-Last activity: 2026-02-15 — Completed 16-01-PLAN.md (Permission Manager & Graceful Degradation)
+Plan: 02 of 02 complete
+Status: Complete
+Last activity: 2026-02-15 — Completed 16-02-PLAN.md (Permission Education Screen)
 
-Progress: [███████████████████████░░░░░] 79% (61/77 plans complete across all milestones)
+Progress: [███████████████████████░░░░░] 80% (62/77 plans complete across all milestones)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 60 (v1.0: 24, v2.0: 26, v3.0: 10)
-- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~4.0 min
-- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.67 hours
+- Total plans completed: 62 (v1.0: 24, v2.0: 26, v3.0: 10, v4.0: 2)
+- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~4.0 min, v4.0 ~6.5 min
+- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.67 hours, v4.0 ~0.22 hours
 
 **By Milestone:**
 
@@ -30,15 +30,15 @@ Progress: [███████████████████████
 | v1.0 WebRTC Rebuild | 4 | 24/24 | Complete (2026-02-07) |
 | v2.0 Android Client | 6 | 26/26 | Complete (2026-02-13) |
 | v3.0 mediasoup Integration | 5 | 10/10 | Complete (2026-02-15) |
-| v4.0 Production Hardening | 5 | 1/13 | In progress |
+| v4.0 Production Hardening | 5 | 2/13 | In progress |
 
 **Recent Trend:**
 - v3.0 complete: 10 plans, 5 phases (11-15), real mediasoup audio verified on physical device
 - Battery profiling validated: 5%/hour with screen off
-- v4.0 started: Phase 16-01 complete, permission management foundation laid
-- Trend: Stable velocity with hardware testing integration
+- Phase 16 complete: Permission management foundation (2 plans, 787s total)
+- Trend: Stable velocity ~6-7 minutes per plan in v4.0
 
-*Updated after 16-01 completion*
+*Updated after 16-02 completion*
 
 ## Accumulated Context
 
@@ -56,6 +56,11 @@ Recent decisions affecting v4.0 work:
 - Phase 16-01: Settings redirect dialog appears after 2 denials of same permission
 - Phase 16-01: Permission banner auto-dismisses when permission granted (not user-dismissible)
 - Phase 16-01: PTT button visibly disabled (grayed out with MicOff icon) when mic missing
+- Phase 16-02: Permission education screen skippable with "Skip" button
+- Phase 16-02: No auto-retry after granting from rationale dialog — user re-triggers action
+- Phase 16-02: Location icon purely informational (not tappable)
+- Phase 16-02: Permission banner Fix action navigates to in-app settings (not system settings)
+- Phase 16-02: Notification revocation shows one-time toast warning
 
 ### Pending Todos
 
@@ -77,10 +82,10 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-15
-Stopped at: Completed Phase 16 Plan 01 (Permission Manager & Graceful Degradation)
+Stopped at: Completed Phase 16 (Permission Management) — 2/2 plans complete
 Resume file: None
 
-**Next action:** `/gsd:execute-phase 16` with plan 02 to create permission education screen
+**Next action:** `/gsd:execute-phase 17` to begin Phase 17 (Audio Reliability Improvements)
 
 **Previous Milestones:**
 - v1.0 WebRTC Audio Rebuild + Web UI — SHIPPED 2026-02-07
@@ -88,9 +93,9 @@ Resume file: None
 - v3.0 mediasoup Library Integration — SHIPPED 2026-02-15
 
 **Current Milestone Progress:**
-- v4.0 Phase 16 (Permission Management): 1/2 plans complete
+- v4.0 Phase 16 (Permission Management): 2/2 plans complete ✅
   - 16-01: Permission Manager & Graceful Degradation ✅
-  - 16-02: Permission Education Screen (pending)
+  - 16-02: Permission Education Screen ✅
 
 ---
-*Last updated: 2026-02-15 after Phase 16-01 completion*
+*Last updated: 2026-02-15 after Phase 16-02 completion*
