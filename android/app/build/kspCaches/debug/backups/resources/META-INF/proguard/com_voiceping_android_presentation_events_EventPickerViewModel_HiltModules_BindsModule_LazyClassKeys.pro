@@ -1,1 +1,0 @@
--keep,allowobfuscation,allowshrinking class com.voiceping.android.presentation.events.EventPickerViewModel
