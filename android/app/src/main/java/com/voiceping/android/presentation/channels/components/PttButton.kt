@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -37,11 +38,13 @@ import com.voiceping.android.domain.model.PttMode
  * - Transmitting: Red pulsing with elapsed time counter
  * - Denied: Brief dark red flash (handled by PttManager state, 500ms then back to idle)
  * - Busy: Dimmed/grayed out, not clickable when channel is busy
+ * - No mic permission: Dimmed gray, MicOff icon, not clickable
  *
  * @param pttState Current PTT state from PttManager
  * @param pttMode Interaction mode (PRESS_AND_HOLD or TOGGLE)
  * @param transmissionDuration Elapsed time in seconds (shown during Transmitting)
  * @param isBusy True when channel is busy (someone else speaking)
+ * @param micPermissionGranted True when mic permission is granted
  * @param onPttPressed Callback when PTT button is pressed
  * @param onPttReleased Callback when PTT button is released
  * @param modifier Optional modifier
@@ -52,6 +55,7 @@ fun PttButton(
     pttMode: PttMode,
     transmissionDuration: Long,
     isBusy: Boolean,
+    micPermissionGranted: Boolean = true,
     onPttPressed: () -> Unit,
     onPttReleased: () -> Unit,
     modifier: Modifier = Modifier
@@ -63,6 +67,7 @@ fun PttButton(
 
     // Determine button color based on state
     val buttonColor = when {
+        !micPermissionGranted -> Color(0xFF757575) // Dimmed gray when no mic permission
         isDenied -> Color(0xFFB71C1C) // Dark red for denied (brief flash)
         isTransmitting -> Color(0xFFD32F2F) // Red for transmitting
         isRequesting -> Color(0xFF9E9E9E) // Gray for requesting (loading)
@@ -111,7 +116,7 @@ fun PttButton(
     }
 
     // Determine if button is clickable
-    val isClickable = !isBusy || isTransmitting
+    val isClickable = micPermissionGranted && (!isBusy || isTransmitting)
 
     // Button content
     val buttonModifier = modifier
@@ -163,8 +168,8 @@ fun PttButton(
         } else {
             // Show mic icon for all other states
             Icon(
-                imageVector = Icons.Filled.Mic,
-                contentDescription = "Push to Talk",
+                imageVector = if (micPermissionGranted) Icons.Filled.Mic else Icons.Filled.MicOff,
+                contentDescription = if (micPermissionGranted) "Push to Talk" else "Microphone permission required",
                 tint = Color.White,
                 modifier = Modifier.size(32.dp)
             )

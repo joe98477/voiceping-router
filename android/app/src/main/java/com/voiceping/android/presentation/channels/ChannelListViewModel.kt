@@ -10,6 +10,7 @@ import com.voiceping.android.data.audio.AudioRouter
 import com.voiceping.android.data.network.MediasoupClient
 import com.voiceping.android.data.network.NetworkMonitor
 import com.voiceping.android.data.network.SignalingClient
+import com.voiceping.android.data.permissions.PermissionManager
 import com.voiceping.android.data.ptt.PttManager
 import com.voiceping.android.data.ptt.PttState
 import com.voiceping.android.data.repository.ChannelRepository
@@ -60,6 +61,7 @@ class ChannelListViewModel @Inject constructor(
     private val transmissionHistoryRepository: TransmissionHistoryRepository,
     private val tokenManager: com.voiceping.android.data.storage.TokenManager,
     private val mediasoupClient: MediasoupClient,
+    private val permissionManager: PermissionManager,
     @ApplicationContext private val context: Context,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
@@ -157,9 +159,15 @@ class ChannelListViewModel @Inject constructor(
     private val _toastMessage = MutableStateFlow<String?>(null)
     val toastMessage: StateFlow<String?> = _toastMessage.asStateFlow()
 
-    // Mic permission tracking
-    private val _needsMicPermission = MutableStateFlow(false)
-    val needsMicPermission: StateFlow<Boolean> = _needsMicPermission.asStateFlow()
+    // Permission state tracking
+    private val _micPermissionGranted = MutableStateFlow(false)
+    val micPermissionGranted: StateFlow<Boolean> = _micPermissionGranted.asStateFlow()
+    private val _locationPermissionGranted = MutableStateFlow(false)
+    val locationPermissionGranted: StateFlow<Boolean> = _locationPermissionGranted.asStateFlow()
+    private val _notificationPermissionGranted = MutableStateFlow(false)
+    val notificationPermissionGranted: StateFlow<Boolean> = _notificationPermissionGranted.asStateFlow()
+    private val _showSettingsRedirect = MutableStateFlow<String?>(null)
+    val showSettingsRedirect: StateFlow<String?> = _showSettingsRedirect.asStateFlow()
 
     // Battery optimization tracking
     private val _showBatteryOptimizationPrompt = MutableStateFlow(false)
@@ -198,6 +206,9 @@ class ChannelListViewModel @Inject constructor(
 
     init {
         eventId?.let { loadChannels(it) }
+
+        // Initialize permission states
+        refreshPermissionStates()
 
         // Start NetworkMonitor
         networkMonitor.start()
@@ -315,10 +326,50 @@ class ChannelListViewModel @Inject constructor(
         _toastMessage.value = null
     }
 
+    // Permission management
+    fun refreshPermissionStates() {
+        _micPermissionGranted.value = permissionManager.hasMicPermission()
+        _locationPermissionGranted.value = permissionManager.hasLocationPermission()
+        _notificationPermissionGranted.value = permissionManager.hasNotificationPermission()
+    }
+
+    fun onPermissionResult(permission: String, granted: Boolean) {
+        if (granted) {
+            permissionManager.resetDenialCount(permission)
+            refreshPermissionStates()
+        } else {
+            permissionManager.markRequested(permission)
+            if (permissionManager.trackDenial(permission)) {
+                _showSettingsRedirect.value = permission
+            }
+        }
+    }
+
+    fun dismissSettingsRedirect() {
+        _showSettingsRedirect.value = null
+    }
+
+    fun requestPermissionOrRedirect(permission: String): Boolean {
+        return if (permissionManager.shouldRedirectToSettings(permission)) {
+            _showSettingsRedirect.value = permission
+            false
+        } else {
+            permissionManager.markRequested(permission)
+            true
+        }
+    }
+
+    fun stopTransmissionIfMicRevoked() {
+        if (!permissionManager.hasMicPermission() && pttState.value is PttState.Transmitting) {
+            pttManager.forceReleasePtt()
+            _toastMessage.value = "Mic permission revoked, transmission stopped"
+        }
+    }
+
     // PTT actions
     fun onPttPressed() {
-        if (!channelRepository.hasMicPermission()) {
-            _needsMicPermission.value = true
+        if (!permissionManager.hasMicPermission()) {
+            _toastMessage.value = "Microphone permission required for PTT"
             return
         }
 
@@ -338,17 +389,6 @@ class ChannelListViewModel @Inject constructor(
 
     fun onPttReleased() {
         pttManager.releasePtt()
-    }
-
-    fun onMicPermissionResult(granted: Boolean) {
-        _needsMicPermission.value = false
-        if (granted) {
-            // Retry PTT press after permission granted
-            Log.d(TAG, "Mic permission granted, retrying PTT")
-            onPttPressed()
-        } else {
-            Log.w(TAG, "Mic permission denied by user")
-        }
     }
 
     // Settings actions

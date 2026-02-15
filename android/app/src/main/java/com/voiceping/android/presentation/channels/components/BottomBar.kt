@@ -31,6 +31,7 @@ fun BottomBar(
     pttMode: PttMode,
     transmissionDuration: Long,
     connectionState: ConnectionState,
+    micPermissionGranted: Boolean,
     onToggleLock: () -> Unit,
     onPttPressed: () -> Unit,
     onPttReleased: () -> Unit
@@ -121,12 +122,13 @@ fun BottomBar(
                     pttMode = pttMode,
                     transmissionDuration = transmissionDuration,
                     isBusy = isBusy,
+                    micPermissionGranted = micPermissionGranted,
                     onPttPressed = onPttPressed,
                     onPttReleased = onPttReleased
                 )
             } else {
                 Text(
-                    text = "No channel selected",
+                    text = if (!micPermissionGranted) "Microphone required" else "No channel selected",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

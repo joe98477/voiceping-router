@@ -19,6 +19,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Headset
@@ -26,9 +30,13 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.TextButton
 import com.voiceping.android.domain.model.AudioOutputDevice
 import com.voiceping.android.presentation.settings.ButtonDetectionDialog
 import com.voiceping.android.presentation.settings.keyCodeToName
+import com.voiceping.android.presentation.permissions.PermissionBanner
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -87,8 +95,13 @@ fun ChannelListScreen(
     val pttStartToneEnabled by viewModel.pttStartToneEnabled.collectAsState()
     val rogerBeepEnabled by viewModel.rogerBeepEnabled.collectAsState()
     val rxSquelchEnabled by viewModel.rxSquelchEnabled.collectAsState()
-    val needsMicPermission by viewModel.needsMicPermission.collectAsState()
     val showBatteryPrompt by viewModel.showBatteryOptimizationPrompt.collectAsState()
+
+    // Permission states
+    val micPermissionGranted by viewModel.micPermissionGranted.collectAsState()
+    val locationPermissionGranted by viewModel.locationPermissionGranted.collectAsState()
+    val notificationPermissionGranted by viewModel.notificationPermissionGranted.collectAsState()
+    val showSettingsRedirect by viewModel.showSettingsRedirect.collectAsState()
 
     // Hardware button settings
     val volumeKeyPttConfig by viewModel.volumeKeyPttConfig.collectAsState()
@@ -104,8 +117,23 @@ fun ChannelListScreen(
     val transmissionHistory by viewModel.transmissionHistory.collectAsState()
 
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     var drawerOpen by remember { mutableStateOf(false) }
     var volumeDialogChannelId by remember { mutableStateOf<String?>(null) }
+
+    // Lifecycle observer for permission re-checking on resume
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.refreshPermissionStates()
+                viewModel.stopTransmissionIfMicRevoked()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     // Derive displayed channel state for BottomBar
     val displayedChannel = monitoredChannels[displayedChannelId]
@@ -141,33 +169,6 @@ fun ChannelListScreen(
                 data = Uri.parse("package:${context.packageName}")
             }
             batteryOptimizationLauncher.launch(intent)
-        }
-    }
-
-    // Mic permission launcher
-    val micPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        viewModel.onMicPermissionResult(granted)
-    }
-
-    // Launch permission request when needed
-    LaunchedEffect(needsMicPermission) {
-        if (needsMicPermission) {
-            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-        }
-    }
-
-    // Notification permission (required for foreground service notification on API 33+)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        val notifPermissionLauncher = rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.RequestPermission()
-        ) { /* granted or denied — service still runs, notification just hidden if denied */ }
-
-        LaunchedEffect(Unit) {
-            if (context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
         }
     }
 
@@ -285,6 +286,7 @@ fun ChannelListScreen(
                     pttMode = pttMode,
                     transmissionDuration = transmissionDuration,
                     connectionState = connectionState,
+                    micPermissionGranted = micPermissionGranted,
                     onToggleLock = { viewModel.toggleBottomBarLock() },
                     onPttPressed = { viewModel.onPttPressed() },
                     onPttReleased = { viewModel.onPttReleased() }
@@ -302,6 +304,29 @@ fun ChannelListScreen(
                     connectionState = connectionState,
                     onRetry = { viewModel.manualRetry() }
                 )
+
+                // Permission banner (shows when permissions missing)
+                val missingPermissionsCount = listOf(
+                    micPermissionGranted,
+                    locationPermissionGranted,
+                    notificationPermissionGranted
+                ).count { !it }
+
+                if (missingPermissionsCount > 0) {
+                    PermissionBanner(
+                        message = if (missingPermissionsCount == 1 && !micPermissionGranted) {
+                            "Microphone permission needed for Push-to-Talk"
+                        } else {
+                            "Some permissions needed for full functionality"
+                        },
+                        actionLabel = "Fix",
+                        onAction = {
+                            // For now, open system settings until in-app permission section is built (Plan 02)
+                            val permissionManager = com.voiceping.android.data.permissions.PermissionManager(context)
+                            permissionManager.openAppSettings(context)
+                        }
+                    )
+                }
 
                 // Channel list grouped by team
                 val channelsByTeam = channels.groupBy { it.teamName }
@@ -383,6 +408,42 @@ fun ChannelListScreen(
                 detectedKeyName = detectedKeyCode?.let { keyCodeToName(it) },
                 onDismiss = { viewModel.stopButtonDetection() },
                 onConfirm = { viewModel.confirmDetectedButton() }
+            )
+        }
+
+        // Settings redirect dialog (after 2 denials)
+        showSettingsRedirect?.let { permission ->
+            val permissionName = when (permission) {
+                Manifest.permission.RECORD_AUDIO -> "Microphone"
+                Manifest.permission.ACCESS_COARSE_LOCATION -> "Location"
+                Manifest.permission.POST_NOTIFICATIONS -> "Notifications"
+                else -> "Permission"
+            }
+            val featureName = when (permission) {
+                Manifest.permission.RECORD_AUDIO -> "Push-to-Talk"
+                Manifest.permission.ACCESS_COARSE_LOCATION -> "location tracking"
+                Manifest.permission.POST_NOTIFICATIONS -> "notifications"
+                else -> "this feature"
+            }
+
+            AlertDialog(
+                onDismissRequest = { viewModel.dismissSettingsRedirect() },
+                title = { Text("Permission Required") },
+                text = { Text("To use $featureName, please enable $permissionName in your device settings.") },
+                confirmButton = {
+                    Button(onClick = {
+                        val permissionManager = com.voiceping.android.data.permissions.PermissionManager(context)
+                        permissionManager.openAppSettings(context)
+                        viewModel.dismissSettingsRedirect()
+                    }) {
+                        Text("Open Settings")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { viewModel.dismissSettingsRedirect() }) {
+                        Text("Not now")
+                    }
+                }
             )
         }
     }
