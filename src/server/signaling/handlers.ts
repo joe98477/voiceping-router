@@ -1,6 +1,16 @@
 /**
  * Signaling message handlers
  * Implements all signaling operations for WebRTC negotiation and PTT control
+ *
+ * SECURITY AUDIT: Verified (2026-02-15)
+ * All signaling handlers validate authorization before accessing channel resources:
+ * - handleJoinChannel: Checks ctx.authorizedChannels.has(channelId) before join
+ * - handleCreateTransport: Transport creation requires user in channel (validated via router lookup)
+ * - handleProduce: Producer creation requires transportId owned by user in channel
+ * - handlePttStart/handlePttStop: PTT operations validate channel state membership
+ * - Admin handlers (FORCE_DISCONNECT, BAN_USER, UNBAN_USER): Check DISPATCH/ADMIN role
+ * - Location handlers: Authenticated user context required (ctx.userId validated in WebSocket verifyClient)
+ * - All handlers accessed via authenticated WebSocket connection (JWT verified in verifyClient)
  */
 
 import { types as mediasoupTypes } from 'mediasoup';

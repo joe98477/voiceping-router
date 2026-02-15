@@ -329,6 +329,15 @@ class MediasoupClient @Inject constructor(
                 val iceCandidates = toJsonString(transportData.get("iceCandidates"))
                 val dtlsParameters = toJsonString(transportData.get("dtlsParameters"))
 
+                // DTLS validation: Verify DTLS parameters are present
+                val dtlsJson = transportData.get("dtlsParameters")?.asJsonObject
+                val dtlsFingerprints = dtlsJson?.getAsJsonArray("fingerprints")
+                if (dtlsFingerprints != null && dtlsFingerprints.size() > 0) {
+                    Log.d(TAG, "DTLS fingerprints received: ${dtlsFingerprints.size()}")
+                } else {
+                    Log.w(TAG, "Warning: DTLS parameters missing in transport response")
+                }
+
                 Log.d(TAG, "Transport parameters received: id=$transportId")
 
                 // Step 2 & 3: Create RecvTransport with listener
@@ -596,6 +605,15 @@ class MediasoupClient @Inject constructor(
                 val iceParameters = toJsonString(transportData.get("iceParameters"))
                 val iceCandidates = toJsonString(transportData.get("iceCandidates"))
                 val dtlsParameters = toJsonString(transportData.get("dtlsParameters"))
+
+                // DTLS validation: Verify DTLS parameters are present
+                val dtlsJson = transportData.get("dtlsParameters")?.asJsonObject
+                val dtlsFingerprints = dtlsJson?.getAsJsonArray("fingerprints")
+                if (dtlsFingerprints != null && dtlsFingerprints.size() > 0) {
+                    Log.d(TAG, "DTLS fingerprints received: ${dtlsFingerprints.size()}")
+                } else {
+                    Log.w(TAG, "Warning: DTLS parameters missing in transport response")
+                }
 
                 Log.d(TAG, "Send transport parameters received: id=$transportId")
 

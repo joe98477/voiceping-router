@@ -60,6 +60,7 @@ async function main() {
 
     // 6. Create HTTP server with health endpoint and test pages (dev only)
     const server = http.createServer((req, res) => {
+      // SECURITY AUDIT: Public endpoint - no auth required (health check)
       if (req.url === '/health' && req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(
@@ -70,6 +71,7 @@ async function main() {
             connections: signalingServer?.getConnectedClients() || 0,
           })
         );
+      // SECURITY AUDIT: Dev-only - guarded by NODE_ENV check, disabled in production
       } else if (req.url === '/dev/seed-test-data' && req.method === 'POST' && process.env.NODE_ENV !== 'production') {
         // Dev-only endpoint: Seed Redis with test users
         (async () => {
@@ -107,6 +109,7 @@ async function main() {
             res.end(JSON.stringify({ error: 'Failed to seed test data', message: err.message }));
           }
         })();
+      // SECURITY AUDIT: Dev-only - guarded by NODE_ENV check, disabled in production
       } else if (req.url === '/test' && req.method === 'GET' && process.env.NODE_ENV !== 'production') {
         // Serve test demo page (development only)
         const fs = require('fs');
@@ -122,6 +125,7 @@ async function main() {
           res.writeHead(200, { 'Content-Type': 'text/html' });
           res.end(data);
         });
+      // SECURITY AUDIT: Dev-only - guarded by NODE_ENV check, disabled in production
       } else if (req.url === '/test/pttDemo.js' && req.method === 'GET' && process.env.NODE_ENV !== 'production') {
         // Serve compiled test page JavaScript
         const fs = require('fs');
@@ -137,6 +141,7 @@ async function main() {
           res.writeHead(200, { 'Content-Type': 'application/javascript' });
           res.end(data);
         });
+      // SECURITY AUDIT: Dev-only - guarded by NODE_ENV check, disabled in production
       } else if (req.url === '/test/phase2' && req.method === 'GET' && process.env.NODE_ENV !== 'production') {
         // Serve Phase 2 E2E test page (development only)
         const fs = require('fs');
@@ -152,6 +157,7 @@ async function main() {
           res.writeHead(200, { 'Content-Type': 'text/html' });
           res.end(data);
         });
+      // SECURITY AUDIT: Dev-only - guarded by NODE_ENV check, disabled in production
       } else if (req.url === '/test/phase2.js' && req.method === 'GET' && process.env.NODE_ENV !== 'production') {
         // Serve compiled Phase 2 test page JavaScript
         const fs = require('fs');

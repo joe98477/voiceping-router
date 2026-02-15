@@ -63,7 +63,7 @@ export class TransportManager {
       logger.info(`Transport ${transport.id} ICE state changed to ${iceState}`);
     });
 
-    logger.info(`Created ${direction} transport ${transport.id} for user ${userId} in channel ${channelId}`);
+    logger.info(`Created ${direction} transport ${transport.id} for user ${userId} in channel ${channelId} with DTLS state: ${transport.dtlsState}`);
 
     return {
       id: transport.id,
