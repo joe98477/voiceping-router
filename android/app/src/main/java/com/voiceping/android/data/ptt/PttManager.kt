@@ -3,6 +3,7 @@ package com.voiceping.android.data.ptt
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import com.voiceping.android.data.location.LocationManager
 import com.voiceping.android.data.network.MediasoupClient
 import com.voiceping.android.data.network.SignalingClient
 import com.voiceping.android.data.network.dto.SignalingType
@@ -62,6 +63,7 @@ sealed class PttState {
 class PttManager @Inject constructor(
     private val signalingClient: SignalingClient,
     private val mediasoupClient: MediasoupClient,
+    private val locationManager: LocationManager,
     @ApplicationContext private val context: Context
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -218,7 +220,14 @@ class PttManager @Inject constructor(
                         // Step 6: Notify callback (Plan 04 will wire in tone/haptic)
                         onPttGranted?.invoke()
 
-                        // Step 6a: Async ACK check (does not block PTT grant)
+                        // Step 6a: Trigger PTT-triggered location (fire-and-forget, no PTT impact)
+                        try {
+                            locationManager.requestPttTriggeredLocation()
+                        } catch (e: Exception) {
+                            Log.w(TAG, "PTT-triggered location failed (non-blocking): ${e.message}")
+                        }
+
+                        // Step 6b: Async ACK check (does not block PTT grant)
                         scope.launch {
                             try {
                                 val ackResponse = withTimeout(2000L) {

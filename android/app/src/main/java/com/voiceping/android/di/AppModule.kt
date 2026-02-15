@@ -93,6 +93,10 @@ object AppModule {
             SignalingType.ROLE_INFO to "role-info",
             SignalingType.BAN_USER to "ban-user",
             SignalingType.UNBAN_USER to "unban-user",
+            SignalingType.LOCATION_UPDATE to "location-update",
+            SignalingType.LOCATION_BATCH to "location-batch",
+            SignalingType.LOCATION_QUERY to "location-query",
+            SignalingType.LOCATION_BROADCAST to "location-broadcast",
         )
         private val fromWire = toWire.entries.associate { it.value to it.key }
 

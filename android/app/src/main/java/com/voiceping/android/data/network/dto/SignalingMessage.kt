@@ -102,5 +102,17 @@ enum class SignalingType {
     BAN_USER,
 
     @SerializedName("unban-user")
-    UNBAN_USER
+    UNBAN_USER,
+
+    @SerializedName("location-update")
+    LOCATION_UPDATE,
+
+    @SerializedName("location-batch")
+    LOCATION_BATCH,
+
+    @SerializedName("location-query")
+    LOCATION_QUERY,
+
+    @SerializedName("location-broadcast")
+    LOCATION_BROADCAST
 }

@@ -275,6 +275,18 @@ class SignalingClient @Inject constructor(
     }
 
     /**
+     * Send a fire-and-forget message with pre-built JsonObject (preserves nested JSON structure).
+     *
+     * @param type Signaling message type
+     * @param data JsonObject message data
+     */
+    fun send(type: SignalingType, data: JsonObject?) {
+        val message = SignalingMessage(type, null, data)
+        val json = gson.toJson(message)
+        webSocket?.send(json)
+    }
+
+    /**
      * Disconnect from WebSocket server.
      */
     fun disconnect() {

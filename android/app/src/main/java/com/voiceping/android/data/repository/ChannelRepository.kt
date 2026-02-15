@@ -11,6 +11,7 @@ import com.voiceping.android.data.audio.AudioRouter
 import com.voiceping.android.data.audio.HapticFeedback
 import com.voiceping.android.data.audio.TonePlayer
 import com.voiceping.android.data.hardware.MediaButtonHandler
+import com.voiceping.android.data.location.LocationManager
 import com.voiceping.android.data.network.MediasoupClient
 import com.voiceping.android.data.network.NetworkMonitor
 import com.voiceping.android.data.network.SignalingClient
@@ -59,6 +60,7 @@ class ChannelRepository @Inject constructor(
     private val audioDeviceManager: AudioDeviceManager,
     private val mediaButtonHandler: MediaButtonHandler,
     private val networkMonitor: NetworkMonitor,
+    private val locationManager: LocationManager,
     @ApplicationContext private val context: Context
 ) {
     private val _monitoredChannels = MutableStateFlow<Map<String, ChannelMonitoringState>>(emptyMap())
@@ -419,6 +421,14 @@ class ChannelRepository @Inject constructor(
                 }
                 mediaButtonHandler.setConfiguredKeyCode(btKeycode)
                 Log.d(TAG, "Started AudioDeviceManager and MediaButtonHandler")
+
+                // Auto-start location tracking on first channel join (if permission granted)
+                try {
+                    locationManager.startTracking()
+                    Log.d(TAG, "Started location tracking")
+                } catch (e: SecurityException) {
+                    Log.w(TAG, "Location permission not granted, skipping location tracking")
+                }
             }
 
             // Update notification
@@ -831,6 +841,10 @@ class ChannelRepository @Inject constructor(
         // Stop AudioDeviceManager and MediaButtonHandler
         audioDeviceManager.stop()
         mediaButtonHandler.setActive(false)
+
+        // Stop location tracking
+        locationManager.stopTracking()
+        Log.d(TAG, "Stopped location tracking")
 
         // Stop monitoring service
         if (isServiceRunning) {

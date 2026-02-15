@@ -8,13 +8,20 @@ import android.os.BatteryManager
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.Priority
+import com.google.gson.JsonObject
+import com.voiceping.android.data.network.SignalingClient
+import com.voiceping.android.data.network.dto.SignalingType
+import com.voiceping.android.domain.model.ConnectionState
 import com.voiceping.android.domain.model.MotionState
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.time.Instant
 import javax.inject.Inject
@@ -36,7 +43,8 @@ import javax.inject.Singleton
 class LocationManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val locationTracker: LocationTracker,
-    private val motionDetector: MotionDetector
+    private val motionDetector: MotionDetector,
+    private val signalingClient: SignalingClient
 ) {
     companion object {
         private const val TAG = "LocationManager"
@@ -59,6 +67,12 @@ class LocationManager @Inject constructor(
     private val _locationUpdates = MutableSharedFlow<LocationUpdate>()
     val locationUpdates: SharedFlow<LocationUpdate> = _locationUpdates
 
+    private val _currentLocation = MutableStateFlow<LocationUpdate?>(null)
+    val currentLocation: StateFlow<LocationUpdate?> = _currentLocation.asStateFlow()
+
+    private val offlineQueue = ArrayDeque<LocationUpdate>(50)
+    private val maxQueueSize = 50
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     init {
@@ -68,6 +82,16 @@ class LocationManager @Inject constructor(
                 if (isTracking) {
                     Log.d(TAG, "Motion state changed to $motionState, restarting tracker with adaptive interval")
                     startTrackingWithAdaptiveInterval(motionState)
+                }
+            }
+        }
+
+        // Observe connection state changes and flush offline queue on reconnect
+        scope.launch {
+            signalingClient.connectionState.collect { connectionState ->
+                if (connectionState == ConnectionState.CONNECTED && offlineQueue.isNotEmpty()) {
+                    Log.d(TAG, "WebSocket reconnected, flushing ${offlineQueue.size} queued locations")
+                    flushOfflineQueue()
                 }
             }
         }
@@ -237,14 +261,67 @@ class LocationManager @Inject constructor(
             timestamp = Instant.now().toString()
         )
 
+        // Update current location for debug screen (before deduplication)
+        _currentLocation.value = locationUpdate
+
         scope.launch {
             _locationUpdates.emit(locationUpdate)
         }
+
+        // Send via WebSocket (with offline queue fallback)
+        sendLocationUpdate(locationUpdate)
 
         lastSentLocation = location
         lastSentTime = System.currentTimeMillis()
 
         Log.d(TAG, "Location update emitted: lat=${locationUpdate.latitude}, lng=${locationUpdate.longitude}, motionState=${locationUpdate.motionState}")
+    }
+
+    /**
+     * Send location update via WebSocket, or queue if offline.
+     *
+     * @param update Location update to send
+     */
+    private fun sendLocationUpdate(update: LocationUpdate) {
+        if (signalingClient.connectionState.value == ConnectionState.CONNECTED) {
+            // Flush queue first if not empty
+            if (offlineQueue.isNotEmpty()) {
+                flushOfflineQueue()
+            }
+
+            // Send individual update
+            signalingClient.send(SignalingType.LOCATION_UPDATE, update.toJsonObject())
+            Log.d(TAG, "Location sent via WebSocket: lat=${update.latitude}, lng=${update.longitude}")
+        } else {
+            // Queue for offline transmission
+            if (offlineQueue.size >= maxQueueSize) {
+                offlineQueue.removeFirst()
+                Log.d(TAG, "Offline queue full, dropping oldest update")
+            }
+            offlineQueue.addLast(update)
+            Log.d(TAG, "Location queued offline (queue size: ${offlineQueue.size})")
+        }
+    }
+
+    /**
+     * Flush offline queue as batch message.
+     */
+    private fun flushOfflineQueue() {
+        if (offlineQueue.isEmpty()) return
+
+        val batch = offlineQueue.toList()
+        offlineQueue.clear()
+
+        val batchJson = JsonObject().apply {
+            val updatesArray = com.google.gson.JsonArray()
+            batch.forEach { update ->
+                updatesArray.add(update.toJsonObject())
+            }
+            add("updates", updatesArray)
+        }
+
+        signalingClient.send(SignalingType.LOCATION_BATCH, batchJson)
+        Log.d(TAG, "Flushed ${batch.size} queued locations as batch")
     }
 
     /**
