@@ -5,5 +5,6 @@ enum class ConnectionState {
     CONNECTING,
     CONNECTED,
     RECONNECTING,
-    FAILED
+    FAILED,
+    TLS_ERROR
 }

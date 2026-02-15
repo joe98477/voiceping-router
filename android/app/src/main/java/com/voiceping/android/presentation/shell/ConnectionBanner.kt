@@ -51,6 +51,10 @@ fun ConnectionBanner(
                 // FAILED always shows banner immediately (5-min timeout already elapsed)
                 showBanner = true
             }
+            ConnectionState.TLS_ERROR -> {
+                // TLS_ERROR shows banner immediately (non-dismissible, user must fix)
+                showBanner = true
+            }
             ConnectionState.CONNECTING -> {
                 // CONNECTING shows banner immediately
                 showBanner = true
@@ -76,6 +80,7 @@ fun ConnectionBanner(
                         ConnectionState.CONNECTING -> Color(0xFFFFA726) // Amber
                         ConnectionState.RECONNECTING -> MaterialTheme.colorScheme.secondaryContainer
                         ConnectionState.FAILED -> MaterialTheme.colorScheme.errorContainer
+                        ConnectionState.TLS_ERROR -> MaterialTheme.colorScheme.errorContainer
                         else -> Color.Transparent
                     }
                 )
@@ -88,6 +93,7 @@ fun ConnectionBanner(
                     ConnectionState.CONNECTING -> "Connecting..."
                     ConnectionState.RECONNECTING -> "Reconnecting..."
                     ConnectionState.FAILED -> "Connection lost"
+                    ConnectionState.TLS_ERROR -> "Secure connection failed. Check your network or contact support."
                     else -> ""
                 },
                 style = MaterialTheme.typography.bodySmall,
@@ -95,12 +101,13 @@ fun ConnectionBanner(
                     ConnectionState.CONNECTING -> Color.White
                     ConnectionState.RECONNECTING -> MaterialTheme.colorScheme.onSecondaryContainer
                     ConnectionState.FAILED -> MaterialTheme.colorScheme.onErrorContainer
+                    ConnectionState.TLS_ERROR -> MaterialTheme.colorScheme.onErrorContainer
                     else -> Color.White
                 }
             )
 
-            // Retry button only for FAILED state
-            if (connectionState == ConnectionState.FAILED) {
+            // Retry button for FAILED or TLS_ERROR states
+            if (connectionState == ConnectionState.FAILED || connectionState == ConnectionState.TLS_ERROR) {
                 TextButton(onClick = onRetry) {
                     Text(
                         text = "Retry",

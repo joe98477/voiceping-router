@@ -157,7 +157,22 @@ class SignalingClient @Inject constructor(
 
                 heartbeatJob?.cancel()
 
-                // Start reconnection if not intentionally disconnected
+                // Detect TLS-related failures (per user decision: show error, don't retry)
+                val isTlsError = t is javax.net.ssl.SSLException ||
+                                 t is javax.net.ssl.SSLHandshakeException ||
+                                 t is java.security.cert.CertificateException ||
+                                 (t.message?.contains("SSL", ignoreCase = true) == true) ||
+                                 (t.message?.contains("certificate", ignoreCase = true) == true) ||
+                                 (t.message?.contains("TLS", ignoreCase = true) == true)
+
+                if (isTlsError) {
+                    Log.e(TAG, "TLS error detected, not retrying: ${t.message}")
+                    _connectionState.value = ConnectionState.TLS_ERROR
+                    // Do NOT schedule reconnect for TLS errors
+                    return
+                }
+
+                // Start reconnection for non-TLS failures if not intentionally disconnected
                 if (!intentionalDisconnect) {
                     if (disconnectedAt == null) {
                         disconnectedAt = System.currentTimeMillis()
@@ -388,10 +403,11 @@ class SignalingClient @Inject constructor(
     }
 
     /**
-     * Manually retry connection after FAILED state (triggered by Retry button).
+     * Manually retry connection after FAILED or TLS_ERROR state (triggered by Retry button).
      */
     fun manualRetry() {
-        if (_connectionState.value != ConnectionState.FAILED) return
+        if (_connectionState.value != ConnectionState.FAILED &&
+            _connectionState.value != ConnectionState.TLS_ERROR) return
         reconnectStartTime = System.currentTimeMillis() // Reset 5-minute window
         reconnectAttempt = 0
         _connectionState.value = ConnectionState.RECONNECTING

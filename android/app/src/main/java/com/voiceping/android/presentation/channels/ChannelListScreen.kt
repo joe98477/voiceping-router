@@ -308,6 +308,7 @@ fun ChannelListScreen(
                                         ConnectionState.CONNECTED -> androidx.compose.ui.graphics.Color.Green
                                         ConnectionState.CONNECTING -> androidx.compose.ui.graphics.Color.Yellow
                                         ConnectionState.FAILED -> androidx.compose.ui.graphics.Color.Red
+                                        ConnectionState.TLS_ERROR -> androidx.compose.ui.graphics.Color.Red
                                         else -> androidx.compose.ui.graphics.Color.Gray
                                     },
                                     shape = CircleShape
