@@ -11,6 +11,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.rememberNavController
 import com.voiceping.android.data.hardware.HardwareKeyHandler
+import com.voiceping.android.data.location.LocationManager
 import com.voiceping.android.data.network.SignalingClient
 import com.voiceping.android.data.ptt.PttManager
 import com.voiceping.android.data.repository.ChannelRepository
@@ -41,6 +42,9 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var channelRepository: ChannelRepository
 
+    @Inject
+    lateinit var locationManager: LocationManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -67,7 +71,8 @@ class MainActivity : ComponentActivity() {
                         navController = navController,
                         preferencesManager = preferencesManager,
                         settingsRepository = settingsRepository,
-                        signalingClient = signalingClient
+                        signalingClient = signalingClient,
+                        locationManager = locationManager
                     )
                 }
             }

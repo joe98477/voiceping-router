@@ -10,6 +10,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.voiceping.android.data.location.LocationManager
 import com.voiceping.android.data.storage.PreferencesManager
 import com.voiceping.android.data.storage.SettingsRepository
 import com.voiceping.android.presentation.channels.ChannelListScreen
@@ -43,7 +44,8 @@ fun NavGraph(
     loginViewModel: LoginViewModel = hiltViewModel(),
     preferencesManager: PreferencesManager,
     settingsRepository: SettingsRepository,
-    signalingClient: SignalingClient
+    signalingClient: SignalingClient,
+    locationManager: LocationManager
 ) {
     val scope = rememberCoroutineScope()
 
@@ -157,6 +159,7 @@ fun NavGraph(
         composable(Routes.DEV_STATS) {
             DevStatsScreen(
                 signalingClient = signalingClient,
+                locationManager = locationManager,
                 onBack = {
                     navController.popBackStack()
                 }

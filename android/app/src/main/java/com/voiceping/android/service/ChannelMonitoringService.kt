@@ -108,7 +108,7 @@ class ChannelMonitoringService : Service() {
             startForeground(
                 NOTIFICATION_ID,
                 notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
             )
         } else {
             startForeground(NOTIFICATION_ID, notification)

@@ -8,7 +8,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.voiceping.android.data.location.LocationManager
 import com.voiceping.android.data.network.SignalingClient
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 /**
  * Hidden developer stats screen showing real-time audio quality metrics.
@@ -23,9 +27,11 @@ import com.voiceping.android.data.network.SignalingClient
 @Composable
 fun DevStatsScreen(
     signalingClient: SignalingClient,
+    locationManager: LocationManager,
     onBack: () -> Unit
 ) {
     val latency by signalingClient.latency.collectAsStateWithLifecycle()
+    val currentLocation by locationManager.currentLocation.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -64,6 +70,38 @@ fun DevStatsScreen(
             StatRow("Packet Loss", "Pending device validation")
             StatRow("Packets Received", "Pending device validation")
             StatRow("Quality Indicator", "Pending device validation")
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text("Location Tracking", style = MaterialTheme.typography.titleMedium)
+
+            if (currentLocation != null) {
+                val loc = currentLocation!!
+                StatRow("Latitude", String.format("%.6f", loc.latitude))
+                StatRow("Longitude", String.format("%.6f", loc.longitude))
+                StatRow("Accuracy", "${String.format("%.1f", loc.accuracy)}m")
+                StatRow("Speed", loc.speed?.let { "${String.format("%.1f", it)} m/s" } ?: "N/A")
+                StatRow("Heading", loc.heading?.let { "${String.format("%.0f", it)}°" } ?: "N/A")
+                StatRow("Motion State", loc.motionState.toString().lowercase().replaceFirstChar { it.uppercase() })
+
+                // Format timestamp
+                val timestamp = try {
+                    val instant = Instant.parse(loc.timestamp)
+                    val formatter = DateTimeFormatter.ofPattern("HH:mm:ss")
+                        .withZone(ZoneId.systemDefault())
+                    formatter.format(instant)
+                } catch (e: Exception) {
+                    loc.timestamp
+                }
+                StatRow("Last Update", timestamp)
+                StatRow("Tracking Status", "Active")
+            } else {
+                Text(
+                    "Location: Not available (waiting for first fix)",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
