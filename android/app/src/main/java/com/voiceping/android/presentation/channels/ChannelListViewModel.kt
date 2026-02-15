@@ -2,6 +2,7 @@ package com.voiceping.android.presentation.channels
 
 import android.content.Context
 import android.util.Log
+import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -96,6 +97,15 @@ class ChannelListViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
     val rxSquelchEnabled: StateFlow<Boolean> = settingsRepository.getRxSquelchEnabled()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val confirmationToneEnabled: StateFlow<Boolean> = settingsRepository.getConfirmationToneEnabled()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    // ACK flash state for PTT button visual feedback
+    private val _ackFlashColor = MutableStateFlow<Color?>(null)
+    val ackFlashColor: StateFlow<Color?> = _ackFlashColor.asStateFlow()
+
+    private val _isAmberPtt = MutableStateFlow(false)
+    val isAmberPtt: StateFlow<Boolean> = _isAmberPtt.asStateFlow()
 
     // Scan mode settings
     val scanModeEnabled: StateFlow<Boolean> = settingsRepository.getScanModeEnabled()
@@ -259,6 +269,16 @@ class ChannelListViewModel @Inject constructor(
                         stopNetworkQualityPolling(channelId)
                     }
                 }
+            }
+        }
+
+        // Collect ACK results for PTT button flash feedback
+        viewModelScope.launch {
+            pttManager.ackResult.collect { success ->
+                val flashColor = if (success) Color(0xFF4CAF50) else Color(0xFFD32F2F)
+                _ackFlashColor.value = flashColor
+                delay(300) // 300ms flash duration per user decision
+                _ackFlashColor.value = null
             }
         }
     }

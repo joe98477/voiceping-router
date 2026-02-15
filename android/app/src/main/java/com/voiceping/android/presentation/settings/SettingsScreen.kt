@@ -74,6 +74,7 @@ fun SettingsScreen(
     val audioRoute by viewModel.audioRoute.collectAsState()
     val pttStartToneEnabled by viewModel.pttStartToneEnabled.collectAsState()
     val rogerBeepEnabled by viewModel.rogerBeepEnabled.collectAsState()
+    val confirmationToneEnabled by viewModel.confirmationToneEnabled.collectAsState()
     val rxSquelchEnabled by viewModel.rxSquelchEnabled.collectAsState()
     val scanModeEnabled by viewModel.scanModeEnabled.collectAsState()
     val scanReturnDelay by viewModel.scanReturnDelay.collectAsState()
@@ -281,6 +282,19 @@ fun SettingsScreen(
                         Switch(
                             checked = rogerBeepEnabled,
                             onCheckedChange = { viewModel.setRogerBeepEnabled(it) }
+                        )
+                    }
+                )
+            }
+
+            item {
+                ListItem(
+                    headlineContent = { Text("Confirmation Tone") },
+                    supportingContent = { Text("Play tone after transmission confirms delivery") },
+                    trailingContent = {
+                        Switch(
+                            checked = confirmationToneEnabled,
+                            onCheckedChange = { viewModel.setConfirmationToneEnabled(it) }
                         )
                     }
                 )

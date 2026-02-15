@@ -37,14 +37,19 @@ import com.voiceping.android.domain.model.PttMode
  * - Requesting: Subtle gray loading pulse (NOT red - server confirmation wait)
  * - Transmitting: Red pulsing with elapsed time counter
  * - Denied: Brief dark red flash (handled by PttManager state, 500ms then back to idle)
+ * - Error: Brief dark red flash (producer creation failure after retries)
  * - Busy: Dimmed/grayed out, not clickable when channel is busy
  * - No mic permission: Dimmed gray, MicOff icon, not clickable
+ * - ACK flash: Green (success) or red (failure) 300ms flash after transmission ACK
+ * - Amber: Send transport degraded (receive still working)
  *
  * @param pttState Current PTT state from PttManager
  * @param pttMode Interaction mode (PRESS_AND_HOLD or TOGGLE)
  * @param transmissionDuration Elapsed time in seconds (shown during Transmitting)
  * @param isBusy True when channel is busy (someone else speaking)
  * @param micPermissionGranted True when mic permission is granted
+ * @param ackFlashColor Color for ACK flash (green/red), null when no flash active
+ * @param isAmber True when send transport degraded (receive ok)
  * @param onPttPressed Callback when PTT button is pressed
  * @param onPttReleased Callback when PTT button is released
  * @param modifier Optional modifier
@@ -56,6 +61,8 @@ fun PttButton(
     transmissionDuration: Long,
     isBusy: Boolean,
     micPermissionGranted: Boolean = true,
+    ackFlashColor: Color? = null,
+    isAmber: Boolean = false,
     onPttPressed: () -> Unit,
     onPttReleased: () -> Unit,
     modifier: Modifier = Modifier
@@ -63,12 +70,15 @@ fun PttButton(
     val isTransmitting = pttState is PttState.Transmitting
     val isRequesting = pttState is PttState.Requesting
     val isDenied = pttState is PttState.Denied
+    val isError = pttState is PttState.Error
     val isIdle = pttState is PttState.Idle
 
     // Determine button color based on state
     val buttonColor = when {
+        ackFlashColor != null -> ackFlashColor  // ACK flash overrides all
         !micPermissionGranted -> Color(0xFF757575) // Dimmed gray when no mic permission
-        isDenied -> Color(0xFFB71C1C) // Dark red for denied (brief flash)
+        isAmber && isIdle -> Color(0xFFFFA000)  // Amber: send broken, receive ok
+        isDenied || isError -> Color(0xFFB71C1C) // Dark red for denied/error (brief flash)
         isTransmitting -> Color(0xFFD32F2F) // Red for transmitting
         isRequesting -> Color(0xFF9E9E9E) // Gray for requesting (loading)
         isBusy && isIdle -> Color(0xFF757575) // Dimmed gray when busy

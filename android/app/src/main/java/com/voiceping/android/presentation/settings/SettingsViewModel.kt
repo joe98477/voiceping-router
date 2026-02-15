@@ -57,6 +57,9 @@ class SettingsViewModel @Inject constructor(
     val rogerBeepEnabled: StateFlow<Boolean> = settingsRepository.getRogerBeepEnabled()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
+    val confirmationToneEnabled: StateFlow<Boolean> = settingsRepository.getConfirmationToneEnabled()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
     val rxSquelchEnabled: StateFlow<Boolean> = settingsRepository.getRxSquelchEnabled()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
@@ -115,6 +118,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setRogerBeepEnabled(enabled: Boolean) = viewModelScope.launch {
         settingsRepository.setRogerBeepEnabled(enabled)
+    }
+
+    fun setConfirmationToneEnabled(enabled: Boolean) = viewModelScope.launch {
+        settingsRepository.setConfirmationToneEnabled(enabled)
     }
 
     fun setRxSquelchEnabled(enabled: Boolean) = viewModelScope.launch {

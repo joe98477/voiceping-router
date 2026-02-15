@@ -32,6 +32,8 @@ fun BottomBar(
     transmissionDuration: Long,
     connectionState: ConnectionState,
     micPermissionGranted: Boolean,
+    ackFlashColor: Color? = null,
+    isAmber: Boolean = false,
     onToggleLock: () -> Unit,
     onPttPressed: () -> Unit,
     onPttReleased: () -> Unit
@@ -123,6 +125,8 @@ fun BottomBar(
                     transmissionDuration = transmissionDuration,
                     isBusy = isBusy,
                     micPermissionGranted = micPermissionGranted,
+                    ackFlashColor = ackFlashColor,
+                    isAmber = isAmber,
                     onPttPressed = onPttPressed,
                     onPttReleased = onPttReleased
                 )

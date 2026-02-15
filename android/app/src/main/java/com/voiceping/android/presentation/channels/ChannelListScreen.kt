@@ -99,6 +99,9 @@ fun ChannelListScreen(
     val pttStartToneEnabled by viewModel.pttStartToneEnabled.collectAsState()
     val rogerBeepEnabled by viewModel.rogerBeepEnabled.collectAsState()
     val rxSquelchEnabled by viewModel.rxSquelchEnabled.collectAsState()
+    val confirmationToneEnabled by viewModel.confirmationToneEnabled.collectAsState()
+    val ackFlashColor by viewModel.ackFlashColor.collectAsState()
+    val isAmberPtt by viewModel.isAmberPtt.collectAsState()
     val showBatteryPrompt by viewModel.showBatteryOptimizationPrompt.collectAsState()
 
     // Permission states
@@ -331,6 +334,8 @@ fun ChannelListScreen(
                     transmissionDuration = transmissionDuration,
                     connectionState = connectionState,
                     micPermissionGranted = micPermissionGranted,
+                    ackFlashColor = ackFlashColor,
+                    isAmber = isAmberPtt,
                     onToggleLock = { viewModel.toggleBottomBarLock() },
                     onPttPressed = { viewModel.onPttPressed() },
                     onPttReleased = { viewModel.onPttReleased() }
