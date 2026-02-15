@@ -126,6 +126,27 @@ class HapticFeedback @Inject constructor(
         }
     }
 
+    /**
+     * Vibrate on PTT error release - double-buzz pattern.
+     *
+     * Pattern: Strong buzz (80ms), pause (60ms), strong buzz (80ms)
+     * Purpose: Distinct from normal release (subtle pulse) and denied (buzz-pause-buzz)
+     * Signals that PTT transmission failed after retry attempts
+     */
+    fun vibrateErrorRelease() {
+        try {
+            if (vibrator?.hasVibrator() == true) {
+                val timings = longArrayOf(0, 80, 60, 80)
+                val amplitudes = intArrayOf(0, 255, 0, 255) // Full amplitude for urgency
+                val effect = VibrationEffect.createWaveform(timings, amplitudes, -1)
+                vibrator.vibrate(effect)
+                Log.d(TAG, "PTT error release vibration triggered")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error vibrating on PTT error release", e)
+        }
+    }
+
     companion object {
         private const val TAG = "HapticFeedback"
     }

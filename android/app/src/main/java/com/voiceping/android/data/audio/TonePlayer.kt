@@ -185,6 +185,26 @@ class TonePlayer @Inject constructor(
     }
 
     /**
+     * Play confirmation tone after server ACK — pitch varies by success/failure.
+     *
+     * Success: DTMF_0 (1336 Hz + 941 Hz) for 150ms — same as roger beep pitch
+     * Failure: DTMF_7 (1209 Hz + 852 Hz) for 150ms — lower pitch indicates problem
+     * Configurable: Yes (independent "Confirmation tone" toggle in settings)
+     * Purpose: Audio feedback when screen is off/headset — confirms transmission was received
+     */
+    fun playConfirmationTone(success: Boolean) {
+        try {
+            if (settingsRepository.getCachedConfirmationToneEnabled()) {
+                val tone = if (success) ToneGenerator.TONE_DTMF_0 else ToneGenerator.TONE_DTMF_7
+                toneGenerator?.startTone(tone, 150)
+                Log.d(TAG, "Playing confirmation tone: ${if (success) "success" else "failure"}")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error playing confirmation tone", e)
+        }
+    }
+
+    /**
      * Cleanup ToneGenerator resources.
      * Call when TonePlayer is no longer needed.
      */

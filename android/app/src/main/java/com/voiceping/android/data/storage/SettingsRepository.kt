@@ -60,6 +60,7 @@ class SettingsRepository @Inject constructor(
         val PTT_START_TONE_ENABLED = booleanPreferencesKey("ptt_start_tone_enabled")
         val ROGER_BEEP_ENABLED = booleanPreferencesKey("roger_beep_enabled")
         val RX_SQUELCH_ENABLED = booleanPreferencesKey("rx_squelch_enabled")
+        val CONFIRMATION_TONE_ENABLED = booleanPreferencesKey("confirmation_tone_enabled")
         val TOGGLE_MAX_DURATION = intPreferencesKey("toggle_max_duration")
 
         // Multi-channel monitoring and scan mode
@@ -168,6 +169,25 @@ class SettingsRepository @Inject constructor(
      */
     fun getCachedRxSquelchEnabled(): Boolean = runBlocking {
         context.dataStore.data.first()[Keys.RX_SQUELCH_ENABLED] ?: false
+    }
+
+    // Confirmation Tone (independent of roger beep)
+    suspend fun setConfirmationToneEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[Keys.CONFIRMATION_TONE_ENABLED] = enabled
+        }
+    }
+
+    fun getConfirmationToneEnabled(): Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[Keys.CONFIRMATION_TONE_ENABLED] ?: true // Default ON
+    }
+
+    /**
+     * Get confirmation tone enabled setting synchronously.
+     * Safe to call from audio thread - DataStore caches after first read.
+     */
+    fun getCachedConfirmationToneEnabled(): Boolean = runBlocking {
+        context.dataStore.data.first()[Keys.CONFIRMATION_TONE_ENABLED] ?: true
     }
 
     // Toggle Max Duration
