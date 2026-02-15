@@ -18,8 +18,11 @@ import com.voiceping.android.presentation.loading.LoadingScreen
 import com.voiceping.android.presentation.login.LoginScreen
 import com.voiceping.android.presentation.login.LoginViewModel
 import com.voiceping.android.presentation.permissions.PermissionEducationScreen
+import com.voiceping.android.presentation.settings.DevStatsScreen
 import com.voiceping.android.presentation.settings.SettingsScreen
+import com.voiceping.android.data.network.SignalingClient
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 // Route constants
 object Routes {
@@ -29,6 +32,7 @@ object Routes {
     const val EVENTS = "events"
     const val CHANNELS = "channels/{eventId}"
     const val SETTINGS = "settings"
+    const val DEV_STATS = "dev-stats"
 
     fun channelsRoute(eventId: String) = "channels/$eventId"
 }
@@ -38,7 +42,8 @@ fun NavGraph(
     navController: NavHostController,
     loginViewModel: LoginViewModel = hiltViewModel(),
     preferencesManager: PreferencesManager,
-    settingsRepository: SettingsRepository
+    settingsRepository: SettingsRepository,
+    signalingClient: SignalingClient
 ) {
     val scope = rememberCoroutineScope()
 
@@ -142,7 +147,17 @@ fun NavGraph(
 
         composable(Routes.SETTINGS) {
             SettingsScreen(
+                navController = navController,
                 onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable(Routes.DEV_STATS) {
+            DevStatsScreen(
+                signalingClient = signalingClient,
+                onBack = {
                     navController.popBackStack()
                 }
             )

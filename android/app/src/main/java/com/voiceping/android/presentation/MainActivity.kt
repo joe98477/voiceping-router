@@ -11,6 +11,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.rememberNavController
 import com.voiceping.android.data.hardware.HardwareKeyHandler
+import com.voiceping.android.data.network.SignalingClient
 import com.voiceping.android.data.ptt.PttManager
 import com.voiceping.android.data.repository.ChannelRepository
 import com.voiceping.android.data.storage.PreferencesManager
@@ -27,6 +28,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var settingsRepository: com.voiceping.android.data.storage.SettingsRepository
+
+    @Inject
+    lateinit var signalingClient: SignalingClient
 
     @Inject
     lateinit var hardwareKeyHandler: HardwareKeyHandler
@@ -62,7 +66,8 @@ class MainActivity : ComponentActivity() {
                     NavGraph(
                         navController = navController,
                         preferencesManager = preferencesManager,
-                        settingsRepository = settingsRepository
+                        settingsRepository = settingsRepository,
+                        signalingClient = signalingClient
                     )
                 }
             }

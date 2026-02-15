@@ -1,6 +1,8 @@
 package com.voiceping.android.presentation.settings
 
+import com.voiceping.android.BuildConfig
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.foundation.clickable
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.navigation.NavController
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -49,6 +52,7 @@ import kotlin.math.roundToInt
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
+    navController: NavController,
     viewModel: SettingsViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit = {},
     onNavigateToButtonDetection: () -> Unit = {}
@@ -640,6 +644,29 @@ fun SettingsScreen(
             }
 
             // Bottom spacing
+            // Developer section (debug builds only)
+            if (BuildConfig.DEBUG) {
+                item {
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                item {
+                    Text(
+                        "Developer",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+
+                item {
+                    ListItem(
+                        headlineContent = { Text("Audio Stats") },
+                        supportingContent = { Text("Real-time jitter, packet loss, RTT") },
+                        modifier = Modifier.clickable { navController.navigate("dev-stats") }
+                    )
+                }
+            }
+
             item {
                 Spacer(modifier = Modifier.height(16.dp))
             }
