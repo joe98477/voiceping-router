@@ -66,8 +66,8 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-16
-Stopped at: Created v5.0 roadmap with 6 phases (21-26) covering all 24 requirements
-Resume file: None
+Stopped at: Phase 21 context gathered
+Resume file: .planning/phases/21-backend-protocol-extension/21-CONTEXT.md
 
 **Next action:** `/gsd:plan-phase 21` — plan backend protocol extension
 
