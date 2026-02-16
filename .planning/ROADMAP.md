@@ -6,6 +6,7 @@
 - ✅ **v2.0 Android Client App** - Phases 5-10 (shipped 2026-02-13)
 - ✅ **v3.0 mediasoup Library Integration** - Phases 11-15 (shipped 2026-02-15)
 - ✅ **v4.0 Production Hardening & Location** - Phases 16-20 (shipped 2026-02-16)
+- 🚧 **v5.0 Dispatch Map View** - Phases 21-26 (in progress)
 
 ## Phases
 
@@ -133,7 +134,117 @@ See: `.planning/milestones/v4.0-ROADMAP.md` for full details.
 
 </details>
 
+### 🚧 v5.0 Dispatch Map View (In Progress)
+
+**Milestone Goal:** Add real-time interactive satellite map to dispatch console showing field worker locations with battery telemetry and configurable status popups.
+
+- [ ] **Phase 21: Backend Protocol Extension** - Add battery telemetry to server and Android with backward-compatible protocol
+- [ ] **Phase 22: Web Layout Split** - Create CSS Grid split layout for channels and map panels
+- [ ] **Phase 23: Map Foundation** - Integrate Leaflet with proper cleanup pattern and tile layers
+- [ ] **Phase 24: Location State and Real-Time Markers** - Connect WebSocket location broadcasts to map markers
+- [ ] **Phase 25: Interactive Markers and Motion State** - Add status popups, motion indicators, and clustering
+- [ ] **Phase 26: Map Controls and Polish** - Add layer switching, auto-fit, search, and settings persistence
+
+## Phase Details
+
+### Phase 21: Backend Protocol Extension
+**Goal**: Extend location protocol with optional battery percentage field for dispatch monitoring
+**Depends on**: Phase 20 (v4.0 location tracking complete)
+**Requirements**: TELEM-01, TELEM-02, TELEM-03
+**Success Criteria** (what must be TRUE):
+  1. Android client includes battery percentage in LOCATION_UPDATE messages
+  2. Server stores battery percentage in location database when present
+  3. Server broadcasts battery percentage in LOCATION_BROADCAST when available
+  4. Old Android clients without battery field continue to work (backward compatibility validated)
+  5. Old web clients ignore unknown battery field (forward compatibility validated)
+**Plans**: TBD
+
+Plans:
+- [ ] 21-01: TBD
+- [ ] 21-02: TBD
+
+### Phase 22: Web Layout Split
+**Goal**: Create split-panel dispatch console layout with channels on left and map panel on right
+**Depends on**: Phase 21
+**Requirements**: LAYOUT-01
+**Success Criteria** (what must be TRUE):
+  1. Dispatch console displays channels panel on left and empty map panel on right using CSS Grid
+  2. Layout optimized for desktop (1200px+ widescreen), channels panel fixed-width, map panel fills remaining space
+  3. Existing channel monitoring functionality works unchanged in new layout
+  4. Map panel div exists and is sized correctly for Leaflet integration
+**Plans**: TBD
+
+Plans:
+- [ ] 22-01: TBD
+
+### Phase 23: Map Foundation
+**Goal**: Integrate Leaflet map library with proper cleanup pattern to prevent memory leaks
+**Depends on**: Phase 22
+**Requirements**: MAP-01, CTRL-02
+**Success Criteria** (what must be TRUE):
+  1. Dispatch user can view an interactive satellite map (Esri World Imagery tiles) in the map panel
+  2. Map component properly cleans up on unmount (no memory leaks in React Strict Mode)
+  3. Dispatch user can switch between satellite and street map layers
+  4. Map controls (zoom, pan) work correctly alongside channel monitoring
+**Plans**: TBD
+
+Plans:
+- [ ] 23-01: TBD
+- [ ] 23-02: TBD
+
+### Phase 24: Location State and Real-Time Markers
+**Goal**: Connect WebSocket location broadcasts to map markers showing real-time user positions
+**Depends on**: Phase 23
+**Requirements**: MAP-02, MAP-03, MAP-04, LAYOUT-02
+**Success Criteria** (what must be TRUE):
+  1. Map displays user positions as markers with radio icons when location data arrives
+  2. Each marker shows the associated username as a label
+  3. Markers update in real-time as LOCATION_BROADCAST messages arrive via WebSocket
+  4. Map loads all known user positions on initial connection via LOCATION_QUERY
+  5. LocationContext is separate from ChannelContext (high-frequency location updates don't re-render channels)
+**Plans**: TBD
+
+Plans:
+- [ ] 24-01: TBD
+- [ ] 24-02: TBD
+
+### Phase 25: Interactive Markers and Motion State
+**Goal**: Add status popups, motion indicators, staleness treatment, and clustering for production scale
+**Depends on**: Phase 24
+**Requirements**: MAP-05, MAP-06, MAP-07, POPUP-01, POPUP-02, POPUP-03, POPUP-04, POPUP-05, POPUP-06, CTRL-01
+**Success Criteria** (what must be TRUE):
+  1. Hovering over a marker shows a status card with location, motion, channel, PTT status, connection, and battery data
+  2. Markers display motion state visually (distinct icons or colors for STILL/WALKING/DRIVING)
+  3. Markers for users with no update in 5+ minutes appear visually faded (stale indicator)
+  4. Nearby markers cluster when zoomed out and expand when zoomed in (handles 200+ markers without performance collapse)
+  5. Dispatch user can zoom and pan the map interactively without lag
+**Plans**: TBD
+
+Plans:
+- [ ] 25-01: TBD
+- [ ] 25-02: TBD
+- [ ] 25-03: TBD
+
+### Phase 26: Map Controls and Polish
+**Goal**: Add auto-fit bounds, user search, configurable popup settings, and UX polish
+**Depends on**: Phase 25
+**Requirements**: CTRL-03, CTRL-04, SETTINGS-01, SETTINGS-02
+**Success Criteria** (what must be TRUE):
+  1. Map auto-fits bounds on initial load to show all visible user markers
+  2. Dispatch user can search for a user by name and map centers on their marker
+  3. Dispatch user can configure which fields appear in the status popup via settings
+  4. Popup field preferences persist across browser sessions in localStorage
+  5. Map remembers zoom and center position across page reloads
+**Plans**: TBD
+
+Plans:
+- [ ] 26-01: TBD
+- [ ] 26-02: TBD
+
 ## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 21 → 22 → 23 → 24 → 25 → 26
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -157,7 +268,13 @@ See: `.planning/milestones/v4.0-ROADMAP.md` for full details.
 | 18. Location Tracking | v4.0 | 3/3 | Complete | 2026-02-15 |
 | 19. Security Hardening & Code Quality | v4.0 | 3/3 | Complete | 2026-02-15 |
 | 20. Power Optimization & Validation | v4.0 | 2/2 | Complete | 2026-02-16 |
+| 21. Backend Protocol Extension | v5.0 | 0/2 | Not started | - |
+| 22. Web Layout Split | v5.0 | 0/1 | Not started | - |
+| 23. Map Foundation | v5.0 | 0/2 | Not started | - |
+| 24. Location State and Real-Time Markers | v5.0 | 0/2 | Not started | - |
+| 25. Interactive Markers and Motion State | v5.0 | 0/3 | Not started | - |
+| 26. Map Controls and Polish | v5.0 | 0/2 | Not started | - |
 
 ---
 *Roadmap created: 2026-02-06*
-*Last updated: 2026-02-16 after v4.0 milestone completion*
+*Last updated: 2026-02-16 after v5.0 roadmap creation*

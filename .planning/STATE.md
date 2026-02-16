@@ -5,14 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-16)
 
 **Core value:** Reliable, secure real-time audio communication for coordinating 1000+ distributed team members during high-profile events where security and uptime are critical
-**Current focus:** v5.0 Dispatch Map View
+**Current focus:** v5.0 Dispatch Map View - Phase 21
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-02-16 — Milestone v5.0 started
+Phase: 21 of 26 (Backend Protocol Extension)
+Plan: Ready to plan phase 21
+Status: Ready to plan
+Last activity: 2026-02-16 — v5.0 roadmap created, 6 phases mapped from 24 requirements
+
+Progress: [████████████████████████████████████████████████████████████████████████░░░░] 73/85 plans (85.9%)
 
 ## Performance Metrics
 
@@ -29,12 +31,23 @@ Last activity: 2026-02-16 — Milestone v5.0 started
 | v2.0 Android Client | 6 | 26/26 | Complete (2026-02-13) |
 | v3.0 mediasoup Integration | 5 | 10/10 | Complete (2026-02-15) |
 | v4.0 Production Hardening | 5 | 13/13 | Complete (2026-02-16) |
+| v5.0 Dispatch Map View | 6 | 0/12 | In progress |
 
 ## Accumulated Context
 
 ### Decisions
 
 All decisions logged in PROJECT.md Key Decisions table (43 entries across 4 milestones).
+
+Recent decisions affecting v5.0:
+- Phase 18 (v4.0): SQLite for location storage (not PostgreSQL) — lightweight, embedded, 24h retention
+- Phase 21 (v5.0): Battery % as additive protocol field — backward-compatible, old clients omit field
+- Phase 21 (v5.0): Leaflet + Esri World Imagery for dispatch map — free, no API key, satellite tiles
+- Phase 21 (v5.0): Cross-component stability constraint — all protocol changes backward-compatible
+
+### Pending Todos
+
+None.
 
 ### Blockers/Concerns
 
@@ -45,29 +58,25 @@ All decisions logged in PROJECT.md Key Decisions table (43 entries across 4 mile
 - PWR-04 battery profiling not validated — implementation complete, profiling deferred
 - Hardcoded JWT secret default — production MUST override via ROUTER_JWT_SECRET
 
-### Quick Tasks Completed
-
-| # | Description | Date | Commit | Directory |
-|---|-------------|------|--------|-----------|
-| 4 | Fix no-audio bug: Android speaker to web listener | 2026-02-16 | 5eb84cc | [4-fix-no-audio-bug-android-speaker-to-web-](./quick/4-fix-no-audio-bug-android-speaker-to-web-/) |
-| 5 | Update docs to reflect Android-to-Web audio fix is verified working | 2026-02-16 | 636d2f6 | [5-update-docs-to-reflect-android-to-web-au](./quick/5-update-docs-to-reflect-android-to-web-au/) |
-| 6 | Rewrite README for Connect Voice rebrand with quick-start guide | 2026-02-16 | 894c036 | [6-rewrite-readme-for-connect-voice-rebrand](./quick/6-rewrite-readme-for-connect-voice-rebrand/) |
-| 7 | Persist channel subscriptions across app restart | 2026-02-16 | 03fa2d8 | [7-persist-channel-subscriptions-across-app](./quick/7-persist-channel-subscriptions-across-app/) |
-| 8 | Introduce simple versioning strategy | 2026-02-16 | cdf2410 | [8-introduce-a-simple-versioning-strategy-f](./quick/8-introduce-a-simple-versioning-strategy-f/) |
+**v5.0 specific:**
+- Leaflet memory leak risk — Phase 23 must establish correct cleanup pattern from start (React Strict Mode validation)
+- Marker performance collapse at 200+ markers — Phase 25 must use canvas or clustering, not DOM markers
+- WebSocket message queue saturation — Phase 24 needs separate LocationContext from ChannelContext
 
 ## Session Continuity
 
 Last session: 2026-02-16
-Stopped at: Completed quick-8 introduce simple versioning strategy
+Stopped at: Created v5.0 roadmap with 6 phases (21-26) covering all 24 requirements
 Resume file: None
 
-**Next action:** `/gsd:new-milestone` — start next milestone
+**Next action:** `/gsd:plan-phase 21` — plan backend protocol extension
 
 **All Milestones:**
 - v1.0 WebRTC Audio Rebuild + Web UI — SHIPPED 2026-02-07
 - v2.0 Android Client App — SHIPPED 2026-02-13
 - v3.0 mediasoup Library Integration — SHIPPED 2026-02-15
 - v4.0 Production Hardening & Location — SHIPPED 2026-02-16
+- v5.0 Dispatch Map View — IN PROGRESS (Phase 21-26)
 
 ---
-*Last updated: 2026-02-16 after quick task 8 completion*
+*Last updated: 2026-02-16 after v5.0 roadmap creation*
