@@ -239,9 +239,16 @@ export class ConnectionManager {
     // Handle audio consumption
     if (isBusy && producerId && userId) {
       this.startConsuming(producerId);
-    } else {
+    } else if (!isBusy) {
+      // Only stop consuming when speaker explicitly releases (isBusy=false).
+      // Do NOT stop on SPEAKER_CHANGED with missing producerId -- this happens
+      // when Android client's PTT_START arrives before PRODUCE (producer doesn't
+      // exist yet). The follow-up SPEAKER_CHANGED from handleProduce will have
+      // the real producerId and trigger startConsuming().
       this.stopConsuming();
     }
+    // else: isBusy=true but no producerId -- Android PTT flow, producer not yet
+    // created. Skip and wait for the re-broadcast from handleProduce with real producerId.
   }
 
   /**
