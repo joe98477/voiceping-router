@@ -29,6 +29,9 @@ export class LocationStore {
     // Initialize schema
     this.initSchema();
 
+    // Migrate schema for new columns (Phase 21)
+    this.migrateSchema();
+
     logger.info(`Location store initialized at ${dbPath}`);
   }
 
@@ -61,12 +64,50 @@ export class LocationStore {
   }
 
   /**
+   * Migrate schema for Phase 21 telemetry fields
+   * Checks if columns exist before adding to support incremental migration
+   */
+  private migrateSchema(): void {
+    // Get existing columns
+    const columns = this.db.prepare('PRAGMA table_info(locations)').all() as Array<{ name: string }>;
+    const columnNames = columns.map((col) => col.name);
+
+    // Add battery_percentage column if not exists
+    if (!columnNames.includes('battery_percentage')) {
+      this.db.exec('ALTER TABLE locations ADD COLUMN battery_percentage INTEGER');
+      logger.info('Added battery_percentage column to locations table');
+    }
+
+    // Add power_save_mode column if not exists
+    if (!columnNames.includes('power_save_mode')) {
+      this.db.exec('ALTER TABLE locations ADD COLUMN power_save_mode INTEGER');
+      logger.info('Added power_save_mode column to locations table');
+    }
+
+    // Add network_type column if not exists
+    if (!columnNames.includes('network_type')) {
+      this.db.exec('ALTER TABLE locations ADD COLUMN network_type TEXT');
+      logger.info('Added network_type column to locations table');
+    }
+
+    // Add low_battery_alert_sent column if not exists (hysteresis flag)
+    if (!columnNames.includes('low_battery_alert_sent')) {
+      this.db.exec('ALTER TABLE locations ADD COLUMN low_battery_alert_sent INTEGER DEFAULT 0');
+      logger.info('Added low_battery_alert_sent column to locations table');
+    }
+
+    logger.info('Location database schema migration complete');
+  }
+
+  /**
    * Insert single location update
    */
   insertLocation(data: LocationData): void {
     const stmt = this.db.prepare(`
-      INSERT INTO locations (user_id, latitude, longitude, accuracy, speed, heading, motion_state, timestamp)
-      VALUES (@userId, @latitude, @longitude, @accuracy, @speed, @heading, @motionState, @timestamp)
+      INSERT INTO locations (user_id, latitude, longitude, accuracy, speed, heading, motion_state, timestamp,
+                             battery_percentage, power_save_mode, network_type)
+      VALUES (@userId, @latitude, @longitude, @accuracy, @speed, @heading, @motionState, @timestamp,
+              @batteryPercentage, @powerSaveMode, @networkType)
     `);
 
     try {
@@ -79,6 +120,10 @@ export class LocationStore {
         heading: data.heading,
         motionState: data.motionState,
         timestamp: data.timestamp,
+        batteryPercentage: data.batteryPercentage ?? null,
+        powerSaveMode:
+          data.powerSaveMode !== null && data.powerSaveMode !== undefined ? (data.powerSaveMode ? 1 : 0) : null,
+        networkType: data.networkType ?? null,
       });
 
       logger.debug(`Stored location for user ${data.userId} at ${data.timestamp}`);
@@ -97,8 +142,10 @@ export class LocationStore {
     }
 
     const stmt = this.db.prepare(`
-      INSERT INTO locations (user_id, latitude, longitude, accuracy, speed, heading, motion_state, timestamp)
-      VALUES (@userId, @latitude, @longitude, @accuracy, @speed, @heading, @motionState, @timestamp)
+      INSERT INTO locations (user_id, latitude, longitude, accuracy, speed, heading, motion_state, timestamp,
+                             battery_percentage, power_save_mode, network_type)
+      VALUES (@userId, @latitude, @longitude, @accuracy, @speed, @heading, @motionState, @timestamp,
+              @batteryPercentage, @powerSaveMode, @networkType)
     `);
 
     const insertMany = this.db.transaction((locations: LocationData[]) => {
@@ -112,6 +159,10 @@ export class LocationStore {
           heading: data.heading,
           motionState: data.motionState,
           timestamp: data.timestamp,
+          batteryPercentage: data.batteryPercentage ?? null,
+          powerSaveMode:
+            data.powerSaveMode !== null && data.powerSaveMode !== undefined ? (data.powerSaveMode ? 1 : 0) : null,
+          networkType: data.networkType ?? null,
         });
       }
     });
@@ -131,7 +182,8 @@ export class LocationStore {
    */
   getLatestPositions(): LocationData[] {
     const stmt = this.db.prepare(`
-      SELECT l.user_id, l.latitude, l.longitude, l.accuracy, l.speed, l.heading, l.motion_state, l.timestamp
+      SELECT l.user_id, l.latitude, l.longitude, l.accuracy, l.speed, l.heading, l.motion_state, l.timestamp,
+             l.battery_percentage, l.power_save_mode, l.network_type
       FROM locations l
       INNER JOIN (
         SELECT user_id, MAX(timestamp) as max_ts
@@ -152,6 +204,10 @@ export class LocationStore {
         heading: row.heading,
         motionState: row.motion_state,
         timestamp: row.timestamp,
+        batteryPercentage: row.battery_percentage ?? null,
+        powerSaveMode:
+          row.power_save_mode !== null && row.power_save_mode !== undefined ? row.power_save_mode === 1 : null,
+        networkType: row.network_type ?? null,
       }));
     } catch (err) {
       logger.error(`Failed to get latest positions: ${err instanceof Error ? err.message : String(err)}`);
