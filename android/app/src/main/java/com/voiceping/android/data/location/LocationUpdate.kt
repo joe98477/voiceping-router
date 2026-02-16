@@ -16,7 +16,10 @@ data class LocationUpdate(
     val speed: Float?,          // Speed in m/s (null if unavailable)
     val heading: Float?,        // Bearing in degrees (null if unavailable)
     val motionState: MotionState,
-    val timestamp: String       // ISO8601 UTC string
+    val timestamp: String,      // ISO8601 UTC string
+    val batteryPercentage: Int?,      // 0-100 integer, null if unavailable
+    val powerSaveMode: Boolean?,      // Android battery saver on/off, null if unavailable
+    val networkType: String?          // "wifi" or "cellular", null if unavailable
 ) {
     /**
      * Convert to JsonObject for WebSocket transmission.
@@ -35,6 +38,15 @@ data class LocationUpdate(
             }
             addProperty("motionState", motionState.toWireFormat())
             addProperty("timestamp", timestamp)
+            if (batteryPercentage != null) {
+                addProperty("batteryPercentage", batteryPercentage)
+            }
+            if (powerSaveMode != null) {
+                addProperty("powerSaveMode", powerSaveMode)
+            }
+            if (networkType != null) {
+                addProperty("networkType", networkType)
+            }
         }
     }
 }
