@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 Phase: 20 of 20 (all complete)
 Plan: All plans complete
 Status: v4.0 SHIPPED
-Last activity: 2026-02-16 - Completed quick task 5: Update docs to reflect Android-to-Web audio fix is verified working
+Last activity: 2026-02-16 - Completed quick task 6: Rewrite README for Connect Voice rebrand with quick-start guide
 
 Progress: [████████████████████████████████] 100% (73/73 plans complete across all milestones)
 
@@ -53,6 +53,7 @@ All decisions logged in PROJECT.md Key Decisions table (43 entries across 4 mile
 |---|-------------|------|--------|-----------|
 | 4 | Fix no-audio bug: Android speaker to web listener | 2026-02-16 | 5eb84cc | [4-fix-no-audio-bug-android-speaker-to-web-](./quick/4-fix-no-audio-bug-android-speaker-to-web-/) |
 | 5 | Update docs to reflect Android-to-Web audio fix is verified working | 2026-02-16 | 636d2f6 | [5-update-docs-to-reflect-android-to-web-au](./quick/5-update-docs-to-reflect-android-to-web-au/) |
+| 6 | Rewrite README for Connect Voice rebrand with quick-start guide | 2026-02-16 | 894c036 | [6-rewrite-readme-for-connect-voice-rebrand](./quick/6-rewrite-readme-for-connect-voice-rebrand/) |
 
 ## Session Continuity
 
