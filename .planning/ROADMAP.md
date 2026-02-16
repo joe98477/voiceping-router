@@ -157,11 +157,11 @@ See: `.planning/milestones/v4.0-ROADMAP.md` for full details.
   3. Server broadcasts battery percentage in LOCATION_BROADCAST when available
   4. Old Android clients without battery field continue to work (backward compatibility validated)
   5. Old web clients ignore unknown battery field (forward compatibility validated)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 21-01: TBD
-- [ ] 21-02: TBD
+- [ ] 21-01-PLAN.md — Server-side telemetry extension (types, schema, handlers, broadcaster, LOW_BATTERY_ALERT)
+- [ ] 21-02-PLAN.md — Android telemetry collection (battery %, power-save, network type in LocationUpdate)
 
 ### Phase 22: Web Layout Split
 **Goal**: Create split-panel dispatch console layout with channels on left and map panel on right
