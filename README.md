@@ -7,7 +7,7 @@ Real-time push-to-talk communication platform for coordinating distributed teams
 
 ## Overview
 
-ConnectVoice is a WebRTC-based PTT audio routing system with event, team, and channel management. Built on mediasoup with Opus codec, it delivers low-latency voice communication through a Node.js + TypeScript server, React dispatch console, and native Android PTT client. The architecture is designed to scale to 1000+ concurrent users across multiple channels.
+ConnectVoice is a WebRTC-based PTT comms system with event, team, and channel management. Built on mediasoup with Opus codec, it delivers low-latency voice communication through a Node.js + TypeScript server, React dispatch console, and native Android PTT client. The architecture is designed to scale to 1000+ concurrent users across multiple channels.
 
 **Key Technologies:**
 - mediasoup WebRTC SFU (Selective Forwarding Unit)
