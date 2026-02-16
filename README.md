@@ -192,9 +192,3 @@ Detailed guides are available in the `docs/` directory:
 - **[API Reference](docs/api.md)** - Control-plane REST endpoints for events, teams, channels, users
 - **[User Manual](docs/user-manual.md)** - Dispatch console usage guide for coordinators
 - **[Opus Implementation](docs/opus-implementation.md)** - Audio codec details, browser compatibility, Opus parameters
-
-## License
-
-MIT License - see [LICENSE](LICENSE) file for details.
-
-Copyright © 2024-2026 Smart Walkie Pte Ltd
