@@ -4,6 +4,7 @@
  */
 
 import { LocationData, LocationPosition } from './types';
+import { SignalingType } from '../../shared/protocol';
 import { createLogger } from '../logger';
 
 const logger = createLogger('LocationBroadcaster');
@@ -14,6 +15,7 @@ const logger = createLogger('LocationBroadcaster');
 export class LocationBroadcaster {
   private latestPositions = new Map<string, LocationData>();
   private sendToDispatchUsers: (message: string) => void;
+  private lowBatteryAlertSent = new Map<string, boolean>(); // Track per-user low battery alert state
 
   constructor(sendToDispatchUsers: (message: string) => void) {
     this.sendToDispatchUsers = sendToDispatchUsers;
@@ -36,6 +38,12 @@ export class LocationBroadcaster {
     // Update cache
     this.latestPositions.set(userId, location);
 
+    // Compute lowBattery flag server-side
+    const lowBattery =
+      location.batteryPercentage !== null && location.batteryPercentage !== undefined
+        ? location.batteryPercentage < 20
+        : false;
+
     // Broadcast to dispatch users
     const broadcastMessage = JSON.stringify({
       type: 'location-broadcast',
@@ -48,12 +56,56 @@ export class LocationBroadcaster {
         heading: location.heading,
         motionState: location.motionState,
         timestamp: location.timestamp,
+        batteryPercentage: location.batteryPercentage ?? null,
+        powerSaveMode: location.powerSaveMode ?? null,
+        networkType: location.networkType ?? null,
+        lowBattery,
       },
     });
 
     this.sendToDispatchUsers(broadcastMessage);
 
     logger.debug(`Broadcast location for ${userId} to dispatch users`);
+
+    // Check for low battery alert
+    this.checkLowBatteryAlert(userId, location);
+  }
+
+  /**
+   * Check and send low battery alert with hysteresis
+   * Alert fires once when battery drops below 20%, resets when it goes above 20%
+   */
+  private checkLowBatteryAlert(userId: string, location: LocationData): void {
+    const batteryPercentage = location.batteryPercentage;
+
+    // No battery data available
+    if (batteryPercentage === null || batteryPercentage === undefined) {
+      return;
+    }
+
+    const alreadySent = this.lowBatteryAlertSent.get(userId) === true;
+
+    if (batteryPercentage < 20 && !alreadySent) {
+      // Battery dropped below 20% and alert not yet sent
+      this.lowBatteryAlertSent.set(userId, true);
+
+      const alertMessage = JSON.stringify({
+        type: SignalingType.LOW_BATTERY_ALERT,
+        data: {
+          userId,
+          batteryPercentage,
+          userName: location.userId, // Note: userName should come from user context, using userId for now
+        },
+      });
+
+      this.sendToDispatchUsers(alertMessage);
+
+      logger.warn(`LOW_BATTERY_ALERT sent for user ${userId} (battery: ${batteryPercentage}%)`);
+    } else if (batteryPercentage >= 20 && alreadySent) {
+      // Battery recovered above 20% - reset hysteresis flag
+      this.lowBatteryAlertSent.set(userId, false);
+      logger.info(`Low battery alert reset for user ${userId} (battery recovered to ${batteryPercentage}%)`);
+    }
   }
 
   /**
@@ -70,9 +122,16 @@ export class LocationBroadcaster {
       const age = now - new Date(position.timestamp).getTime();
       const isStale = age > staleThreshold;
 
+      // Compute lowBattery flag server-side
+      const lowBattery =
+        position.batteryPercentage !== null && position.batteryPercentage !== undefined
+          ? position.batteryPercentage < 20
+          : false;
+
       positions.push({
         ...position,
         isStale,
+        lowBattery,
       });
     }
 
