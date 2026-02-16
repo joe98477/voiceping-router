@@ -76,8 +76,19 @@ class WakeLockManager @Inject constructor(
     /**
      * Reset timeout: cancel existing delayed release, schedule new one.
      * Called on every audio activity event to keep wake lock alive.
+     *
+     * If the wake lock was previously released (idle timeout elapsed),
+     * re-acquires it so the CPU stays awake for audio processing.
      */
     fun resetTimeout() {
+        // Re-acquire if released (e.g., after idle timeout, then audio activity resumes)
+        if (!wakeLock.isHeld) {
+            wakeLock.acquire(10 * 60 * 1000L)
+            _wakeLockActive.value = true
+            onWakeLockAcquired?.invoke()
+            Log.d(TAG, "Wake lock RE-ACQUIRED on audio activity")
+        }
+
         releaseRunnable?.let { handler.removeCallbacks(it) }
 
         releaseRunnable = Runnable {

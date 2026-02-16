@@ -16,6 +16,7 @@ import io.github.crow_misia.mediasoup.Producer
 import io.github.crow_misia.mediasoup.RecvTransport
 import io.github.crow_misia.mediasoup.SendTransport
 import io.github.crow_misia.mediasoup.Transport
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -25,10 +26,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
 import org.webrtc.AudioSource
 import org.webrtc.AudioTrack
 import org.webrtc.MediaConstraints
@@ -70,10 +71,11 @@ class MediasoupClient @Inject constructor(
     private lateinit var device: Device
 
     // Transport and producer/consumer placeholders (typed in Phase 12/13)
-    private val recvTransports = mutableMapOf<String, RecvTransport>()
+    // ConcurrentHashMap: accessed from coroutines, native callbacks, and cleanup timers
+    private val recvTransports = ConcurrentHashMap<String, RecvTransport>()
     private var sendTransport: SendTransport? = null
     private var sendTransportChannelId: String? = null
-    private val consumers = mutableMapOf<String, Consumer>()
+    private val consumers = ConcurrentHashMap<String, Consumer>()
     private var audioProducer: Producer? = null
     private var audioSource: AudioSource? = null
     private var pttAudioTrack: org.webrtc.AudioTrack? = null
@@ -98,7 +100,7 @@ class MediasoupClient @Inject constructor(
     private val monitorScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var sendGracePeriodJob: Job? = null
     private var sendOrphanCleanupJob: Job? = null
-    private var recvOrphanCleanupJobs = mutableMapOf<String, Job>()
+    private val recvOrphanCleanupJobs = ConcurrentHashMap<String, Job>()
 
     // Transport state callbacks
     var onSendTransportFailed: (() -> Unit)? = null
@@ -345,17 +347,32 @@ class MediasoupClient @Inject constructor(
                     listener = object : RecvTransport.Listener {
                         override fun onConnect(transport: Transport, dtlsParameters: String) {
                             Log.d(TAG, "RecvTransport onConnect: $transportId")
-                            runBlocking {
-                                // dtlsParameters is a JSON string from native —
-                                // parse into JsonElement to avoid double-encoding
-                                val connectData = JsonObject().apply {
-                                    addProperty("transportId", transportId)
-                                    add("dtlsParameters", JsonParser.parseString(dtlsParameters))
+                            // Use CompletableDeferred to avoid blocking the native C++ thread
+                            // with runBlocking (which can deadlock if the network is slow after idle)
+                            val done = CompletableDeferred<Unit>()
+                            monitorScope.launch {
+                                try {
+                                    val connectData = JsonObject().apply {
+                                        addProperty("transportId", transportId)
+                                        add("dtlsParameters", JsonParser.parseString(dtlsParameters))
+                                    }
+                                    signalingClient.request(
+                                        SignalingType.CONNECT_TRANSPORT,
+                                        connectData
+                                    )
+                                    done.complete(Unit)
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "RecvTransport onConnect failed", e)
+                                    done.complete(Unit)
                                 }
-                                signalingClient.request(
-                                    SignalingType.CONNECT_TRANSPORT,
-                                    connectData
-                                )
+                            }
+                            // Block briefly — native expects synchronous completion but we limit the wait
+                            try {
+                                kotlinx.coroutines.runBlocking {
+                                    kotlinx.coroutines.withTimeout(10_000) { done.await() }
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "RecvTransport onConnect timed out", e)
                             }
                         }
 
@@ -370,16 +387,18 @@ class MediasoupClient @Inject constructor(
                                     recvOrphanCleanupJobs[channelId]?.cancel()
                                     recvOrphanCleanupJobs[channelId] = monitorScope.launch {
                                         delay(15_000)
-                                        if (recvTransports.containsKey(channelId)) {
+                                        // Use transportMutex to prevent race with consumeAudio
+                                        transportMutex.withLock {
+                                            val t = recvTransports[channelId] ?: return@withLock
                                             try {
-                                                val t = recvTransports[channelId]
-                                                val state = t?.connectionState
+                                                val state = t.connectionState
                                                 if (state == PeerConnection.IceConnectionState.DISCONNECTED || state == PeerConnection.IceConnectionState.FAILED) {
                                                     Log.w(TAG, "RecvTransport orphaned after 15s for channel: $channelId, cleaning up (silent)")
                                                     recvTransports.remove(channelId)?.close()
                                                 }
                                             } catch (e: Exception) {
                                                 Log.e(TAG, "Error during RecvTransport orphan cleanup: $channelId", e)
+                                                recvTransports.remove(channelId)
                                             }
                                         }
                                     }
@@ -387,7 +406,8 @@ class MediasoupClient @Inject constructor(
                                 "failed" -> {
                                     Log.e(TAG, "RecvTransport failed, cleaning up channel: $channelId")
                                     recvOrphanCleanupJobs[channelId]?.cancel()
-                                    recvTransports.remove(channelId)
+                                    // Close the transport (was missing before — native resource leak)
+                                    recvTransports.remove(channelId)?.close()
 
                                     // Check if ALL recv transports are gone + send transport is gone
                                     if (recvTransports.isEmpty() && sendTransport == null) {
@@ -459,6 +479,25 @@ class MediasoupClient @Inject constructor(
 
             val transport = recvTransports[channelId]
                 ?: throw IllegalStateException("RecvTransport not found for channel: $channelId")
+
+            // CRITICAL: Check transport state before calling native code.
+            // After idle (wake lock released), ICE may have disconnected/failed.
+            // Calling consume() on a dead transport causes a native SIGSEGV.
+            val transportState = try {
+                transport.connectionState
+            } catch (e: Exception) {
+                Log.e(TAG, "Cannot read transport state for $channelId, transport may be disposed", e)
+                throw IllegalStateException("RecvTransport disposed for channel: $channelId")
+            }
+            if (transportState == PeerConnection.IceConnectionState.FAILED ||
+                transportState == PeerConnection.IceConnectionState.CLOSED) {
+                Log.w(TAG, "RecvTransport in $transportState state for channel: $channelId, cannot consume")
+                // Remove stale transport so caller can recreate
+                recvTransports.remove(channelId)?.let {
+                    try { it.close() } catch (e: Exception) { /* already failed/closed */ }
+                }
+                throw IllegalStateException("RecvTransport in $transportState state for channel: $channelId")
+            }
 
             val consumer = transport.consume(
                 listener = object : Consumer.Listener {
@@ -622,17 +661,32 @@ class MediasoupClient @Inject constructor(
                     listener = object : SendTransport.Listener {
                         override fun onConnect(transport: Transport, dtlsParameters: String) {
                             Log.d(TAG, "SendTransport onConnect: $transportId")
-                            runBlocking {
-                                // dtlsParameters is a JSON string from native —
-                                // parse into JsonElement to avoid double-encoding
-                                val connectData = JsonObject().apply {
-                                    addProperty("transportId", transportId)
-                                    add("dtlsParameters", JsonParser.parseString(dtlsParameters))
+                            // Use CompletableDeferred to avoid blocking the native C++ thread
+                            // with runBlocking (which can deadlock if the network is slow after idle)
+                            val done = CompletableDeferred<Unit>()
+                            monitorScope.launch {
+                                try {
+                                    val connectData = JsonObject().apply {
+                                        addProperty("transportId", transportId)
+                                        add("dtlsParameters", JsonParser.parseString(dtlsParameters))
+                                    }
+                                    signalingClient.request(
+                                        SignalingType.CONNECT_TRANSPORT,
+                                        connectData
+                                    )
+                                    done.complete(Unit)
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "SendTransport onConnect failed", e)
+                                    done.complete(Unit)
                                 }
-                                signalingClient.request(
-                                    SignalingType.CONNECT_TRANSPORT,
-                                    connectData
-                                )
+                            }
+                            // Block briefly — native expects synchronous completion but we limit the wait
+                            try {
+                                kotlinx.coroutines.runBlocking {
+                                    kotlinx.coroutines.withTimeout(10_000) { done.await() }
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "SendTransport onConnect timed out", e)
                             }
                         }
 
@@ -643,25 +697,36 @@ class MediasoupClient @Inject constructor(
                             appData: String?
                         ): String {
                             Log.d(TAG, "SendTransport onProduce: kind=$kind, transport=$transportId, channel=$sendTransportChannelId")
-                            return runBlocking {
-                                // rtpParameters is a JSON string from native —
-                                // parse into JsonElement to avoid double-encoding.
-                                // Server requires transportId and channelId.
-                                val produceData = JsonObject().apply {
-                                    addProperty("transportId", transportId)
-                                    addProperty("channelId", sendTransportChannelId)
-                                    addProperty("kind", kind)
-                                    add("rtpParameters", JsonParser.parseString(rtpParameters))
+                            // Use CompletableDeferred to move network I/O off native C++ thread
+                            val result = CompletableDeferred<String>()
+                            monitorScope.launch {
+                                try {
+                                    val produceData = JsonObject().apply {
+                                        addProperty("transportId", transportId)
+                                        addProperty("channelId", sendTransportChannelId)
+                                        addProperty("kind", kind)
+                                        add("rtpParameters", JsonParser.parseString(rtpParameters))
+                                    }
+                                    val produceResponse = signalingClient.request(
+                                        SignalingType.PRODUCE,
+                                        produceData
+                                    )
+                                    if (produceResponse.error != null) {
+                                        result.completeExceptionally(
+                                            IllegalStateException("Produce failed: ${produceResponse.error}")
+                                        )
+                                    } else {
+                                        val id = produceResponse.data?.get("id").asStringOrNull()
+                                            ?: throw IllegalStateException("No producer id in response")
+                                        result.complete(id)
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "SendTransport onProduce failed", e)
+                                    result.completeExceptionally(e)
                                 }
-                                val produceResponse = signalingClient.request(
-                                    SignalingType.PRODUCE,
-                                    produceData
-                                )
-                                if (produceResponse.error != null) {
-                                    throw IllegalStateException("Produce failed: ${produceResponse.error}")
-                                }
-                                produceResponse.data?.get("id").asStringOrNull()
-                                    ?: throw IllegalStateException("No producer id in response")
+                            }
+                            return kotlinx.coroutines.runBlocking {
+                                kotlinx.coroutines.withTimeout(10_000) { result.await() }
                             }
                         }
 
@@ -747,6 +812,8 @@ class MediasoupClient @Inject constructor(
                                     audioProducer?.close()
                                     audioProducer = null
                                     cleanupAudioResources()
+                                    // Close transport before nulling to release native resources
+                                    sendTransport?.close()
                                     sendTransport = null
 
                                     val hasWorkingRecvTransport = recvTransports.values.isNotEmpty()

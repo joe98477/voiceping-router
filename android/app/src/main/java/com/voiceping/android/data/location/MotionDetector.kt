@@ -1,11 +1,13 @@
 package com.voiceping.android.data.location
 
-import android.annotation.SuppressLint
+import android.Manifest
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.location.Location
 import android.util.Log
+import androidx.core.content.ContextCompat
 import com.google.android.gms.location.ActivityRecognition
 import com.google.android.gms.location.ActivityRecognitionClient
 import com.google.android.gms.location.ActivityTransition
@@ -62,9 +64,16 @@ class MotionDetector @Inject constructor(
      *
      * @throws Exception if Activity Recognition is unavailable (permission denied or API disabled)
      */
-    @SuppressLint("MissingPermission")
     fun startMonitoring() {
         Log.d(TAG, "Starting motion detection")
+
+        // Check ACTIVITY_RECOGNITION permission (dangerous on API 29+)
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACTIVITY_RECOGNITION)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            Log.w(TAG, "ACTIVITY_RECOGNITION permission not granted, skipping")
+            throw SecurityException("ACTIVITY_RECOGNITION permission not granted")
+        }
 
         val transitions = listOf(
             ActivityTransition.Builder()
@@ -96,8 +105,7 @@ class MotionDetector @Inject constructor(
                 Log.d(TAG, "Activity transition updates registered successfully")
             }
             .addOnFailureListener { e ->
-                Log.e(TAG, "Failed to register activity transitions", e)
-                throw e
+                Log.e(TAG, "Failed to register activity transitions, using GPS fallback", e)
             }
     }
 

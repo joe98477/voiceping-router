@@ -41,6 +41,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -79,16 +80,18 @@ class ChannelRepository @Inject constructor(
     val primaryChannelId: StateFlow<String?> = _primaryChannelId.asStateFlow()
 
     // Per-channel consumer tracking: channelId -> (producerId -> consumerId)
-    private val channelConsumers = mutableMapOf<String, MutableMap<String, String>>()
+    // ConcurrentHashMap: accessed from speaker observer coroutines, mute/unmute, phone call callback, and cleanup
+    private val channelConsumers = ConcurrentHashMap<String, ConcurrentHashMap<String, String>>()
 
     // Per-channel speaker observer jobs
-    private val speakerObserverJobs = mutableMapOf<String, Job>()
+    // ConcurrentHashMap: accessed from joinChannel, leaveChannel, and disconnectAll on different coroutines
+    private val speakerObserverJobs = ConcurrentHashMap<String, Job>()
 
     // Per-channel state update observer jobs
-    private val channelStateObserverJobs = mutableMapOf<String, Job>()
+    private val channelStateObserverJobs = ConcurrentHashMap<String, Job>()
 
     // Per-channel last speaker fade jobs
-    private val lastSpeakerFadeJobs = mutableMapOf<String, Job>()
+    private val lastSpeakerFadeJobs = ConcurrentHashMap<String, Job>()
 
     private var isServiceRunning = false
     private var currentAudioMixMode = AudioMixMode.EQUAL_VOLUME
@@ -399,7 +402,7 @@ class ChannelRepository @Inject constructor(
             val isFirstChannel = _monitoredChannels.value.isEmpty()
             if (isFirstChannel) {
                 audioRouter.requestAudioFocus()
-                audioRouter.setEarpieceMode()
+                audioRouter.setSpeakerMode()
 
                 // Set as primary
                 _primaryChannelId.value = channelId
@@ -655,7 +658,7 @@ class ChannelRepository @Inject constructor(
                                 // Track consumer: producerId -> actual consumerId (NOT producerId!)
                                 // The actual consumerId is needed for closeConsumer() and setConsumerVolume()
                                 if (channelConsumers[channelId] == null) {
-                                    channelConsumers[channelId] = mutableMapOf()
+                                    channelConsumers[channelId] = ConcurrentHashMap()
                                 }
                                 channelConsumers[channelId]!![producerId] = actualConsumerId
 
@@ -764,7 +767,7 @@ class ChannelRepository @Inject constructor(
 
             // Track consumer: producerId -> actual consumerId
             if (channelConsumers[channelId] == null) {
-                channelConsumers[channelId] = mutableMapOf()
+                channelConsumers[channelId] = ConcurrentHashMap()
             }
             channelConsumers[channelId]!![producerId] = actualConsumerId
 
@@ -871,7 +874,7 @@ class ChannelRepository @Inject constructor(
 
         // Re-acquire audio focus (may have been released during disconnect)
         audioRouter.requestAudioFocus()
-        audioRouter.setEarpieceMode()
+        audioRouter.setSpeakerMode()
 
         for ((channelId, state) in currentChannels) {
             try {

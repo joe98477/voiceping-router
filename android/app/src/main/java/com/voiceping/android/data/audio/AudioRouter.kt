@@ -19,8 +19,8 @@ import javax.inject.Singleton
  * - Audio output routing (earpiece vs speaker)
  * - Audio focus management (pausing during phone calls, resuming after)
  *
- * Default: Earpiece mode (quiet/private) - MODE_IN_COMMUNICATION with speakerphone off.
- * User can toggle to speaker mode in Phase 6 settings.
+ * Default: Speaker mode (audible PTT) - MODE_IN_COMMUNICATION with speakerphone on.
+ * User can toggle to earpiece mode for private listening.
  */
 @Singleton
 class AudioRouter @Inject constructor(

@@ -52,6 +52,7 @@ class PermissionManager @Inject constructor(
         const val PERMISSION_MIC = Manifest.permission.RECORD_AUDIO
         const val PERMISSION_LOCATION = Manifest.permission.ACCESS_COARSE_LOCATION
         const val PERMISSION_NOTIFICATIONS = Manifest.permission.POST_NOTIFICATIONS
+        const val PERMISSION_ACTIVITY_RECOGNITION = Manifest.permission.ACTIVITY_RECOGNITION
     }
 
     /**
