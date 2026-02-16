@@ -236,6 +236,7 @@ fun ChannelListScreen(
         appVersion = "1.0.0",
         onSwitchEvent = {
             drawerOpen = false
+            viewModel.switchEvent()
             onSwitchEvent()
         },
         onSettings = {
@@ -244,6 +245,7 @@ fun ChannelListScreen(
         },
         onLogout = {
             drawerOpen = false
+            viewModel.logout()
             onLogout()
         }
     ) {

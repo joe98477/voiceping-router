@@ -908,7 +908,13 @@ class ChannelRepository @Inject constructor(
         }
     }
 
-    fun disconnectAll() {
+    /**
+     * Disconnect from all channels, preserving persisted state in DataStore.
+     * Used when the app is closing or going to background (ViewModel.onCleared).
+     * The WebSocket disconnect itself tells the server we left, so no LEAVE_CHANNEL needed.
+     * Persisted channel IDs remain in DataStore for auto-rejoin on next app start.
+     */
+    fun disconnectAllPreservingState() {
         // Stop NetworkMonitor
         networkMonitor.stop()
 
@@ -934,7 +940,7 @@ class ChannelRepository @Inject constructor(
             }
             context.startService(serviceIntent)
             isServiceRunning = false
-            Log.d(TAG, "Stopped ChannelMonitoringService (disconnectAll)")
+            Log.d(TAG, "Stopped ChannelMonitoringService (disconnectAllPreservingState)")
         }
 
         // Cancel all speaker observer jobs
@@ -949,19 +955,24 @@ class ChannelRepository @Inject constructor(
         lastSpeakerFadeJobs.values.forEach { it.cancel() }
         lastSpeakerFadeJobs.clear()
 
-        // Leave all channels
-        val channelIds = _monitoredChannels.value.keys.toList()
+        // Release audio focus and clean up mediasoup
+        audioRouter.releaseAudioFocus()
+        audioRouter.resetAudioMode()
+        mediasoupClient.cleanup()
+
+        // Clear in-memory state without server communication or persistence clearing
+        channelConsumers.clear()
+        _monitoredChannels.value = emptyMap()
+        _primaryChannelId.value = null
+    }
+
+    /**
+     * Disconnect from all channels AND clear persisted state.
+     * Used for explicit logout or event-switch where channels should NOT be restored.
+     */
+    fun disconnectAllAndClearState() {
+        disconnectAllPreservingState()
         CoroutineScope(Dispatchers.IO).launch {
-            channelIds.forEach { channelId ->
-                leaveChannel(channelId)
-            }
-
-            // Clear all maps
-            channelConsumers.clear()
-            _monitoredChannels.value = emptyMap()
-            _primaryChannelId.value = null
-
-            // Clear persisted state
             settingsRepository.clearMonitoredChannels()
         }
     }

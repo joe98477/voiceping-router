@@ -629,13 +629,29 @@ class ChannelListViewModel @Inject constructor(
         _networkQuality.update { it - channelId }
     }
 
+    /**
+     * Explicit logout: disconnect and clear persisted channel state.
+     * Channels will NOT be restored on next login.
+     */
+    fun logout() {
+        channelRepository.disconnectAllAndClearState()
+    }
+
+    /**
+     * Switch event: disconnect and clear persisted channel state.
+     * Old event's channels should NOT be restored for the new event.
+     */
+    fun switchEvent() {
+        channelRepository.disconnectAllAndClearState()
+    }
+
     override fun onCleared() {
         super.onCleared()
         // Clean up network quality polling jobs
         networkQualityJobs.values.forEach { it.cancel() }
         networkQualityJobs.clear()
-        // Disconnect from all channels on ViewModel cleanup
-        channelRepository.disconnectAll()
+        // Disconnect preserving state: persisted channel IDs remain for auto-rejoin
+        channelRepository.disconnectAllPreservingState()
         // Stop NetworkMonitor
         networkMonitor.stop()
     }
