@@ -45,8 +45,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
 @HiltViewModel
@@ -222,6 +224,62 @@ class ChannelListViewModel @Inject constructor(
 
     init {
         eventId?.let { loadChannels(it) }
+
+        // Auto-rejoin persisted channels from previous session
+        viewModelScope.launch {
+            try {
+                val persistedChannelIds = settingsRepository.getMonitoredChannels().first()
+                val persistedPrimaryId = settingsRepository.getPrimaryChannel().first()
+
+                if (persistedChannelIds.isEmpty()) return@launch
+
+                Log.d(TAG, "Found ${persistedChannelIds.size} persisted channels, waiting for channel list...")
+
+                // Wait for channel list to load (with timeout)
+                val loadedChannels = withTimeoutOrNull(10_000L) {
+                    _channels.first { it.isNotEmpty() }
+                }
+
+                if (loadedChannels == null) {
+                    Log.w(TAG, "Channel list did not load in time, skipping auto-rejoin")
+                    return@launch
+                }
+
+                val channelMap = loadedChannels.associateBy { it.id }
+
+                // Join primary channel first (so it becomes primary)
+                val orderedIds = if (persistedPrimaryId != null && persistedPrimaryId in persistedChannelIds) {
+                    listOf(persistedPrimaryId) + (persistedChannelIds - persistedPrimaryId)
+                } else {
+                    persistedChannelIds.toList()
+                }
+
+                var joinedCount = 0
+                for (channelId in orderedIds) {
+                    val channel = channelMap[channelId]
+                    if (channel == null) {
+                        Log.w(TAG, "Persisted channel $channelId not found in event, skipping")
+                        continue
+                    }
+                    val result = channelRepository.joinChannel(channelId, channel.name, channel.teamName)
+                    if (result.isSuccess) {
+                        joinedCount++
+                    } else {
+                        Log.w(TAG, "Failed to rejoin channel ${channel.name}: ${result.exceptionOrNull()?.message}")
+                    }
+                }
+
+                // Restore primary if needed
+                if (persistedPrimaryId != null && channelRepository.primaryChannelId.value != persistedPrimaryId
+                    && persistedPrimaryId in channelRepository.monitoredChannels.value) {
+                    channelRepository.setPrimaryChannel(persistedPrimaryId)
+                }
+
+                Log.d(TAG, "Auto-rejoined $joinedCount/${persistedChannelIds.size} channels from previous session")
+            } catch (e: Exception) {
+                Log.e(TAG, "Auto-rejoin failed", e)
+            }
+        }
 
         // Initialize permission states
         refreshPermissionStates()
