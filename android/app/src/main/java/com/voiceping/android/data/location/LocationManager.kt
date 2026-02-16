@@ -4,7 +4,10 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.BatteryManager
+import android.os.PowerManager
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.Priority
@@ -223,7 +226,7 @@ class LocationManager @Inject constructor(
         }
 
         val batteryLevel = getBatteryLevel()
-        if (batteryLevel < LOW_BATTERY_THRESHOLD) {
+        if ((batteryLevel ?: 100) < LOW_BATTERY_THRESHOLD) {
             Log.d(TAG, "PTT location skipped: battery $batteryLevel% < $LOW_BATTERY_THRESHOLD%")
             return
         }
@@ -241,7 +244,7 @@ class LocationManager @Inject constructor(
      */
     private fun startTrackingWithAdaptiveInterval(motionState: MotionState) {
         val batteryLevel = getBatteryLevel()
-        val lowBattery = batteryLevel < LOW_BATTERY_THRESHOLD
+        val lowBattery = (batteryLevel ?: 100) < LOW_BATTERY_THRESHOLD
 
         // Determine interval based on motion state
         var interval = when (motionState) {
@@ -321,7 +324,10 @@ class LocationManager @Inject constructor(
             speed = if (location.hasSpeed()) location.speed else null,
             heading = if (location.hasBearing()) location.bearing else null,
             motionState = motionDetector.motionState.value,
-            timestamp = Instant.now().toString()
+            timestamp = Instant.now().toString(),
+            batteryPercentage = getBatteryLevel(),
+            powerSaveMode = getPowerSaveMode(),
+            networkType = getNetworkType()
         )
 
         // Update current location for debug screen (before deduplication)
@@ -412,10 +418,52 @@ class LocationManager @Inject constructor(
     /**
      * Get current battery level as percentage (0-100).
      *
-     * @return Battery level percentage
+     * @return Battery level percentage, null if unavailable
      */
-    private fun getBatteryLevel(): Int {
-        val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
-        return batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+    private fun getBatteryLevel(): Int? {
+        return try {
+            val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+            val level = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+            if (level in 0..100) level else null
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to read battery level: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Get power save mode state.
+     *
+     * @return true if battery saver enabled, false if disabled, null if unavailable
+     */
+    private fun getPowerSaveMode(): Boolean? {
+        return try {
+            val powerManager = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+            powerManager.isPowerSaveMode
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to read power save mode: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Get network type.
+     *
+     * @return "wifi" or "cellular", null if unavailable
+     */
+    private fun getNetworkType(): String? {
+        return try {
+            val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+            val network = connectivityManager.activeNetwork ?: return null
+            val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return null
+            when {
+                capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
+                capabilities.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) -> "cellular"
+                else -> null
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to read network type: ${e.message}")
+            null
+        }
     }
 }
