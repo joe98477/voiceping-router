@@ -653,17 +653,23 @@ class ChannelRepository @Inject constructor(
                             // Consume audio from this producer (guard: only if not muted)
                             val channelState = _monitoredChannels.value[channelId]
                             if (channelState?.isMuted == false) {
-                                val actualConsumerId = mediasoupClient.consumeAudio(channelId, producerId, speakerUserId)
+                                try {
+                                    val actualConsumerId = mediasoupClient.consumeAudio(channelId, producerId, speakerUserId)
 
-                                // Track consumer: producerId -> actual consumerId (NOT producerId!)
-                                // The actual consumerId is needed for closeConsumer() and setConsumerVolume()
-                                if (channelConsumers[channelId] == null) {
-                                    channelConsumers[channelId] = ConcurrentHashMap()
+                                    // Track consumer: producerId -> actual consumerId (NOT producerId!)
+                                    // The actual consumerId is needed for closeConsumer() and setConsumerVolume()
+                                    if (channelConsumers[channelId] == null) {
+                                        channelConsumers[channelId] = ConcurrentHashMap()
+                                    }
+                                    channelConsumers[channelId]!![producerId] = actualConsumerId
+
+                                    // Apply audio mix mode to new consumer
+                                    applyAudioMixMode(currentAudioMixMode)
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Failed to consume audio for channel $channelId: ${e.message}")
+                                    // Audio won't play for this transmission but app stays alive.
+                                    // Transport may be stale — next speaker change will retry.
                                 }
-                                channelConsumers[channelId]!![producerId] = actualConsumerId
-
-                                // Apply audio mix mode to new consumer
-                                applyAudioMixMode(currentAudioMixMode)
                             }
                         } else {
                             // Speaker stopped transmitting
@@ -763,16 +769,20 @@ class ChannelRepository @Inject constructor(
             val producerId = channelState.consumerId
             val speakerId = channelState.currentSpeaker.id
 
-            val actualConsumerId = mediasoupClient.consumeAudio(channelId, producerId, speakerId)
+            try {
+                val actualConsumerId = mediasoupClient.consumeAudio(channelId, producerId, speakerId)
 
-            // Track consumer: producerId -> actual consumerId
-            if (channelConsumers[channelId] == null) {
-                channelConsumers[channelId] = ConcurrentHashMap()
+                // Track consumer: producerId -> actual consumerId
+                if (channelConsumers[channelId] == null) {
+                    channelConsumers[channelId] = ConcurrentHashMap()
+                }
+                channelConsumers[channelId]!![producerId] = actualConsumerId
+
+                // Apply audio mix mode
+                applyAudioMixMode(currentAudioMixMode)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to consume audio on unmute for channel $channelId: ${e.message}")
             }
-            channelConsumers[channelId]!![producerId] = actualConsumerId
-
-            // Apply audio mix mode
-            applyAudioMixMode(currentAudioMixMode)
         }
 
         Log.d(TAG, "Channel $channelId unmuted")

@@ -111,6 +111,33 @@ class MediasoupClient @Inject constructor(
     }
 
     /**
+     * Safely read transport connection state, handling enum mapping mismatches.
+     *
+     * The crow-misia library's Transport.connectionState internally calls
+     * PeerConnection.IceConnectionState.valueOf(nativeState). The native mediasoup-client
+     * returns lowercase state strings (e.g., "new", "checking") that may not map to the
+     * WebRTC Java enum (which uses uppercase: NEW, CHECKING, etc.), or may include states
+     * not present in the enum at all. This causes IllegalArgumentException.
+     *
+     * @return The connection state, or null if the state couldn't be read (unknown state or disposed transport)
+     */
+    private fun getConnectionStateSafe(transport: Transport): PeerConnection.IceConnectionState? {
+        return try {
+            transport.connectionState
+        } catch (e: IllegalArgumentException) {
+            // Enum mapping failure — native returned a state string not in IceConnectionState enum
+            // (e.g., "new" which is the initial state before ICE negotiation).
+            // This is NOT an error — the transport is alive, just in an unmappable state.
+            Log.d(TAG, "Transport state is unmappable (likely 'new' or 'checking'): ${e.message}")
+            null
+        } catch (e: Exception) {
+            // Any other exception likely means the transport is disposed/invalid
+            Log.w(TAG, "Cannot read transport state: ${e.message}")
+            null
+        }
+    }
+
+    /**
      * Initialize PeerConnectionFactory with custom AudioDeviceModule.
      * MUST be called before Device.load() and any transport creation.
      *
@@ -230,18 +257,28 @@ class MediasoupClient @Inject constructor(
         // parser ([json.exception.type_error.305]). The demo app always passes an explicit config.
         //
         // Retry: SDP generation is non-deterministic (random ICE/DTLS params).
-        // Some SDPs trigger a json parse error while others succeed. Retry up to 5 times.
+        // Some SDPs trigger a json parse error while others succeed.
+        // On each retry, recreate the Device to ensure clean native state —
+        // a previous failed device.load() may leave the native Device in a corrupt state,
+        // and on some devices (Samsung) the SDP parser can SIGSEGV (null pointer in
+        // extractRtpCapabilities) which kills the process entirely.
         val rtcConfig = PeerConnection.RTCConfiguration(emptyList())
         var lastException: Exception? = null
-        for (attempt in 1..10) {
+        for (attempt in 1..5) {
             try {
+                // Recreate Device on retry to clear any corrupt native state
+                if (attempt > 1) {
+                    Log.d(TAG, "Recreating Device for retry attempt $attempt")
+                    try { device.dispose() } catch (e: Exception) { /* ignore */ }
+                    device = Device(peerConnectionFactory)
+                }
                 device.load(rtpCapabilities, rtcConfig)
                 lastException = null
                 break
             } catch (e: Exception) {
                 lastException = e
-                Log.w(TAG, "device.load() attempt $attempt/10 failed: ${e.message}")
-                if (attempt < 10) delay(200L * attempt)
+                Log.w(TAG, "device.load() attempt $attempt/5 failed: ${e.message}")
+                if (attempt < 5) delay(300L * attempt)
             }
         }
         if (lastException != null) throw lastException!!
@@ -390,15 +427,17 @@ class MediasoupClient @Inject constructor(
                                         // Use transportMutex to prevent race with consumeAudio
                                         transportMutex.withLock {
                                             val t = recvTransports[channelId] ?: return@withLock
-                                            try {
-                                                val state = t.connectionState
-                                                if (state == PeerConnection.IceConnectionState.DISCONNECTED || state == PeerConnection.IceConnectionState.FAILED) {
-                                                    Log.w(TAG, "RecvTransport orphaned after 15s for channel: $channelId, cleaning up (silent)")
+                                            val state = getConnectionStateSafe(t)
+                                            // Clean up if still disconnected/failed, or if state is unreadable (null)
+                                            // after 15s — a transport that's been disconnected for 15s is orphaned
+                                            if (state == null || state == PeerConnection.IceConnectionState.DISCONNECTED || state == PeerConnection.IceConnectionState.FAILED) {
+                                                Log.w(TAG, "RecvTransport orphaned after 15s for channel: $channelId (state=$state), cleaning up (silent)")
+                                                try {
                                                     recvTransports.remove(channelId)?.close()
+                                                } catch (e: Exception) {
+                                                    Log.e(TAG, "Error closing orphaned RecvTransport: $channelId", e)
+                                                    recvTransports.remove(channelId)
                                                 }
-                                            } catch (e: Exception) {
-                                                Log.e(TAG, "Error during RecvTransport orphan cleanup: $channelId", e)
-                                                recvTransports.remove(channelId)
                                             }
                                         }
                                     }
@@ -480,15 +519,13 @@ class MediasoupClient @Inject constructor(
             val transport = recvTransports[channelId]
                 ?: throw IllegalStateException("RecvTransport not found for channel: $channelId")
 
-            // CRITICAL: Check transport state before calling native code.
+            // Check transport state before calling native code.
             // After idle (wake lock released), ICE may have disconnected/failed.
             // Calling consume() on a dead transport causes a native SIGSEGV.
-            val transportState = try {
-                transport.connectionState
-            } catch (e: Exception) {
-                Log.e(TAG, "Cannot read transport state for $channelId, transport may be disposed", e)
-                throw IllegalStateException("RecvTransport disposed for channel: $channelId")
-            }
+            // Note: getConnectionStateSafe returns null for unmappable states (e.g., "new")
+            // which is fine — "new" means the transport exists but ICE hasn't connected yet,
+            // and consume() will trigger the ICE/DTLS handshake.
+            val transportState = getConnectionStateSafe(transport)
             if (transportState == PeerConnection.IceConnectionState.FAILED ||
                 transportState == PeerConnection.IceConnectionState.CLOSED) {
                 Log.w(TAG, "RecvTransport in $transportState state for channel: $channelId, cannot consume")
@@ -758,27 +795,22 @@ class MediasoupClient @Inject constructor(
 
                                         // Check if transport recovered during grace period
                                         if (sendTransport != null) {
-                                            try {
-                                                val currentState = transport.connectionState
-                                                if (currentState == PeerConnection.IceConnectionState.DISCONNECTED || currentState == PeerConnection.IceConnectionState.FAILED) {
-                                                    Log.e(TAG, "SendTransport still $currentState after 2s grace period")
+                                            val currentState = getConnectionStateSafe(transport)
+                                            if (currentState == PeerConnection.IceConnectionState.DISCONNECTED || currentState == PeerConnection.IceConnectionState.FAILED) {
+                                                Log.e(TAG, "SendTransport still $currentState after 2s grace period")
 
-                                                    // Determine if this is partial or full failure
-                                                    val hasWorkingRecvTransport = recvTransports.values.isNotEmpty()
-                                                    if (hasWorkingRecvTransport) {
-                                                        _transportHealthState.value = TransportHealthState.SEND_DEGRADED
-                                                    } else {
-                                                        _transportHealthState.value = TransportHealthState.FULLY_DISCONNECTED
-                                                    }
-
-                                                    // Force-release PTT if transmitting
-                                                    onSendTransportFailed?.invoke()
+                                                // Determine if this is partial or full failure
+                                                val hasWorkingRecvTransport = recvTransports.values.isNotEmpty()
+                                                if (hasWorkingRecvTransport) {
+                                                    _transportHealthState.value = TransportHealthState.SEND_DEGRADED
+                                                } else {
+                                                    _transportHealthState.value = TransportHealthState.FULLY_DISCONNECTED
                                                 }
-                                            } catch (e: Exception) {
-                                                Log.e(TAG, "Error checking transport state after grace period", e)
-                                                _transportHealthState.value = TransportHealthState.SEND_DEGRADED
+
+                                                // Force-release PTT if transmitting
                                                 onSendTransportFailed?.invoke()
                                             }
+                                            // If state is null (unmappable) or CONNECTED, transport may have recovered — do nothing
                                         }
                                     }
 
@@ -787,18 +819,16 @@ class MediasoupClient @Inject constructor(
                                     sendOrphanCleanupJob = monitorScope.launch {
                                         delay(15_000) // 15 second orphan cleanup per user decision
                                         if (sendTransport != null) {
-                                            try {
-                                                val currentState = transport.connectionState
-                                                if (currentState == PeerConnection.IceConnectionState.DISCONNECTED || currentState == PeerConnection.IceConnectionState.FAILED) {
-                                                    Log.w(TAG, "SendTransport orphaned after 15s, cleaning up (silent)")
-                                                    audioProducer?.close()
-                                                    audioProducer = null
-                                                    cleanupAudioResources()
-                                                    sendTransport?.close()
-                                                    sendTransport = null
-                                                }
-                                            } catch (e: Exception) {
-                                                Log.e(TAG, "Error during orphan cleanup", e)
+                                            val currentState = getConnectionStateSafe(transport)
+                                            // Clean up if still disconnected/failed, or if state is unreadable
+                                            // after 15s — transport is orphaned
+                                            if (currentState == null || currentState == PeerConnection.IceConnectionState.DISCONNECTED || currentState == PeerConnection.IceConnectionState.FAILED) {
+                                                Log.w(TAG, "SendTransport orphaned after 15s (state=$currentState), cleaning up (silent)")
+                                                audioProducer?.close()
+                                                audioProducer = null
+                                                cleanupAudioResources()
+                                                sendTransport?.close()
+                                                sendTransport = null
                                             }
                                         }
                                     }
