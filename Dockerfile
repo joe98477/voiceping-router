@@ -45,6 +45,9 @@ RUN npm ci --omit=dev --ignore-scripts
 # Copy mediasoup worker binary from builder stage
 COPY --from=builder /app/node_modules/mediasoup/worker/out/Release/mediasoup-worker ./node_modules/mediasoup/worker/out/Release/mediasoup-worker
 
+# Copy better-sqlite3 native binding from builder stage (used by LocationStore)
+COPY --from=builder /app/node_modules/better-sqlite3/build ./node_modules/better-sqlite3/build
+
 # Copy compiled code from builder
 COPY --from=builder /app/dist ./dist
 
