@@ -418,7 +418,10 @@ export class SignalingHandlers {
   }
 
   /**
-   * Handle PRODUCE: Create audio producer on transport (starts paused)
+   * Handle PRODUCE: Create audio producer on transport.
+   * Producer starts paused. If the user already holds the speaker lock
+   * (Android client sends PTT_START before PRODUCE), auto-resume the
+   * producer and re-broadcast SPEAKER_CHANGED with the real producerId.
    */
   async handleProduce(ctx: ClientContext, message: SignalingMessage): Promise<void> {
     try {
@@ -433,6 +436,15 @@ export class SignalingHandlers {
         throw new Error('transportId, kind, rtpParameters, and channelId are required');
       }
 
+      // Close any previous producer for this user:channel (Android creates a new
+      // producer per PTT press, unlike the web client which reuses one producer).
+      const producerKey = `${ctx.userId}:${channelId}`;
+      const oldProducerId = this.userProducers.get(producerKey);
+      if (oldProducerId) {
+        await this.producerConsumerManager.closeProducer(oldProducerId);
+        logger.info(`Closed previous producer ${oldProducerId} for ${ctx.userId} in channel ${channelId}`);
+      }
+
       const producerId = await this.producerConsumerManager.createProducer(
         transportId,
         kind,
@@ -442,12 +454,27 @@ export class SignalingHandlers {
       );
 
       // Track producer for PTT operations
-      const producerKey = `${ctx.userId}:${channelId}`;
       this.userProducers.set(producerKey, producerId);
 
       this.sendResponse(ctx, message.id, { id: producerId });
 
       logger.info(`Created producer ${producerId} for ${ctx.userId} in channel ${channelId}`);
+
+      // If this user already holds the speaker lock (PTT_START arrived before PRODUCE),
+      // resume the producer now and re-broadcast SPEAKER_CHANGED with the real producerId
+      // so other clients can consume the audio stream.
+      const channelState = await this.channelStateManager.getChannelState(channelId);
+      if (channelState.currentSpeaker === ctx.userId) {
+        await this.producerConsumerManager.resumeProducer(producerId);
+        logger.info(`Auto-resumed producer ${producerId} (PTT already active for ${ctx.userId})`);
+
+        // Re-broadcast SPEAKER_CHANGED with the actual producerId
+        this.broadcastToChannel(
+          channelId,
+          createMessage(SignalingType.SPEAKER_CHANGED, { ...channelState, producerId } as any),
+          ctx.userId,
+        );
+      }
     } catch (err) {
       logger.error(`Error handling PRODUCE: ${err instanceof Error ? err.message : String(err)}`);
       this.sendError(ctx, message.id, err instanceof Error ? err.message : 'Failed to create producer');

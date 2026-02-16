@@ -35,11 +35,8 @@ import org.webrtc.AudioTrack
 import org.webrtc.MediaConstraints
 import org.webrtc.PeerConnection
 import org.webrtc.PeerConnectionFactory
-import org.webrtc.VideoCodecInfo
-import org.webrtc.VideoDecoder
-import org.webrtc.VideoDecoderFactory
-import org.webrtc.VideoEncoder
-import org.webrtc.VideoEncoderFactory
+import org.webrtc.SoftwareVideoDecoderFactory
+import org.webrtc.SoftwareVideoEncoderFactory
 import org.webrtc.audio.JavaAudioDeviceModule
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -193,24 +190,21 @@ class MediasoupClient @Inject constructor(
             })
             .createAudioDeviceModule()
 
-        // CRITICAL: Explicitly set empty video factories to prevent Samsung hardware video codecs
-        // from appearing in the SDP offer generated during Device.load(). On Samsung Android 16,
-        // the default hardware video codec SDP entries cause a null pointer dereference (SIGSEGV)
-        // in mediasoupclient::Sdp::Utils::extractRtpCapabilities(), killing the process.
-        // Since we only use audio, no video factories are needed.
-        val noVideoEncoderFactory = object : VideoEncoderFactory {
-            override fun createEncoder(info: VideoCodecInfo): VideoEncoder? = null
-            override fun getSupportedCodecs(): Array<VideoCodecInfo> = emptyArray()
-        }
-        val noVideoDecoderFactory = object : VideoDecoderFactory {
-            override fun createDecoder(info: VideoCodecInfo): VideoDecoder? = null
-            override fun getSupportedCodecs(): Array<VideoCodecInfo> = emptyArray()
-        }
-
+        // CRITICAL: Use SoftwareVideoEncoderFactory/SoftwareVideoDecoderFactory instead of
+        // hardware (default) or empty video factories. mediasoup-client's Handler::GetNativeRtpCapabilities()
+        // hardcodes offer_to_receive_video=1, so the SDP offer ALWAYS has a video m-line.
+        //
+        // - Default (hardware) factories: Samsung Android 16 hardware video codecs produce SDP entries
+        //   that cause SIGSEGV (null deref) in extractRtpCapabilities().
+        // - Empty factories: No video codecs → empty video m-line → JSON parse error
+        //   [json.exception.type_error.305], and retry causes SIGSEGV (corrupt native state).
+        // - Software factories (VP8/VP9): Platform-independent, standards-compliant SDP that
+        //   the mediasoup parser handles correctly. We never actually use video — these just
+        //   satisfy the SDP parser.
         peerConnectionFactory = PeerConnectionFactory.builder()
             .setAudioDeviceModule(audioDeviceModule)
-            .setVideoEncoderFactory(noVideoEncoderFactory)
-            .setVideoDecoderFactory(noVideoDecoderFactory)
+            .setVideoEncoderFactory(SoftwareVideoEncoderFactory())
+            .setVideoDecoderFactory(SoftwareVideoDecoderFactory())
             .createPeerConnectionFactory()
 
         // Create Device with PeerConnectionFactory
@@ -272,37 +266,14 @@ class MediasoupClient @Inject constructor(
         // Log capabilities for debugging native load failures
         Log.d(TAG, "Received RTP capabilities (${rtpCapabilities.length} chars), first 500: ${rtpCapabilities.take(500)}")
 
-        // CRITICAL: Pass empty RTCConfiguration, not null. Null causes the native
-        // PeerConnection to use device-default config which on some devices (Samsung)
-        // generates SDP with extensions that crash mediasoup-client's extractRtpCapabilities
-        // parser ([json.exception.type_error.305]). The demo app always passes an explicit config.
+        // Pass explicit RTCConfiguration (not null). Null causes the native PeerConnection
+        // to use device-default config which on some devices (Samsung) generates problematic SDP.
         //
-        // Retry: SDP generation is non-deterministic (random ICE/DTLS params).
-        // Some SDPs trigger a json parse error while others succeed.
-        // On each retry, recreate the Device to ensure clean native state —
-        // a previous failed device.load() may leave the native Device in a corrupt state,
-        // and on some devices (Samsung) the SDP parser can SIGSEGV (null pointer in
-        // extractRtpCapabilities) which kills the process entirely.
+        // NO RETRY: A failed device.load() leaves native C++ state corrupted.
+        // Calling device.dispose() + new Device() then retrying causes SIGSEGV on Samsung
+        // (fault addr 0x100000002 in extractRtpCapabilities). Fail fast instead.
         val rtcConfig = PeerConnection.RTCConfiguration(emptyList())
-        var lastException: Exception? = null
-        for (attempt in 1..5) {
-            try {
-                // Recreate Device on retry to clear any corrupt native state
-                if (attempt > 1) {
-                    Log.d(TAG, "Recreating Device for retry attempt $attempt")
-                    try { device.dispose() } catch (e: Exception) { /* ignore */ }
-                    device = Device(peerConnectionFactory)
-                }
-                device.load(rtpCapabilities, rtcConfig)
-                lastException = null
-                break
-            } catch (e: Exception) {
-                lastException = e
-                Log.w(TAG, "device.load() attempt $attempt/5 failed: ${e.message}")
-                if (attempt < 5) delay(300L * attempt)
-            }
-        }
-        if (lastException != null) throw lastException!!
+        device.load(rtpCapabilities, rtcConfig)
 
         // Validate Opus codec support
         val deviceCapsJson = device.rtpCapabilities

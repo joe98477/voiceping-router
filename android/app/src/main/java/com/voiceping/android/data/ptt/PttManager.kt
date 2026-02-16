@@ -114,6 +114,15 @@ class PttManager @Inject constructor(
     var pttDisabledForReconnect: Boolean = false
 
     /**
+     * Flag for press-and-hold race condition: user releases PTT button before
+     * server grants (state is Requesting, not Transmitting). releasePtt() can't
+     * clean up because the producer doesn't exist yet. This flag causes the
+     * grant handler to auto-release immediately after producer creation.
+     */
+    @Volatile
+    private var pendingRelease: Boolean = false
+
+    /**
      * Request PTT from server.
      *
      * CRITICAL: NOT optimistic. State goes Idle -> Requesting -> (Transmitting | Denied).
@@ -165,6 +174,7 @@ class PttManager @Inject constructor(
             return
         }
 
+        pendingRelease = false
         _pttState.value = PttState.Requesting
         Log.d(TAG, "PTT requested for channel: $channelId")
 
@@ -229,6 +239,26 @@ class PttManager @Inject constructor(
                     }
 
                     if (producerCreated && producerId != null) {
+                        // Check if user released PTT while we were creating the producer
+                        if (pendingRelease) {
+                            Log.d(TAG, "pendingRelease detected after producer creation, auto-releasing")
+                            pendingRelease = false
+                            _pttState.value = PttState.Idle
+                            transmissionStartTime = 0
+                            currentChannelId = null
+                            // Cleanup producer and service
+                            mediasoupClient.stopProducing()
+                            val stopIntent = Intent(context, AudioCaptureService::class.java).apply {
+                                action = AudioCaptureService.ACTION_STOP
+                            }
+                            context.startService(stopIntent)
+                            signalingClient.send(
+                                SignalingType.PTT_STOP,
+                                mapOf("channelId" to channelId)
+                            )
+                            return@launch
+                        }
+
                         // Step 6: Notify callback (Plan 04 will wire in tone/haptic)
                         onPttGranted?.invoke()
 
@@ -316,7 +346,16 @@ class PttManager @Inject constructor(
      * 4. Stop producing (closes Producer, disposes AudioSource + AudioTrack) -> stop service -> notify server
      */
     fun releasePtt() {
-        if (_pttState.value !is PttState.Transmitting) {
+        val currentState = _pttState.value
+        if (currentState is PttState.Requesting) {
+            // Race condition: user released PTT before server granted.
+            // Can't clean up yet (producer doesn't exist). Set flag so the
+            // grant handler auto-releases after producer creation.
+            Log.d(TAG, "Release during Requesting state, setting pendingRelease")
+            pendingRelease = true
+            return
+        }
+        if (currentState !is PttState.Transmitting) {
             Log.w(TAG, "Not transmitting, ignoring release")
             return
         }
