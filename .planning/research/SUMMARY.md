@@ -1,316 +1,242 @@
 # Project Research Summary
 
-**Project:** VoicePing Router v4.0 - Production Hardening
-**Domain:** Enterprise PTT (Push-to-Talk) Communications Platform - Android Client
-**Researched:** 2026-02-15
-**Confidence:** MEDIUM-HIGH
+**Project:** VoicePing Router - Dispatch Map View
+**Domain:** Real-time dispatch map for enterprise PTT communications
+**Researched:** 2026-02-16
+**Confidence:** HIGH
 
 ## Executive Summary
 
-VoicePing v4.0 transforms a working PTT prototype into a production-ready enterprise solution by adding five critical capabilities: adaptive location tracking with motion-aware throttling, audio reliability guarantees, power/bandwidth optimization, security hardening, and polished permission flows. The research reveals a mature Android ecosystem where most needed capabilities exist in Google Play Services and established libraries — the challenge is proper configuration and lifecycle management, not finding new dependencies.
+This research covers adding a real-time location tracking dispatch map to a production PTT system. The map will display field workers' positions on satellite imagery with battery telemetry and motion state indicators. Based on research findings, **Leaflet + react-leaflet 4.x** is the optimal choice (react-leaflet 5.x requires React 19, project uses React 18.3.1). Esri World Imagery tiles work without API key using direct TileLayer. No new Android dependencies are needed for battery telemetry (BatteryManager is built-in SDK).
 
-The recommended approach leverages existing architectural patterns (singleton-based Hilt DI, data/presentation separation) by adding new @Singleton managers (LocationManager, PermissionManager) that slot cleanly alongside existing components. Location tracking flows through the established SignalingClient → Server → Redis pattern used for audio. Audio reliability improvements target WebRTC jitter buffer tuning and state machine hardening within the existing MediasoupClient, not library replacements. Power optimization focuses on adaptive strategies (location throttling, wake lock scoping) rather than battery exemptions, which create more problems than they solve.
+The recommended approach is **backend-first, incremental integration**: extend the protocol with optional battery field, implement server-side broadcasting, then build web map with proper cleanup patterns from the start. The biggest risks are Leaflet memory leaks (React 18 Strict Mode conflicts), marker rendering performance collapse above 200+ markers, and Android background location draining battery. All three have well-documented mitigations: proper useEffect cleanup, canvas-based rendering, and motion-aware location intervals.
 
-The primary risks are integration pitfalls, not technical unknowns. Location tracking on Android 14+ requires explicit foreground service type declarations that crash if missing. WebRTC audio device changes during transmission cause silent failures unless Producer lifecycle coordinates with AudioManager. Permission denial loops create hostile UX if rationale tracking isn't implemented from day one. Each pitfall has a known prevention strategy — the key is addressing them during initial implementation rather than post-launch firefighting.
+Critical success factors: (1) establish correct Leaflet cleanup pattern in Phase 1 to prevent browser crashes, (2) implement canvas markers or clustering in Phase 2 before loading production scale, (3) use optional protocol fields to maintain backward compatibility, (4) split LocationContext from ChannelContext to avoid re-render storms, (5) implement motion-aware location intervals to prevent battery drain complaints.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The v4.0 stack additions are minimal and strategic. Google Play Services provides battle-tested location APIs (FusedLocationProviderClient for GPS fusion, ActivityRecognitionClient for motion detection) that handle the complexity of adaptive tracking. WorkManager enables power-efficient background location batching with 15-minute intervals. OkHttp 5.3.0 upgrade brings TLS 1.3 and improved Android optimizations. Accompanist Permissions (experimental but stable) provides Compose-native permission flows.
+The stack leverages existing infrastructure (React 18.3.1, WebSocket signaling, mediasoup PTT) and adds minimal dependencies. **Core additions:** react-leaflet 4.2.1 (React 18 compatible), leaflet 1.9.4 (mature, lightweight 42KB), Esri World Imagery tiles via direct TileLayer (no plugin needed). **Android requires zero new dependencies** - BatteryManager is built-in since API 21, project minSdk=26. Server extends existing LocationData interface with optional batteryPercent field (backward compatible).
 
-**Core technologies (NEW for v4.0):**
-- com.google.android.gms:play-services-location 21.3.0 — FusedLocationProviderClient + ActivityRecognitionClient for motion-aware location tracking, industry standard with adaptive throttling built-in
-- androidx.work:work-runtime-ktx 2.10.1 — Periodic location batching (15min minimum), survives app restarts
-- com.google.accompanist:accompanist-permissions 0.37.0 — Compose permission UI with rationale flows
-- OkHttp 5.3.0 (upgrade from 4.12.0) — TLS 1.3, DNS over HTTPS, platform-specific optimizations
+**Core technologies:**
+- **react-leaflet 4.2.1**: React bindings for Leaflet maps, supports React 18 (v5.x requires React 19 migration)
+- **leaflet 1.9.4**: Industry-standard open-source map library, lightweight (42KB), mobile-friendly, extensive plugin ecosystem
+- **Esri World Imagery (TileLayer)**: Satellite imagery tiles, free for non-revenue apps, no API key required for raster tiles
+- **android.os.BatteryManager**: Built-in battery monitoring (API 21+), no permissions required for getIntProperty()
 
-**Critical finding:** Do NOT add new audio libraries. Work within existing libmediasoup-android 0.21.0 by tuning WebRTC jitter buffers and enabling Opus FEC (Forward Error Correction). Intermittent silence is typically caused by network issues (TURN server needed for mobile), AEC ducking (audio processing settings), or buffer underruns (increase AudioTrack buffer size), not library deficiencies.
+**Key recommendation:** Use react-leaflet 4.x (NOT 5.x) until React 19 migration. Use direct L.divIcon with SVG for custom markers (consistent with existing @mdi/js icons). Avoid react-leaflet 5.x, Leaflet.awesome-markers, continuous BatteryManager polling.
 
 ### Expected Features
 
-Users expect location tracking, stationary detection, and background monitoring as table stakes for enterprise PTT. Missing these makes the product feel incomplete compared to competitors. Permission education screens are mandatory for Android 14+ Play Store review compliance. TLS/WSS encryption is non-negotiable for enterprise deployments.
+Research identified 8 table stakes features (users expect these), 8 differentiators (competitive advantage), and 6 anti-features (commonly requested but problematic). MVP focuses on table stakes + staleness indicator, defer PTT activity indicator and channel overlay to v1.x after validation.
 
 **Must have (table stakes):**
-- Location tracking with stationary detection — Battery life expectation, GPS can't drain when workers idle
-- Permission education UI before requests — Android 14+ enforcement, explain why location/mic needed
-- TLS/WSS encryption — Enterprise security baseline, production apps cannot use self-signed certs
-- Audio retry queue with acknowledgment — Mission-critical expectation, every PTT transmission must arrive or user notified
-- Network quality feedback — Users need to know if poor connection will impact reliability
-- Battery optimization whitelist prompt — Android Doze kills background apps, PTT must request exemption
+- Real-time location markers - Core value proposition, data already exists from existing location tracking
+- Satellite imagery base layer - Industry standard for dispatch/fleet tracking, field context critical
+- Click-to-view user details popup - Users prefer click over hover (67%), works on mobile
+- Map controls (zoom, pan) - Universal UX expectation, native Leaflet controls
+- Auto-refresh location data - WebSocket LOCATION_BROADCAST already implemented
+- Username labels on markers - Essential for quick scanning without clicking
+- Map layer switcher - Low effort via Leaflet plugin, high user value
+- Location staleness indicator - Uses existing isStale flag, prevents confusion about old data
 
-**Should have (competitive differentiators):**
-- Adaptive location throttling (motion-aware) — Industry-leading battery life, competitors use fixed intervals
-- Transmission acknowledgment with recipient count — Visual confirmation PTT was heard by N recipients (vs. just "sent")
-- Bandwidth-aware codec switching — Auto-switch Opus bitrate based on cellular vs. WiFi
-- Permission recovery flow — If user revokes mic/location later, graceful degradation + re-prompt UI (not crash)
-- Security audit log — Compliance requirement for some enterprises (who accessed what channel, when)
+**Should have (competitive advantages):**
+- Motion state visualization - Show STILL/WALKING/DRIVING via icon color, data already tracked
+- PTT activity indicator - Flash marker when user transmits, unique voice+location integration
+- Battery level warnings - Proactive alerts when <20%, prevents lost workers
+- Marker clustering - When 100+ workers in same area, prevent visual clutter
 
 **Defer (v2+):**
-- Geofence automation workflows — "Arrived at site" auto-joins channel, high complexity
-- End-to-End Encryption (E2EE) — 3GPP MCPTT KMS implementation, requires security audit
-- Offline audio queueing — Queue transmissions during network outage, complex storage/sync
+- Historical trail tracking - Performance disaster with 1000s of polyline points, requires server-side simplification
+- Geofencing alerts - Requires complex polygon UI, server-side evaluation, webhook system
+- Offline map capability - Tile caching = gigabytes, licensing issues, accept online-only for dispatch console
 
 ### Architecture Approach
 
-v4.0 maintains the v3.0 clean architecture by adding new @Singleton components in the data layer without introducing circular dependencies. LocationManager becomes a peer to PttManager/AudioRouter, handling FusedLocationProviderClient lifecycle and adaptive throttling. Location data flows through the existing SignalingClient → Server → Redis pub/sub pattern used for speaker changes. Audio reliability improvements target the existing MediasoupClient/PttManager pipeline with buffer tuning and state machine hardening, not new components.
+The architecture uses **separate LocationContext from ChannelContext** to prevent high-frequency location updates (1-10 Hz) from triggering re-renders of channel cards. Location state is batched with requestAnimationFrame (max 60 renders/sec instead of N updates/sec). Map and channels are parallel siblings in CSS Grid split layout, not parent-child. Protocol extension uses optional fields (batteryPercent?) for backward compatibility with staged deployment: server first (accepts new field), Android second (sends new field), web UI third (displays new field).
 
-**Major components (NEW for v4.0):**
-1. **LocationManager (@Singleton)** — FusedLocationProviderClient lifecycle, adaptive mode switching (PRECISE/GENERAL/MOTION_AWARE), motion detection via ActivityRecognitionClient, batching for power efficiency. Delegates permission checks to PermissionManager, server transmission to SignalingClient.
+**Major components:**
+1. **LocationProvider** - Manages Map<userId, LocationData>, batches updates with requestAnimationFrame, exposes useLocation hook
+2. **DispatchMap** - Leaflet MapContainer with TileLayer, renders UserMarker[] from positions Map
+3. **UserMarker** - Leaflet Marker with L.divIcon, CSS classes for motion state/stale/battery, Popup with user details
+4. **MapController** - useMap consumer for side effects: auto-fit bounds, handle query/broadcast
+5. **LocationBroadcaster** (server) - Broadcasts location updates to dispatch users only, includes batteryPercent in payload
+6. **LocationManager.kt** (Android) - Includes getBatteryLevel() in LOCATION_UPDATE, motion-aware intervals
 
-2. **PermissionManager (@Singleton)** — Centralized permission state checking (granted/denied/never-ask-again), request coordination with Activity via callback pattern, rationale display logic, settings redirect. Prevents circular dependencies by using callback delegation instead of direct Activity references.
-
-3. **MediasoupClient hardening** — WebRTC jitter buffer tuning (increase to 80ms for mobile variance), Opus FEC enablement, transport health monitoring, Producer retry logic on failures. No new libraries, configuration changes only.
-
-4. **ChannelMonitoringService extension** — Add location tracking to existing foreground service (requires android:foregroundServiceType="location|microphone" declaration), wake lock scoping (release after 30s of silence), notification enhancement (show current channel status).
-
-5. **Server-side minimal changes** — New signaling type LOCATION_UPDATE (send-only, no response), Redis pub/sub broadcast to dispatch console, optional database persistence for location history.
-
-**Critical pattern:** Callback-based communication for cross-layer coordination without circular dependencies. Example: PttManager → ChannelRepository → TonePlayer callbacks preserve unidirectional dependency flow while enabling complex interactions.
+**Key pattern:** Backend-first dependency order: Server extends protocol → Android sends battery % → Web layout split → Map foundation → LocationContext + WebSocket → Marker rendering → Polish/performance. This prevents breaking existing UI and enables incremental testing.
 
 ### Critical Pitfalls
 
-Research identified 10 critical pitfalls with proven prevention strategies. The top 5 must be addressed during initial implementation to avoid production outages and emergency releases.
+Research identified 12 pitfalls across 3 severity levels. Top 5 risks (HIGH impact × HIGH likelihood) are Leaflet memory leak, marker performance collapse, protocol breaking changes, React Context re-render storm, and Android battery drain. All have well-documented mitigations but require deliberate design.
 
-1. **Android 14+ Location Permission Crash** — SecurityException when starting foreground service without explicit type declaration. Must add android:foregroundServiceType="location|microphone" to manifest AND FOREGROUND_SERVICE_LOCATION permission. Test on Android 14+ specifically, earlier versions won't catch this.
+1. **Leaflet memory leak on React unmount** - Map instances remain in memory after unmount, browser crashes after repeated navigation. FIX: Proper cleanup in useEffect (remove all layers, then map.remove()), use ref guard to prevent double-init, test with React 18 Strict Mode enabled.
 
-2. **GPS Battery Drain Without Adaptive Strategy** — Battery jumps from 5%/hour to 15-25%/hour with continuous GPS lock. Use PRIORITY_BALANCED_POWER_ACCURACY (not HIGH_ACCURACY) by default, switch to HIGH only during active PTT, implement stationary detection to reduce update frequency. Monitor with Battery Historian during development.
+2. **Marker rendering performance collapse at scale** - DOM-based markers degrade to 5-15 FPS above 200-300 markers. At 1000+ markers, map becomes unusable. FIX: Use canvas-based markers (Leaflet.Canvas-Markers handles 10K+ smoothly) or clustering (Leaflet.markercluster handles 50K on load), implement viewport culling, batch marker updates.
 
-3. **WebRTC Audio Device Change Race Condition** — Audio cuts out when Bluetooth connects/disconnects during PTT transmission. Producer becomes detached from audio source. Must register AudioDeviceCallback, pause/resume Producer on device changes, implement "audio heartbeat" monitoring to detect silent transmissions. Test by toggling Bluetooth during active PTT hold.
+3. **Protocol extension breaking existing clients** - Adding batteryPercent field breaks old Android clients if not optional. FIX: Use optional fields only (batteryPercent?: number), server validates and provides defaults, deploy server first (backward compatible), then clients (forward compatible), test compatibility matrix.
 
-4. **Wake Lock + Doze Mode Exemption Breaking Battery** — Requesting REQUEST_IGNORE_BATTERY_OPTIMIZATIONS disables ALL battery optimization, causing 2-3x drain even when idle. Audio wake locks are ALREADY exempt from Doze. Never request battery optimization exemption for PTT apps, design for Doze windows instead.
+4. **React Context re-renders drowning performance** - Storing 1000+ locations in Context causes every consumer to re-render on every update. At 10 updates/sec, triggers 10,000+ re-renders/sec. FIX: Split LocationContext from ChannelContext, batch updates with requestAnimationFrame, use React.memo() on leaf components, consider Zustand for high-frequency data.
 
-5. **Certificate Pinning Breaking Production Updates** — Pinning leaf certificate creates ticking time bomb (90-day expiry). When cert rotates, all installations lose connectivity, requiring emergency release. Modern 2026 recommendation: don't pin at all, use Certificate Transparency enforcement instead. If pinning mandatory, pin to CA root (not leaf) with backup pins.
-
-**Additional critical pitfalls:**
-- Permission denial loop without rationale tracking (infinite prompts, hostile UX)
-- Network security config allowing cleartext in production (security vulnerability)
-- WebSocket reconnection orphaning Producer during network switch (silent audio failures)
-- Foreground notification importance too low (service killed when notification dismissed)
-- AudioRecord not restarted after app resume (mic captures silence after backgrounding)
+5. **Android background location draining battery** - Continuous GPS at 5-second intervals drains 30-50% battery over 8 hours, users disable location or uninstall. FIX: Motion-aware intervals (STILL=5min, WALKING=30s, DRIVING=10s), use PRIORITY_BALANCED_POWER_ACCURACY not HIGH_ACCURACY, foreground-only default with opt-in background, battery profiling before deploy.
 
 ## Implications for Roadmap
 
-Based on combined research, v4.0 should proceed in five phases with clear dependency ordering. Location and permission management are foundational, audio reliability and power optimization build on that base, security hardening runs in parallel.
+Based on research, suggested phase structure follows dependency-driven build order with critical pitfalls addressed in designated phases. Backend-first approach ensures data is available before web consumes it, layout split validates CSS structure before adding Leaflet complexity, state management before markers prevents performance issues.
 
-### Phase 16: Permission Management Foundation
-**Rationale:** No dependencies, enables all subsequent permission-requiring features. Must come first because location, mic, and notifications all need proper permission flows. Android 14+ requires permission education before requests, not after-the-fact fixes.
+### Phase 1: Server + Android Protocol Extension
+**Rationale:** Extend protocol with optional battery field before web consumes it. Optional fields enable staged deployment (server accepts new field, old clients omit it, new clients send it). Tests backward compatibility before breaking changes.
 
-**Delivers:** PermissionManager @Singleton with Activity callback delegation, first-launch permission flow with rationale screens, denial tracking to prevent infinite loops, graceful degradation when permissions denied.
+**Delivers:** LocationData interface extended with batteryPercent?: number, server broadcasts battery % when present, Android sends battery % in LOCATION_UPDATE.
 
-**Addresses (FEATURES.md):** Permission education UI (table stakes), permission recovery flow (differentiator)
+**Addresses:** Protocol breaking changes (Pitfall 3), enables battery level warnings feature (differentiator).
 
-**Avoids (PITFALLS.md):** Permission denial loop (#6), helps prevent Android 14+ location crash (#1) by ensuring permissions granted before service starts
+**Avoids:** Deploying server that requires battery field (breaks old clients), deploying web UI that expects battery field (breaks with old clients).
 
-**Plans:** 2 plans (PermissionManager + MainActivity integration, rationale dialogs + settings redirect)
+**Stack:** No new dependencies (BatteryManager built-in), TypeScript interface extension, Kotlin data class extension.
 
-**Research flag:** Skip phase research — standard Android permission patterns, well-documented
+### Phase 2: Web Layout Split
+**Rationale:** Create CSS Grid split layout (channels | map) before adding Leaflet. Validates CSS structure without breaking existing channel grid. Empty map panel prevents regressions in channel monitoring.
 
----
+**Delivers:** CSS Grid .dispatch-console--split with 50/50 columns, responsive breakpoints (stack vertically on <1200px), existing ChannelGrid wrapped in .channels-panel, empty .map-panel placeholder.
 
-### Phase 17: Location Tracking Infrastructure
-**Rationale:** Depends on Phase 16 for permission handling. Table stakes feature for enterprise PTT, differentiates VoicePing with adaptive throttling. Must implement battery-efficient strategy from day 1, not optimize later.
+**Addresses:** Layout foundation for map integration, ensures existing dispatch console works unchanged.
 
-**Delivers:** LocationManager @Singleton with FusedLocationProviderClient integration, adaptive tracking modes (PRECISE/GENERAL/MOTION_AWARE), motion detection via ActivityRecognitionClient, foreground service type declaration for Android 14+, server signaling LOCATION_UPDATE, dispatch web UI map overlay.
+**Avoids:** CSS Grid thrashing (Pitfall 6) by isolating panels early.
 
-**Addresses (FEATURES.md):** Location tracking (table stakes), stationary detection (table stakes), adaptive location throttling (differentiator)
+**Stack:** Pure CSS, no new dependencies.
 
-**Avoids (PITFALLS.md):** Android 14+ location crash (#1), GPS battery drain (#2)
+### Phase 3: Map Foundation (Leaflet Integration)
+**Rationale:** Render basic Leaflet map with OpenStreetMap tiles before adding location data. Tests Leaflet integration in isolation, establishes correct cleanup pattern (prevents memory leak), validates map displays alongside channels.
 
-**Uses (STACK.md):** play-services-location 21.3.0, WorkManager 2.10.1
+**Delivers:** DispatchMap component with MapContainer + TileLayer (OpenStreetMap for testing), proper useEffect cleanup with map.remove(), ref guard to prevent double-init, map visible in split layout.
 
-**Implements (ARCHITECTURE.md):** LocationManager @Singleton in data layer, SignalingClient extension for LOCATION_UPDATE type, ChannelMonitoringService location integration
+**Addresses:** Leaflet memory leak (Pitfall 1 - CRITICAL), Esri tile CORS (Pitfall 7), offline tile handling (Pitfall 10).
 
-**Plans:** 2 plans (LocationManager + adaptive modes, server signaling + dispatch UI)
+**Avoids:** Browser crashes from memory leak by establishing cleanup pattern from start, React Strict Mode conflicts by testing double-mount early.
 
-**Research flag:** Skip phase research — Google Play Services APIs well-documented, standard location patterns
+**Stack:** react-leaflet 4.2.1, leaflet 1.9.4, Leaflet CSS in index.html.
 
----
+**Research flag:** NO - Leaflet integration is well-documented with official react-leaflet docs.
 
-### Phase 18: Audio Reliability Hardening
-**Rationale:** Independent of location (can run in parallel with Phase 17). Addresses known "intermittent silence" bug from v3.0. Mission-critical for PTT, audio must be reliable before production.
+### Phase 4: Location State Management
+**Rationale:** Create separate LocationContext (not extending ChannelContext) before rendering markers. Prevents high-frequency location updates from re-rendering channel cards. Batching with requestAnimationFrame reduces re-renders from N/sec to 60/sec.
 
-**Delivers:** WebRTC jitter buffer tuning (80ms target for mobile), Opus FEC enablement, Producer retry logic (3 attempts with exponential backoff), audio device change handling (Bluetooth connect/disconnect during PTT), transport health monitoring, AudioRecord lifecycle fixes (restart after app resume), WebSocket reconnection coordination with MediasoupClient.
+**Delivers:** LocationProvider with positions Map<userId, LocationData>, queueLocationUpdate with rAF batching, useLocationUpdates hook listening to LOCATION_BROADCAST WebSocket, LOCATION_QUERY on mount with LOCATION_SNAPSHOT response.
 
-**Addresses (FEATURES.md):** Audio retry queue (table stakes), network quality feedback enhancement (table stakes)
+**Addresses:** React Context re-render storm (Pitfall 4 - CRITICAL), WebSocket message queue blocking (Pitfall 8).
 
-**Avoids (PITFALLS.md):** Audio device change race condition (#3), WebSocket reconnection orphaning Producer (#8), AudioRecord not restarted (#10)
+**Avoids:** Channel card re-renders on location updates (separate contexts), excessive re-renders (rAF batching), WebSocket saturation (server filters to dispatch users only).
 
-**Uses (STACK.md):** Existing libmediasoup-android 0.21.0 (no new libraries), WebRTC jitter buffer configuration, MediasoupClient state machine hardening
+**Stack:** React Context API, existing WebSocket connection reused.
 
-**Implements (ARCHITECTURE.md):** MediasoupClient hardening, PttManager retry logic, ConnectionStateObserver pattern
+**Research flag:** NO - React Context patterns well-documented, batching with rAF is standard optimization.
 
-**Plans:** 2 plans (jitter buffer + FEC + device change handling, retry logic + health monitoring + reconnection coordination)
+### Phase 5: Marker Rendering + Styling
+**Rationale:** Display user markers with L.divIcon (CSS control) and motion state indicators. Uses canvas-based rendering or clustering from start to avoid performance collapse at production scale (200+ markers). Custom SVG icons consistent with existing @mdi/js usage.
 
-**Research flag:** Consider phase research for WebRTC jitter buffer API specifics — crow-misia library may not expose all controls, might need server-side mediasoup configuration instead
+**Delivers:** UserMarker component with L.divIcon, CSS classes for motion state (--driving, --walking, --still), stale indicator (opacity), battery % badge, popup with user details, render markers from LocationContext.positions.
 
----
+**Addresses:** Marker performance collapse (Pitfall 2 - CRITICAL), SVG icon performance (Pitfall 9).
 
-### Phase 19: Power Optimization
-**Rationale:** Depends on Phase 17 (location batching) and Phase 18 (audio fixes) to measure baseline battery consumption. Must validate <5%/hour total target. Critical for 24/7 pocket radio operation.
+**Avoids:** DOM marker performance issues by using canvas or clustering, inconsistent icon library by using @mdi/js SVG patterns.
 
-**Delivers:** Location batching with WorkManager (15-minute intervals for GENERAL mode), network quality polling reduction (15s idle vs. 5s active), wake lock scoping (release after 30s silence), battery optimization whitelist prompt (during onboarding), battery profiling validation on physical devices.
+**Stack:** Leaflet.Canvas-Markers (optional, for 200+ markers) or Leaflet.markercluster, CSS animations for pulse effect.
 
-**Addresses (FEATURES.md):** Battery optimization whitelist (table stakes), power profiling dashboard (differentiator, deferred to server-side implementation)
+**Research flag:** NO - DivIcon and canvas markers are well-documented Leaflet patterns.
 
-**Avoids (PITFALLS.md):** Wake lock + Doze exemption breaking battery (#4), ensures GPS battery drain optimization from Phase 17 (#2)
+### Phase 6: Auto-Fit + Performance Tuning
+**Rationale:** Polish UX after core functionality works. Auto-fit bounds on initial load, remember zoom/center in localStorage, optimize rendering with CSS containment. Performance testing validates frame rate with production scale (50+ simultaneous updates).
 
-**Uses (STACK.md):** WorkManager for location batching, existing foreground service wake lock management
+**Delivers:** MapController component with useMap hook, fitBounds on initial load, localStorage persistence for zoom/center, useMapBounds toggle, ResizeObserver for container resize, CSS containment for map panel.
 
-**Implements (ARCHITECTURE.md):** LocationBatchManager, ChannelMonitoringService wake lock scoping, network quality polling optimization
+**Addresses:** Map resize issues (Pitfall 11), CSS Grid thrashing (Pitfall 6), timezone mismatches (Pitfall 12).
 
-**Plans:** 2 plans (location batching + polling reduction, wake lock scoping + battery validation)
+**Avoids:** Disorienting auto-follow mode (anti-feature), layout thrashing from frequent updates.
 
-**Research flag:** Skip phase research — WorkManager patterns well-documented, battery optimization is configuration not new APIs
+**Stack:** ResizeObserver (native), localStorage (native).
 
----
-
-### Phase 20: Security Audit and Hardening
-**Rationale:** Independent of other phases (can run in parallel with 18-19). Required for enterprise deployments. Must be complete before production launch, not added post-launch.
-
-**Delivers:** TLS/WSS enforcement (reject ws:// connections), network security config (build-variant-specific, no cleartext in production), OkHttp 5.3.0 upgrade (TLS 1.3 support), Certificate Transparency enforcement (Android 16+ native, <16 via appmattus interceptor), secure token storage (EncryptedSharedPreferences), server-side audit logging (user/channel/action/timestamp/IP).
-
-**Addresses (FEATURES.md):** TLS/WSS encryption (table stakes), security audit log (differentiator)
-
-**Avoids (PITFALLS.md):** Certificate pinning breaking updates (#5), cleartext traffic in production (#7)
-
-**Uses (STACK.md):** OkHttp 5.3.0, network security config XML, appmattus/certificatetransparency (optional for Android <16)
-
-**Implements (ARCHITECTURE.md):** SignalingClient WSS enforcement, SecureTokenManager, server-side audit log table
-
-**Plans:** 2 plans (TLS enforcement + secure storage, Certificate Transparency + audit logging)
-
-**Research flag:** Skip phase research for TLS/WSS (standard patterns). Consider phase research if E2EE (End-to-End Encryption) is added — 3GPP MCPTT KMS is complex, requires security audit consultation.
-
----
+**Research flag:** NO - Standard UX patterns for map interactions.
 
 ### Phase Ordering Rationale
 
-**Why this order:**
-1. **Phase 16 first:** Permission management has no dependencies and unblocks everything else (location, mic, notifications). Must establish permission flows before adding permission-requiring features.
+- **Backend-first (Phase 1):** Server + Android protocol extension ensures data is available before web consumes it. Optional fields enable staged deployment without breaking existing clients.
 
-2. **Phase 17 location:** Depends on Phase 16 for permissions. Table stakes feature that users expect, differentiates with adaptive throttling. Battery optimization from day 1 prevents user complaints.
+- **Layout before map (Phase 2):** Validates CSS Grid structure without Leaflet complexity. Prevents breaking existing channel monitoring, enables incremental testing.
 
-3. **Phase 18 audio in parallel:** Independent of location, can run simultaneously with Phase 17. Addresses known v3.0 bug, mission-critical for PTT reliability. Must be production-ready before launch.
+- **Map foundation before state (Phase 3):** Tests Leaflet integration in isolation, establishes critical cleanup pattern to prevent memory leak. React Strict Mode validation catches double-mount issues early.
 
-4. **Phase 19 power after 17+18:** Needs baseline from location + audio to measure battery consumption accurately. Validates <5%/hour target with all features active.
+- **State before markers (Phase 4):** LocationContext + WebSocket integration must work before rendering markers. Batching pattern prevents re-render storms at production scale.
 
-5. **Phase 20 security in parallel:** Independent of other phases, can run with 18-19. Enterprise requirement, must be complete for production but doesn't block feature development.
+- **Markers with optimization (Phase 5):** Canvas/clustering from start prevents performance collapse. DOM markers are easy but fail at 200+ markers (production scale).
 
-**Grouping logic:**
-- Foundation (16): Enables all permission-requiring features
-- Core features (17-18): Location and audio reliability, both user-facing
-- Optimization (19): Power management after features complete
-- Hardening (20): Security audit before production
-
-**Pitfall avoidance:**
-- Phase 16 prevents permission denial loops before they occur
-- Phase 17 prevents location battery drain by implementing adaptive strategy from start
-- Phase 18 prevents audio reliability issues from reaching production
-- Phase 19 prevents battery optimization exemption mistakes
-- Phase 20 prevents security vulnerabilities in production builds
+- **Polish last (Phase 6):** UX improvements and performance tuning require full stack to test end-to-end. Auto-fit and resize handling are valuable but not blocking.
 
 ### Research Flags
 
-**Phases likely needing deeper research during planning:**
-
-- **Phase 18 (Audio Reliability):** WebRTC jitter buffer configuration may require server-side mediasoup changes if crow-misia libmediasoup-android 0.21.0 doesn't expose jitter buffer controls. Research WebRTC NetEQ API surface and mediasoup Opus FEC configuration patterns.
-
-- **Phase 20 (Security) IF E2EE added:** 3GPP MCPTT End-to-End Encryption is complex, requires Key Management Service (KMS) implementation. Research shows sparse open-source implementations, may require commercial MCPTT SDK or security consulting. Recommend deferring to v5.0 unless enterprise client mandates.
+**Phases needing deeper research during planning:**
+- None - All phases use well-documented patterns with official library documentation.
 
 **Phases with standard patterns (skip research-phase):**
+- **Phase 1:** TypeScript interface extension, Kotlin data class, optional fields (standard backend patterns)
+- **Phase 2:** CSS Grid split layout (standard responsive pattern)
+- **Phase 3:** Leaflet map integration (official react-leaflet docs, extensive examples)
+- **Phase 4:** React Context + useEffect WebSocket (standard React patterns)
+- **Phase 5:** Leaflet markers + DivIcon (official Leaflet docs, canvas plugins documented)
+- **Phase 6:** Map UX patterns (ResizeObserver, localStorage, fitBounds all standard)
 
-- **Phase 16 (Permissions):** Well-documented Android permission patterns, Accompanist library documentation comprehensive
-- **Phase 17 (Location):** Google Play Services FusedLocationProvider is mature, official Android documentation extensive
-- **Phase 19 (Power):** WorkManager and Doze mode optimization patterns well-established, Android Vitals metrics documented
+**Why no research needed:** Leaflet is mature library (v1.9.4 stable), react-leaflet has official docs with React 18 examples, Android BatteryManager is official Android SDK, WebSocket patterns are established in codebase. Research identified standard solutions for all critical pitfalls (cleanup pattern, canvas rendering, optional fields, Context splitting, motion-aware intervals).
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | MEDIUM | Official APIs verified (FusedLocationProvider, WorkManager, OkHttp), but implementation patterns need testing. WebRTC jitter buffer control uncertain (crow-misia library API surface unknown). |
-| Features | HIGH | Feature expectations grounded in industry research (PeakPTT specs, Viasat SLAs) and Android official guidelines. Table stakes vs. differentiators clearly delineated. |
-| Architecture | MEDIUM-HIGH | Integration points fit cleanly into existing v3.0 architecture (singleton pattern, Hilt DI). LocationManager/PermissionManager follow established patterns. Audio reliability fixes target known components. |
-| Pitfalls | HIGH | All 10 critical pitfalls sourced from official Android documentation, verified bug reports, and production postmortems. Prevention strategies proven. |
+| Stack | HIGH | Official Leaflet docs, react-leaflet compatibility verified, Android BatteryManager official API reference, no npm access but versions confirmed via WebSearch |
+| Features | HIGH | Industry analysis from fleet tracking leaders (Samsara, GPS Insight), field service platforms (Salesforce FSL), map UX research (Nielsen Norman Group), existing location data schema verified in codebase |
+| Architecture | HIGH | React Leaflet official docs, React Context best practices (Kent C. Dodds), performance optimization sources (Medium articles with benchmarks), existing codebase analysis (protocol.ts, ChannelContext patterns) |
+| Pitfalls | HIGH | All critical pitfalls backed by authoritative sources (GitHub issues from library maintainers, Android official docs, React documentation, performance benchmarks with numbers) |
 
-**Overall confidence:** MEDIUM-HIGH
-
-Confidence is high for features (user expectations) and pitfalls (known failure modes), medium-high for architecture (fits existing patterns but needs validation), medium for stack (official APIs but implementation details need testing). The research provides a solid foundation for roadmap planning, with clear identification of areas needing phase-specific research (WebRTC jitter buffer, potential E2EE).
+**Overall confidence:** HIGH
 
 ### Gaps to Address
 
-**Areas where research was inconclusive or needs validation during implementation:**
+Research was comprehensive with authoritative sources for all critical areas. Two minor gaps identified:
 
-1. **WebRTC Jitter Buffer Control:** Research shows jitter buffer tuning is critical for mobile PTT reliability, but crow-misia libmediasoup-android 0.21.0 API documentation doesn't clearly expose jitter buffer configuration. May require server-side mediasoup configuration instead of client-side. Validate during Phase 18 planning.
+- **Esri tile service rate limits for production scale:** Documentation shows free tier limits exist but exact numbers not confirmed. WORKAROUND: Use OpenStreetMap tiles for development (unlimited), Esri only for production, monitor tile request count, self-host if rate limited. LOW PRIORITY - free developer tier supports reasonable dispatch console usage.
 
-2. **Stationary Detection Thresholds:** Motion detection via ActivityRecognitionClient provides STILL/WALKING/IN_VEHICLE states, but optimal thresholds for location throttling (e.g., "STILL for >30min = reduce frequency") are application-specific. Industry patterns suggest starting points, but need field validation with actual battery profiling.
+- **mediasoup + high-frequency WebSocket interaction:** Pitfall 8 (WebSocket message queue blocking) is based on general WebSocket knowledge, not specific mediasoup testing. VALIDATION NEEDED: Load test with 1000 simulated users sending location updates while PTT active. Measure PTT button latency. If >500ms, implement separate WebSocket connection for location updates. MEDIUM PRIORITY - likely needed at production scale.
 
-3. **Transmission Acknowledgment Protocol:** Research identifies need for server ACK messages confirming audio delivery, but doesn't specify optimal acknowledgment threshold. Should "delivered" mean all consumers received audio, majority (>50%), or at least one? Requires product decision, affects server protocol design.
-
-4. **Geofence Workflow Automation (deferred):** No industry-standard patterns found for "auto-join channel when arriving at site" workflows. If added in v5.0, will require custom implementation research.
-
-5. **MCPTT End-to-End Encryption (deferred):** 3GPP standards are public, but implementation guides scarce. May require commercial MCPTT SDK or security consulting if enterprise clients mandate E2EE.
-
-**How to handle during planning:**
-
-- **Jitter buffer:** Plan Phase 18-01 to include API research on crow-misia library, fallback to server-side mediasoup configuration if needed
-- **Stationary detection:** Use industry starting points (30min STILL threshold), validate with Battery Historian during Phase 17 testing
-- **Transmission ACK:** Make product decision during Phase 18 requirements (recommend "majority of active consumers" threshold)
-- **Geofencing:** Defer to v5.0, flag for future research if enterprise clients request
-- **E2EE:** Defer to v5.0, note security audit requirement if added
+**Recommendations for implementation:**
+1. Test Esri tile loading in dev environment first, fall back to OSM if CORS issues
+2. Load test PTT latency under location broadcast load in Phase 4 (before adding 1000 markers)
+3. Monitor browser memory in Phase 3 with React DevTools (validate cleanup pattern works)
+4. Profile Android battery in Phase 5 with Battery Historian (target <5% drain/hour)
+5. All gaps are testable during implementation, no blocking unknowns
 
 ## Sources
 
-### Primary (HIGH confidence)
+### Primary (HIGH confidence - official documentation)
+- [React Leaflet Official Docs](https://react-leaflet.js.org/) - Installation, React 18 compatibility, API reference
+- [Leaflet Official Docs](https://leafletjs.com/) - DivIcon, TileLayer, map.remove(), plugin ecosystem
+- [Android BatteryManager API](https://developer.android.com/reference/kotlin/android/os/BatteryManager) - Battery monitoring best practices
+- [Android Battery Optimization](https://developer.android.com/develop/sensors-and-location/location/battery) - Motion-aware intervals, priority levels
+- [React Context Best Practices](https://kentcdodds.com/blog/application-state-management-with-react) - Kent C. Dodds
+- [RFC 6455 WebSocket Protocol](https://www.rfc-editor.org/rfc/rfc6455) - Protocol versioning patterns
+- Existing codebase: `src/shared/protocol.ts`, `web-ui/src/context/ChannelContext.jsx`, `android/app/src/main/java/com/voiceping/android/data/location/`
 
-**Stack & Technology:**
-- [FusedLocationProviderClient API | Google Developers](https://developers.google.com/android/reference/com/google/android/gms/location/FusedLocationProviderClient)
-- [Activity Recognition API | Google Developers](https://developers.google.com/location-context/activity-recognition)
-- [WorkManager Releases | AndroidX](https://developer.android.com/jetpack/androidx/releases/work)
-- [OkHttp Changelog | Square](https://square.github.io/okhttp/changelogs/changelog/)
-- [Network Security Config | Android Developers](https://developer.android.com/privacy-and-security/security-config)
-- [Accompanist Permissions | Google](https://google.github.io/accompanist/permissions/)
+### Secondary (MEDIUM confidence - verified community sources)
+- [Optimizing Leaflet Performance with Large Markers](https://medium.com/@silvajohnny777/optimizing-leaflet-performance-with-a-large-number-of-markers-0dea18c2ec99) - Benchmarks: 10K+ canvas vs <300 DOM
+- [React Context Performance Issues](https://www.tenxdeveloper.com/blog/optimizing-react-context-performance) - Re-render patterns, splitting contexts
+- [Leaflet Memory Leak GitHub Issue](https://github.com/PaulLeCam/react-leaflet/issues/941) - Cleanup pattern from maintainer
+- [React 18 Strict Mode Support](https://github.com/PaulLeCam/react-leaflet/issues/963) - Double-mount handling
+- [5 Must-Have Fleet Dispatch Features](https://www.elevatecodedigital.com/2025/12/5-must-have-features-in-fleet-dispatch.html) - Industry standards
+- [Map UI Design Patterns](https://mapuipatterns.com/) - Click vs hover interaction research
+- [Tooltip Guidelines - Nielsen Norman Group](https://www.nngroup.com/articles/tooltip-guidelines/) - 67% prefer click for details
 
-**Features & Best Practices:**
-- [About background location and battery life | Android Developers](https://developer.android.com/develop/sensors-and-location/location/battery)
-- [Request Runtime Permissions | Android Developers](https://developer.android.com/training/permissions/requesting)
-- [Optimize for Doze and App Standby | Android Developers](https://developer.android.com/training/monitoring-device-state/doze-standby)
-- [Foreground Service Types Required | Android 14](https://developer.android.com/about/versions/14/changes/fgs-types-required)
-- [WebRTC Security Architecture | IETF](https://rtcweb-wg.github.io/security-arch/)
-
-**Pitfalls & Production Issues:**
-- [Restrictions on starting foreground services from background | Android Developers](https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start)
-- [Excessive partial wake locks | Android Vitals](https://developer.android.com/topic/performance/vitals/excessive-wakelock)
-- [Security with network protocols | Android Developers](https://developer.android.com/privacy-and-security/security-ssl)
-
-### Secondary (MEDIUM confidence)
-
-**Architecture & Implementation Patterns:**
-- [How WebRTC's NetEQ Jitter Buffer Provides Smooth Audio | WebRTC Hacks](https://webrtchacks.com/how-webrtcs-neteq-jitter-buffer-provides-smooth-audio/)
-- [mediasoup Opus FEC Issue #234 | GitHub](https://github.com/versatica/mediasoup/issues/234)
-- [Crystal Clear Certificates - Certificate Transparency | Android GDE](https://www.spght.dev/articles/21-04-2025/crystal-clear-certs)
-- [OkHttp 5.0 Migration Guide | Medium](https://medium.com/@hiren6997/okhttp-5-0-what-changed-and-how-to-upgrade-without-breaking-everything-1e2dfb255848)
-- [Advanced Location Tracking Battery Efficiency | OneClick IT](https://www.oneclickitsolution.com/centerofexcellence/android/advanced-location-tracking-with-battery-efficiency-in-android-app)
-
-**Industry Benchmarks:**
-- [PeakPTT Latency Specifications](https://www.peakptt.com/) — <300ms PTT latency target
-- [Viasat PTT Select Availability](https://www.viasat.com/enterprise/services/ptt-select/) — 99.9% SLA
-- [NN/g Permission UX Research](https://www.nngroup.com/articles/permission-requests/) — Permission request patterns
-
-**Known Issues & Workarounds:**
-- [Flutter WebRTC Android 15 Audio Issue #1759 | GitHub](https://github.com/flutter-webrtc/flutter-webrtc/issues/1759) — Audio capture stops periodically
-- [Audio device handling is poor with WebRTC | Mozilla Fenix #16653](https://github.com/mozilla-mobile/fenix/issues/16653)
-- [Intermittent WebRTC audio fade out | discuss-webrtc](https://groups.google.com/g/discuss-webrtc/c/fgJEv_Ziy_g)
-
-### Tertiary (LOW confidence, needs validation)
-
-- [Why WebRTC Calls Fail on Mobile Data | softpagecms](https://www.softpagecms.com/2026/01/06/why-webrtc-calls-fail-mobile-data-fix-2026/) — TURN server required for mobile reliability (validate with production testing)
-- Google Play 2026 battery policy (2hr wake lock threshold) — Policy documentation incomplete, verify with official source during Phase 19
+### Tertiary (LOW confidence - needs validation)
+- WebSocket saturation with mediasoup (inference from general WebSocket knowledge, needs load testing)
+- Esri free tier rate limits (mentioned but exact numbers not confirmed)
 
 ---
-
-**Research completed:** 2026-02-15
-
-**Ready for roadmap:** YES
-
-All four research files (STACK.md, FEATURES.md, ARCHITECTURE.md, PITFALLS.md) provide comprehensive foundation for roadmap planning. Phase structure suggestions are grounded in dependency analysis and pitfall avoidance. Research flags clearly identify areas needing deeper investigation during plan execution (WebRTC jitter buffer API, potential E2EE complexity).
+*Research completed: 2026-02-16*
+*Ready for roadmap: yes*

@@ -1,500 +1,825 @@
-# Pitfalls Research: v4.0 Production Hardening
+# Domain Pitfalls: Adding Real-Time Dispatch Map to Production PTT System
 
-**Domain:** Android PTT app production hardening (location, audio reliability, power, security)
-**Researched:** 2026-02-15
-**Confidence:** HIGH
+**Domain:** Real-time location tracking and interactive maps in PTT communications
+**Researched:** 2026-02-16
+**Context:** Adding Leaflet map with WebSocket-driven markers to stable production system (4 milestones shipped, 73 plans executed)
 
 ## Critical Pitfalls
 
-### Pitfall 1: Android 14+ Location Permission Without Foreground Service Type Declaration
+Mistakes that cause rewrites, production outages, or major performance degradation.
 
-**What goes wrong:**
-App crashes with SecurityException when starting foreground service for location tracking, even though ACCESS_FINE_LOCATION is granted. Android 14 introduced strict requirements where foreground services MUST declare specific service types in the manifest AND request matching runtime permissions. Simply having a foreground service is no longer sufficient to access location in the background.
+### Pitfall 1: Leaflet Memory Leaks on React Unmount
 
-**Why it happens:**
-Developers assume that existing foreground services automatically grant location access, not realizing Android 14+ treats location as a privileged operation requiring explicit foreground service type declaration. The app may already have a foreground service for audio, but location requires adding `android:foregroundServiceType="location"` and the `FOREGROUND_SERVICE_LOCATION` permission.
-
-**How to avoid:**
-1. Add foreground service type to AndroidManifest.xml:
-   ```xml
-   <service android:name=".YourService"
-            android:foregroundServiceType="location|microphone"
-            android:exported="false" />
-   ```
-2. Declare permission: `<uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />`
-3. Request ACCESS_BACKGROUND_LOCATION separately from ACCESS_FINE_LOCATION on Android 10+
-4. Only access location AFTER foreground service is started with proper notification
-5. Test on Android 14+ devices specifically — earlier versions won't catch this
-
-**Warning signs:**
-- SecurityException with message "Permission Denial: startForeground from background requires foreground service type"
-- Crashes only on Android 14+ devices during location initialization
-- Location works in foreground but fails when screen turns off
-- Google Play pre-launch report flags foreground service type issues
-
-**Phase to address:**
-Phase 16 (Location Infrastructure) — must be first step before any location code
-
----
-
-### Pitfall 2: GPS Lock Battery Drain Without Provider Strategy
-
-**What goes wrong:**
-Battery consumption jumps from 5%/hour to 15-25%/hour after adding location tracking. GPS stays locked continuously even when high accuracy isn't needed, draining battery 3-5x faster than necessary. Users complain about excessive battery drain and disable the feature or uninstall the app.
+**What goes wrong:** Leaflet map instances and event listeners remain in memory after component unmount, causing browser memory to grow from ~11MB to 1.3GB+ over repeated mount/unmount cycles, eventually crashing the browser.
 
 **Why it happens:**
-Developers use `PRIORITY_HIGH_ACCURACY` universally without understanding the battery cost. GPS alone can consume 38% of battery when signal is weak (indoors, urban canyons). The fused location provider defaults to continuous GPS if not explicitly configured, and developers don't implement adaptive location strategies based on movement, signal strength, or time-of-day.
+- Leaflet directly manipulates the DOM while React manages the virtual DOM, creating a fundamental conflict
+- Event listeners are not properly removed in the teardown code for Map objects
+- React 18 Strict Mode simulates unmount+remount cycles, exposing cleanup issues (throws "Map container is already initialized" error)
+- Layers added to MapContainer are not removed from the DOM during cleanup
 
-**How to avoid:**
-1. Start with `PRIORITY_BALANCED_POWER_ACCURACY` (cell tower + WiFi, ~100m accuracy)
-2. Only use `PRIORITY_HIGH_ACCURACY` when user is actively transmitting PTT (real-time need)
-3. Switch to `PRIORITY_LOW_POWER` when idle for >5 minutes
-4. Increase update interval based on movement detection (stationary = slower updates)
-5. Stop location updates entirely if user hasn't interacted in 30+ minutes
-6. Use geofencing instead of continuous tracking when monitoring fixed areas
-7. Monitor battery drain with Battery Historian during development
+**Consequences:**
+- Browser tab crashes after repeated navigation in/out of dispatch view
+- Memory consumption grows unbounded in long-running dispatch console sessions
+- Strict Mode development builds fail with cryptic Leaflet initialization errors
 
-**Warning signs:**
-- Battery usage shows GPS constantly active in Android battery stats
-- Location icon in status bar never disappears
-- Device gets warm during normal use
-- Battery Historian shows uninterrupted GPS wake locks
-- User reviews mention "battery killer" within first week
+**Prevention:**
+```typescript
+// CORRECT: Proper cleanup in useEffect
+useEffect(() => {
+  const mapInstance = L.map('map-container', options);
 
-**Phase to address:**
-Phase 16 (Location Infrastructure) — implement adaptive strategy from day 1, don't optimize later
+  return () => {
+    // Critical: remove all layers first
+    mapInstance.eachLayer((layer) => {
+      mapInstance.removeLayer(layer);
+    });
+    // Then destroy the map instance
+    mapInstance.remove();
+  };
+}, []);
+```
+
+**Additional prevention:**
+- Use `useRef` to store map instance and ensure single initialization
+- Never recreate map instance on prop changes—update existing instance instead
+- Test with React 18 Strict Mode enabled to catch double-mount issues early
+- Use ref check pattern: `if (mapRef.current) return;` before initializing map
+- Monitor memory usage in DevTools during development navigation cycles
+
+**Detection:**
+- Chrome DevTools Memory Profiler shows growing "Detached DOM tree" count
+- Repeated map container initialization errors in console
+- Browser tab becomes sluggish after 5-10 navigation cycles
+- Heap snapshots show multiple Leaflet map instances retained
+
+**Phase to address:** Phase 1 (Map Component Foundation) — Must establish correct cleanup pattern from the start
+
+**Sources:**
+- [Heap memory build-up when MapContainer is removed from DOM](https://github.com/PaulLeCam/react-leaflet/issues/941)
+- [Memory leak on simple implementation](https://github.com/Leaflet/Leaflet/issues/6784)
+- [Add support for React 18 Strict Effects](https://github.com/PaulLeCam/react-leaflet/issues/963)
 
 ---
 
-### Pitfall 3: WebRTC Audio Device Change Race Condition
+### Pitfall 2: Marker Rendering Performance Collapse at Scale
 
-**What goes wrong:**
-Audio cuts out (silence) when Bluetooth headset connects/disconnects during active PTT transmission. The audio track is mid-stream when AudioManager switches devices, causing the Producer to become detached from the audio source. User hears silence, but the app still shows transmitting state. This is especially problematic because VoicePing already has a known intermittent silence bug.
+**What goes wrong:** DOM-based marker rendering degrades catastrophically above 200-300 markers. At 1000+ markers (realistic scale for large events), frame rate drops to 5-15 FPS, map panning becomes unusable, and browser becomes unresponsive.
 
 **Why it happens:**
-WebRTC's Audio Device Module (ADM) on Android doesn't automatically handle mid-session device changes. When AudioManager routes audio to a different device (e.g., Bluetooth headset connects), the existing MediaStreamTrack becomes stale but doesn't raise an error. The app continues producing audio from a dead source. The native WebRTC implementation expects the application layer to handle device enumeration and switching.
+- Each Leaflet marker is a DOM element (SVG or HTML icon)
+- 1000 markers = 1000+ DOM nodes to manage
+- Every map pan/zoom triggers layout recalculation for all visible markers
+- Browser rendering engine thrashes on synchronous DOM updates
+- React re-renders cascade through marker components, triggering forced reflows
 
-**How to avoid:**
-1. Register AudioManager.OnAudioFocusChangeListener and AudioDeviceCallback
-2. When device change detected during active PTT:
-   - Pause Producer (don't close)
-   - Wait for AudioManager routing to stabilize (50-100ms delay)
-   - Reinitialize audio capture with new device
-   - Resume Producer with new audio track
-3. Implement "audio heartbeat" monitoring: if no audio packets sent for >500ms during transmission, trigger device recheck
-4. Test specifically: connect/disconnect Bluetooth during PTT hold
-5. Add telemetry to track "silent transmission" occurrences in production
+**Consequences:**
+- Dispatch console becomes unusable during large events
+- Map interactions feel "frozen" or delayed by seconds
+- Browser tab can crash or trigger "page unresponsive" warnings
+- User experience degradation forces dispatch to use separate mapping tools
 
-**Warning signs:**
-- Silence reports increase when Bluetooth headset usage is common
-- Logs show Producer active but no audio packets being sent
-- Issue reproduces reliably when toggling Bluetooth during PTT
-- WebRTC stats show `bytesSent` stops incrementing during transmission
-- Users report "sounds fine on my end but others hear nothing"
+**Prevention:**
 
-**Phase to address:**
-Phase 18 (Audio Reliability Fixes) — must address BEFORE production, not after user reports
+**Strategy 1: Canvas-based markers (HIGH confidence recommendation)**
+```typescript
+// Use Leaflet.Canvas-Markers plugin for 1000+ markers
+import 'leaflet.canvas-markers';
+
+const markersLayer = L.canvasIconLayer({}).addTo(map);
+// Canvas rendering handles 10,000-50,000 markers smoothly
+```
+
+**Strategy 2: Marker clustering (MEDIUM confidence—good for sparse data)**
+```typescript
+import L from 'leaflet';
+import 'leaflet.markercluster';
+
+const markers = L.markerClusterGroup({
+  chunkedLoading: true, // Prevent browser lock during bulk add
+  animateAddingMarkers: false, // Better performance for bulk operations
+});
+// Clustering can handle 50,000 markers on page load
+```
+
+**Strategy 3: Viewport culling (implement alongside canvas/clustering)**
+```typescript
+// Only render markers within current viewport + buffer
+const bounds = map.getBounds();
+const visibleMarkers = allMarkers.filter(m => bounds.contains(m.position));
+```
+
+**Optimization checklist:**
+- Add all markers to cluster/canvas layer **before** adding layer to map
+- Use static icon definitions (not dynamic React components per marker)
+- Avoid per-marker event handlers—use layer delegation instead
+- Batch marker updates (collect 100ms of location updates, apply once)
+- Disable marker animations for bulk operations
+
+**Detection:**
+- Chrome DevTools Performance tab shows >50ms frame times during map interaction
+- "Recalculate Style" and "Layout" dominate performance waterfall
+- FPS counter drops below 20 FPS when panning map
+- React Profiler shows cascading re-renders through marker list
+
+**Phase to address:** Phase 2 (Marker Optimization) — Critical before loading production user counts
+
+**Sources:**
+- [Optimizing Leaflet Performance with a Large Number of Markers](https://medium.com/@silvajohnny777/optimizing-leaflet-performance-with-a-large-number-of-markers-0dea18c2ec99)
+- [Performance issue with > 1000 markers and cluster](https://github.com/thedirtyfew/dash-leaflet/issues/24)
+- [Leaflet.Canvas-Markers plugin](https://github.com/eJuke/Leaflet.Canvas-Markers)
 
 ---
 
-### Pitfall 4: Wake Lock + Doze Mode Exemption Breaking Battery Optimization
+### Pitfall 3: Protocol Extension Breaking Existing Clients
 
-**What goes wrong:**
-App requests battery optimization exemption to ensure real-time delivery, but this PREVENTS Doze mode from ever engaging, causing 2-3x higher battery drain even when idle. Google Play flags the app for excessive battery usage and may display a warning on the store listing. The app gets removed from battery optimization whitelist by aggressive OEM battery managers (Samsung, Xiaomi), breaking functionality unpredictably.
+**What goes wrong:** Adding `batteryPercent` field to `LOCATION_UPDATE` message breaks Android clients that haven't been updated. Old clients either crash when receiving new messages, ignore location data entirely, or send malformed messages that the server rejects.
 
 **Why it happens:**
-Developers misunderstand Android power management. Requesting `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` disables ALL battery optimization, not just specific restrictions. This keeps CPU and network running at full power continuously. The existing partial wake lock in VoicePing is already exempt from Doze calculations if used for audio playback, so requesting additional exemptions is redundant and harmful.
+- JSON-based WebSocket protocol is unversioned
+- TypeScript interfaces are compile-time only (no runtime validation)
+- Android Gson deserialization can fail on unknown fields depending on strictness
+- No protocol negotiation handshake to communicate capabilities
+- Server and clients deployed independently (can't guarantee synchronized updates)
 
-**How to avoid:**
-1. **DO NOT** use `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` for PTT apps
-2. Audio wake locks are ALREADY exempt from Doze restrictions
-3. Use high-priority FCM messages for time-sensitive notifications instead of exemptions
-4. If background work is needed, use JobScheduler with `setRequiresBatteryNotLow(false)`
-5. Design for Doze windows: buffer audio during maintenance window, resume after
-6. Test with `adb shell dumpsys deviceidle force-idle` to verify Doze behavior
-7. Monitor Android Vitals "Excessive wake lock" metric (threshold: >2 hours/24hrs)
+**Consequences:**
+- Production outage: Android users on v4.0 app can't receive location after server deploys v5.0
+- Silent data loss: Server sends battery data, old clients ignore it, dispatch sees incomplete info
+- Split-brain state: Some users see battery %, others don't, causing confusion in dispatch
+- Rollback complexity: Must coordinate rollback across server + all client deployments
 
-**Warning signs:**
-- Battery usage remains high even when app is idle for hours
-- `dumpsys deviceidle` shows device never enters Doze mode
-- Play Console shows "Excessive battery usage" warning
-- Battery Historian shows continuous wake locks during idle periods
-- App appears in "Battery optimization excluded" list without clear user benefit
+**Prevention:**
 
-**Phase to address:**
-Phase 19 (Power Optimization) — remove any exemption requests, validate Doze compatibility
+**Rule 1: Optional fields only**
+```typescript
+// BAD: Required field breaks old clients
+interface LocationData {
+  batteryPercent: number; // Old clients will omit this
+}
+
+// GOOD: Optional field with server-side default
+interface LocationData {
+  batteryPercent?: number; // Old clients omit, server fills with null
+}
+```
+
+**Rule 2: Server validates and provides defaults**
+```typescript
+// Server handler for LOCATION_UPDATE
+const batteryPercent = data.batteryPercent ?? null; // Default for old clients
+const isCharging = data.isCharging ?? false;
+```
+
+**Rule 3: Client handles missing fields gracefully**
+```typescript
+// Web UI rendering
+{location.batteryPercent != null
+  ? `${location.batteryPercent}%`
+  : 'Unknown'}
+```
+
+**Rule 4: Version negotiation for breaking changes**
+```typescript
+// If truly breaking change needed, use protocol versioning
+enum SignalingType {
+  // ...
+  PROTOCOL_VERSION = 'protocol-version', // Add to connection handshake
+}
+
+// Server checks client version on connect
+if (clientProtocolVersion < MIN_SUPPORTED_VERSION) {
+  sendMessage({ type: 'ERROR', error: 'Client outdated, please upgrade' });
+  ws.close();
+}
+```
+
+**Deployment strategy:**
+- Deploy server with optional fields first (backward compatible)
+- Update Android app to send new fields (forward compatible with old server)
+- Update web UI to display new fields (forward compatible)
+- Wait 2 weeks for app store rollout before making fields required
+
+**Testing checklist:**
+- Test v5.0 server with v4.0 Android client (old client must still work)
+- Test v5.0 Android client with v4.0 server (new client must not break old server)
+- Test web UI with location data missing optional fields
+- Verify Gson deserialization on Android handles unknown fields (set `serializeNulls = false`)
+
+**Detection:**
+- Monitor WebSocket disconnections spike after deployment
+- Log warnings for messages with missing expected fields
+- Alert on increased ERROR message frequency
+- Test matrix: (old client + new server), (new client + old server), (new client + new server)
+
+**Phase to address:** Phase 3 (Protocol Extension) — Must design protocol changes correctly before implementation
+
+**Sources:**
+- [RFC 6455: The WebSocket Protocol](https://www.rfc-editor.org/rfc/rfc6455)
+- [WebSocket protocol versioning discussion](https://github.com/XRPLF/rippled/issues/219)
+- Existing codebase: `src/shared/protocol.ts` shows unversioned message types
 
 ---
 
-### Pitfall 5: Certificate Pinning Breaking Production Updates
+### Pitfall 4: React Context Re-renders Drowning Performance
 
-**What goes wrong:**
-App pins TLS certificate for router server, then certificate expires or is rotated during routine renewal. All existing app installations immediately lose connectivity and cannot reach the server. Emergency app update is required, but users can't download it because the Play Store connection might also be affected. Service outage lasts hours to days while users gradually update.
+**What goes wrong:** Storing 1000+ user locations in React Context causes every consuming component to re-render on every location update. At 10 location updates/second (realistic with motion), this triggers 10,000+ component re-renders/second, freezing the UI.
 
 **Why it happens:**
-Developers implement certificate pinning as a security best practice without understanding the operational burden. Leaf certificates expire frequently (90 days is becoming standard), and pinning to a single certificate creates a ticking time bomb. When the certificate rotates, every installed app version becomes non-functional until updated. Third-party services (if any) can rotate certificates without warning, breaking app functionality instantly.
+- React Context broadcasts value changes to **all** consumers, regardless of which subset of data they use
+- Location updates are frequent (1-10 Hz per user)
+- Dispatch console has multiple components consuming location data (map markers, user list, selected user panel)
+- Context value mutations don't notify React—must create new object reference every update
+- No built-in mechanism for selective subscription to subset of context data
 
-**How to avoid:**
-1. **Preferred approach for 2026:** Do NOT use certificate pinning for owned infrastructure
-2. Modern alternatives (better security, less operational risk):
-   - Rely on system PKI trust store
-   - Enable Certificate Transparency enforcement
-   - Use network security config with domain config instead of pinning
-3. If pinning is mandatory (compliance requirement):
-   - Pin to intermediate or root CA, NOT leaf certificate
-   - Pin to at least 2 certificates (current + backup)
-   - Implement remote pin update mechanism (don't require app update)
-   - Monitor certificate expiry 30+ days in advance
-   - Test certificate rotation in staging environment
+**Consequences:**
+- Dispatch console UI becomes unresponsive during large events
+- Typing in search box has 2-3 second lag
+- Map marker animations stutter and lag
+- Browser DevTools Profiler shows thousands of wasted re-renders
+- User frustration forces abandonment of dispatch console
 
-**Warning signs:**
-- All client connections fail simultaneously after server update
-- SSL handshake errors with "Certificate pinning failure" in logs
-- Certificate expiry date approaching in next 30 days
-- Unable to test certificate rotation without pushing app update
-- No backup pinned certificate configured
+**Prevention:**
 
-**Phase to address:**
-Phase 20 (Security Hardening) — decide pin strategy BEFORE implementing TLS, or skip pinning entirely
+**Strategy 1: Split Context by concern (HIGH confidence)**
+```typescript
+// BAD: Monolithic context
+interface AppContext {
+  users: Map<string, User>;
+  locations: Map<string, Location>;
+  channels: Map<string, Channel>;
+  selectedUserId: string;
+}
+
+// GOOD: Separate contexts
+const LocationContext = createContext<Map<string, Location>>();
+const ChannelContext = createContext<Map<string, Channel>>();
+const SelectionContext = createContext<string>(); // selectedUserId only
+```
+
+**Strategy 2: Memoize context values and selectors**
+```typescript
+const locationContextValue = useMemo(
+  () => ({ locations, updateLocation }),
+  [locations] // Only recreate if locations Map reference changes
+);
+
+// Use selector hooks for component optimization
+function useUserLocation(userId: string) {
+  const locations = useContext(LocationContext);
+  return useMemo(() => locations.get(userId), [locations, userId]);
+}
+```
+
+**Strategy 3: Use specialized state management for high-frequency data**
+```typescript
+// Consider Zustand for location data (avoids Context re-render issues)
+import create from 'zustand';
+
+const useLocationStore = create((set) => ({
+  locations: new Map(),
+  updateLocation: (userId, location) =>
+    set((state) => {
+      const newLocations = new Map(state.locations);
+      newLocations.set(userId, location);
+      return { locations: newLocations };
+    }),
+}));
+
+// Components subscribe to specific slices
+const location = useLocationStore(state => state.locations.get(userId));
+```
+
+**Strategy 4: Virtualize large lists (CRITICAL for marker rendering)**
+```typescript
+import { FixedSizeList } from 'react-window';
+
+// Only render visible user list items (not all 1000)
+<FixedSizeList
+  height={600}
+  itemCount={users.length}
+  itemSize={60}
+>
+  {UserRow}
+</FixedSizeList>
+```
+
+**Strategy 5: Batch location updates**
+```typescript
+// Collect 100ms of location updates, apply in single state update
+const locationBuffer = useRef<Map<string, Location>>(new Map());
+
+useEffect(() => {
+  const interval = setInterval(() => {
+    if (locationBuffer.current.size > 0) {
+      setLocations(prev => new Map([...prev, ...locationBuffer.current]));
+      locationBuffer.current.clear();
+    }
+  }, 100); // Batch every 100ms
+
+  return () => clearInterval(interval);
+}, []);
+```
+
+**Optimization checklist:**
+- Wrap leaf components in `React.memo()` to prevent unnecessary re-renders
+- Use `useCallback` for event handlers passed as props
+- Split UI into independently updating regions (map vs. user list vs. details panel)
+- Monitor re-render count with React DevTools Profiler
+- Target <16ms per frame (60 FPS) for smooth UI
+
+**Detection:**
+- React DevTools Profiler shows >100ms render times
+- Flamegraph shows cascading re-renders through component tree
+- Interaction lag >100ms in dispatch console
+- CPU profiler shows >50% time in React reconciliation
+
+**Phase to address:** Phase 4 (State Management Optimization) — Must address before loading production scale data
+
+**Sources:**
+- [One simple trick to optimize React re-renders](https://kentcdodds.com/blog/optimize-react-re-renders)
+- [Optimizing React Context for Performance](https://www.tenxdeveloper.com/blog/optimizing-react-context-performance)
+- [Performantly Render a Large List of Items with React Context](https://egghead.io/lessons/react-performantly-render-a-large-list-of-items-with-react-context)
+- [How to Handle React Context Performance Issues](https://oneuptime.com/blog/post/2026-01-24-react-context-performance-issues/view)
 
 ---
 
-### Pitfall 6: Permission Denial Loop Without Rationale Tracking
+### Pitfall 5: Android Background Location Draining Battery
 
-**What goes wrong:**
-User denies location permission once, app repeatedly prompts on every screen transition or app launch, creating hostile UX. Android eventually marks permission as "permanently denied," but app doesn't detect this and continues showing broken permission prompts that do nothing. User frustrated, leaves 1-star review citing "constant permission nagging."
+**What goes wrong:** Continuous background location tracking at 5-second intervals drains battery by 30-50% over 8 hours, making the app unusable for full-day events. Users disable location permissions or uninstall the app.
 
 **Why it happens:**
-Developers call `requestPermissions()` without checking `shouldShowRequestPermissionRationale()` first. This method returns `true` if user denied permission previously and should see explanation, or `false` if user chose "Don't ask again." Without tracking denial state, app falls into infinite prompt loop. Android 11+ made permission prompts more aggressive, so poor permission UX is amplified.
+- GPS is the most power-hungry sensor on mobile devices
+- Background location prevents the system from putting the device to sleep
+- High accuracy mode uses GPS continuously (vs. low-power cell tower/WiFi triangulation)
+- Foreground service keeps app process alive, preventing aggressive battery optimization
+- Android system attributes battery drain to the app, damaging reputation
 
-**How to avoid:**
-1. Track permission denial count in SharedPreferences
-2. Flow:
-   - First ask: Direct permission request (no rationale needed)
-   - If denied: Show in-app rationale with clear benefit explanation
-   - If denied twice: Stop prompting, show permanent "Enable in Settings" card
-3. Use `shouldShowRequestPermissionRationale()` to detect "Don't ask again" state
-4. For location: Request while-in-use FIRST, then background permission separately
-5. Only request permissions when feature is first used, NOT on app launch
-6. Android 13+: Request notification permission contextually, not on startup
-7. Gracefully degrade features when permission denied (don't block core functionality)
+**Consequences:**
+- User complaints and app store negative reviews
+- Dispatch management mandates disabling location tracking
+- Users manually disable location permissions, breaking dispatch visibility
+- Milestone v5.0 feature becomes unusable in production
+- Wasted development effort on feature that can't be deployed
 
-**Warning signs:**
-- Permission dialog appears repeatedly on same screen
-- User taps "Deny" but sees prompt again immediately
-- App shows permission rationale after "Don't ask again" selected
-- No fallback UI when permission permanently denied
-- Play Store reviews mention "keeps asking for location"
+**Prevention:**
 
-**Phase to address:**
-Phase 21 (Permission Refactoring) — implement denial tracking BEFORE adding new permission requests
+**Strategy 1: Motion-aware location intervals (CRITICAL)**
+```kotlin
+// LocationTracker.kt — existing motion detection
+when (motionState) {
+  MotionState.STILL -> {
+    // User stationary: update every 5 minutes
+    locationRequest.interval = 5 * 60 * 1000L
+  }
+  MotionState.WALKING -> {
+    // User walking: update every 30 seconds
+    locationRequest.interval = 30 * 1000L
+  }
+  MotionState.DRIVING -> {
+    // User driving: update every 10 seconds
+    locationRequest.interval = 10 * 1000L
+  }
+}
+```
+
+**Strategy 2: Use largest possible interval (from Android official docs)**
+```kotlin
+// BAD: 5-second updates
+LocationRequest.Builder(5_000L)
+
+// GOOD: 30-second updates with motion-based adjustment
+LocationRequest.Builder(30_000L)
+  .setMinUpdateIntervalMillis(10_000L) // Fastest update if system has location
+  .setPriority(Priority.PRIORITY_BALANCED_POWER_ACCURACY) // Not HIGH_ACCURACY
+```
+
+**Strategy 3: Foreground-only default with opt-in background**
+```kotlin
+// Default: Location only while app in foreground
+<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
+// Require explicit user opt-in for background tracking
+// Only request ACCESS_BACKGROUND_LOCATION if user enables "Track me always"
+if (userOptedInToBackgroundTracking) {
+  requestPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+}
+```
+
+**Strategy 4: Geofencing for event areas (advanced optimization)**
+```kotlin
+// Use geofencing API to wake up location tracking only near event venue
+// Reduces GPS usage by 90% when user is off-duty
+geofencingClient.addGeofences(
+  GeofencingRequest.Builder()
+    .addGeofence(eventVenueGeofence)
+    .setInitialTrigger(GeofencingRequest.INITIAL_TRIGGER_ENTER)
+    .build()
+)
+```
+
+**Strategy 5: Battery profiling before deployment**
+```bash
+# Android Battery Historian analysis
+adb bugreport > bugreport.zip
+# Upload to https://bathist.ef.lc/
+# Target: <5% battery drain per hour during normal event operations
+```
+
+**User-facing controls:**
+- Settings toggle: "Update location frequency" (High/Normal/Low)
+- Battery saver mode: Automatically reduces location updates when battery <20%
+- Notification: "Location tracking paused (battery saver)" when throttled
+- Show last update timestamp on map marker so dispatch knows data freshness
+
+**Detection:**
+- Android Battery Settings shows app consuming >10% per hour
+- User reports of rapid battery drain in app store reviews
+- Battery Historian shows continuous GPS sensor wakelock
+- LocationManager logs show update frequency not adapting to motion state
+
+**Phase to address:** Phase 5 (Location Tracking) — Must implement motion-aware intervals from the start
+
+**Sources:**
+- [About background location and battery life (Android official docs)](https://developer.android.com/develop/sensors-and-location/location/battery)
+- [2026 Apps Like TikTok, Netflix Drain Batteries: Optimization Tips](https://www.webpronews.com/2026-apps-like-tiktok-netflix-drain-batteries-optimization-tips/)
+- [Do Location Tracking Apps Drain Your Battery?](https://www.lystloc.com/blog/do-location-tracking-apps-drain-mobile-battery/)
 
 ---
 
-### Pitfall 7: Network Security Config Allowing Cleartext in Production
+## Moderate Pitfalls
 
-**What goes wrong:**
-Developer enables `android:cleartextTrafficPermitted="true"` for local testing, accidentally ships to production. App communicates over HTTP (not HTTPS) for some requests, exposing authentication tokens, audio metadata, and user data to network eavesdropping. Security audit or penetration test discovers cleartext traffic, requiring emergency release to fix.
+Issues causing degraded UX or increased development complexity, but not production outages.
+
+### Pitfall 6: CSS Grid Layout Thrashing on Frequent Updates
+
+**What goes wrong:** Updating location marker positions at 10 Hz triggers CSS Grid recalculations across the entire dispatch console layout (split panel with map + user list). This causes visible jank and dropped frames even though the grid itself isn't changing.
 
 **Why it happens:**
-Android 9+ disables cleartext by default, forcing developers to explicitly allow it during development. Developers add global cleartext permission to `network_security_config.xml` or manifest, forget to remove it before release, or use same config for debug and release builds. Build variants not properly configured to use environment-specific network security configs.
+- CSS Grid recalculates layout for entire grid container when any child changes
+- Browsers recalibrate and paint more rapidly when DOM complexity stays below 1000 nodes per view
+- Layout thrashing: JavaScript reads layout property (e.g., `getBoundingClientRect`), then writes DOM, forcing synchronous reflow
 
-**How to avoid:**
-1. NEVER use `android:usesCleartextTraffic="true"` in manifest
-2. Use build-variant-specific network security configs:
-   - `res/xml/network_security_config_debug.xml` (allows cleartext for localhost only)
-   - `res/xml/network_security_config_release.xml` (no cleartext allowed)
-3. Configure in `build.gradle`:
-   ```kotlin
-   buildTypes {
-       debug {
-           manifestPlaceholders["networkSecurityConfig"] =
-               "@xml/network_security_config_debug"
-       }
-       release {
-           manifestPlaceholders["networkSecurityConfig"] =
-               "@xml/network_security_config_release"
-       }
-   }
-   ```
-4. Add CI check: `grep -r "cleartextTrafficPermitted=\"true\"" app/src/main/`
-5. Use StrictMode in debug builds to detect cleartext violations early
+**Prevention:**
+- Isolate map and user list into separate CSS Grid cells with `contain: layout style paint`
+- Use CSS `will-change: transform` on animated marker elements
+- Batch DOM reads and writes (read all positions, then write all updates)
+- Use `transform` for marker animations instead of `top`/`left` (avoids layout recalculation)
+- Keep DOM complexity below 1000 nodes per view (use virtualization for user lists)
 
-**Warning signs:**
-- HTTP URLs in release build logs
-- Security scanner flags cleartext traffic
-- Network traffic inspection shows unencrypted HTTP requests
-- No TLS handshake in packet captures for API calls
-- Build includes network_security_config.xml with `<domain-config cleartextTrafficPermitted="true">`
+**Testing:**
+- Chrome DevTools Performance tab: Look for "Recalculate Style" >10ms
+- Enable "Paint flashing" to visualize unnecessary repaints
+- Target <16ms frame time for 60 FPS
 
-**Phase to address:**
-Phase 20 (Security Hardening) — verify network config BEFORE security audit, not after
+**Phase to address:** Phase 6 (Layout Optimization)
+
+**Sources:**
+- [CSS Grid vs Flexbox - Render Performance](https://moldstud.com/articles/p-css-grid-vs-flexbox-which-layout-method-offers-better-render-performance)
+- [Performance analysis of Grid Layout](https://blogs.igalia.com/jfernandez/2015/06/24/performance-on-grid-layout/)
+- Existing codebase: `web-ui/src/styles.css` uses CSS Grid for layout
 
 ---
 
-### Pitfall 8: WebSocket Reconnection During Producer Active State
+### Pitfall 7: Esri Tile Service CORS and Rate Limiting
 
-**What goes wrong:**
-Network switches from WiFi to cellular (or vice versa) while user is actively transmitting PTT. WebSocket reconnects successfully, but mediasoup Producer is orphaned on the old connection. App thinks it's transmitting (UI shows active), but audio isn't reaching the server. The existing SignalingClient reconnection logic doesn't coordinate with MediasoupClient state, creating silent failure.
+**What goes wrong:** Esri ArcGIS tile services require CORS configuration or ArcGIS proxy for cross-domain requests. Additionally, free tier has rate limits that can be exceeded during development/testing with frequent map pans. Map tiles fail to load, showing gray squares.
 
 **Why it happens:**
-WebSocket reconnection logic in SignalingClient handles transport layer (socket), but doesn't inform MediasoupClient about connection state changes. When WebSocket reconnects, it gets a new socket instance, but the Producer still references the old closed transport. MediasoupClient continues calling producer.send() on a closed peer connection, silently failing. No error propagated because WebRTC doesn't immediately detect closed connections.
+- Esri services don't enable CORS by default for all domains
+- Free tier rate limits are low (typically 1,000-2,000 requests/day)
+- Development with hot-reload causes repeated tile fetches
+- Multiple developers hitting same tile service can exhaust quota
 
-**How to avoid:**
-1. Implement connection state observer pattern:
-   ```kotlin
-   interface ConnectionStateObserver {
-       fun onConnecting()
-       fun onConnected()
-       fun onDisconnected()
-       fun onFailed()
-   }
-   ```
-2. MediasoupClient subscribes to SignalingClient state changes
-3. On disconnect while Producer active:
-   - Save PTT state (user still holding button)
-   - Close Producer/Transport cleanly
-   - After reconnection + rejoin, auto-resume PTT transmission
-4. Add connection state to PttState enum:
-   - `Transmitting.Connected`
-   - `Transmitting.Reconnecting` (show different UI)
-5. UI shows "reconnecting" indicator if PTT held during network change
-6. Implement end-to-end transmission monitoring: server ACKs audio packets, client detects missing ACKs
+**Prevention:**
+- Use Esri Leaflet plugin's built-in CORS handling: `L.esri.tiledMapLayer()`
+- Configure `errorTileUrl` fallback for missing tiles
+- Implement tile caching in development (browser cache or service worker)
+- Use OpenStreetMap tiles for development, Esri for production only
+- Monitor tile request count in development
+- Consider self-hosting tiles for high-traffic production use
 
-**Warning signs:**
-- "Sounds fine on my phone but others hear nothing" reports
-- Issue reproduces when switching WiFi/cellular during PTT
-- Logs show WebSocket reconnect but no new Producer created
-- Producer.close() never called during network switch
-- UI shows transmitting but server logs show no audio packets received
+**Detection:**
+- Gray tiles or "CORS error" in browser console
+- 429 "Too Many Requests" responses from tile server
+- Tile loading slows or stops after N map interactions
 
-**Phase to address:**
-Phase 18 (Audio Reliability Fixes) — critical for production, affects core PTT functionality
+**Phase to address:** Phase 1 (Map Component Foundation)
+
+**Sources:**
+- [Esri Leaflet and ArcGIS](https://developers.arcgis.com/esri-leaflet/)
+- [Question about CORS enabled images support in ESRI Leaflet](https://github.com/Esri/esri-leaflet/issues/563)
+- [Handling Tile Load Errors in Leaflet](https://runebook.dev/en/articles/leaflet/index/tilelayer-load)
 
 ---
 
-### Pitfall 9: Foreground Service Notification Channel Importance Too Low
+### Pitfall 8: WebSocket Message Queue Blocking Real-Time Audio
 
-**What goes wrong:**
-Foreground service notification gets swiped away by user or hidden by system because channel importance is set to LOW or MIN. Android kills the foreground service shortly after, terminating audio playback and location tracking. App appears to be running (in recent apps) but is actually dead, user misses incoming PTT messages.
+**What goes wrong:** High-frequency location broadcasts (10 updates/sec × 1000 users = 10K messages/sec) saturate the WebSocket connection, causing PTT audio signaling messages to be delayed by seconds. Users experience lag when pressing PTT button or receiving speaker lock confirmation.
 
 **Why it happens:**
-Developers set notification channel importance to LOW to avoid annoying users with sound/vibration. However, Android 8+ ties notification dismissibility to channel importance. LOW importance notifications can be dismissed, which removes foreground service protection. Some OEMs (Samsung, Xiaomi) aggressively hide low-importance notifications, which the system interprets as user dismissal.
+- Single WebSocket connection carries both audio signaling (low volume, latency-sensitive) and location broadcasts (high volume, latency-tolerant)
+- WebSocket is TCP-based: messages are delivered in order, so large queue of location updates blocks urgent signaling messages
+- Server broadcasts all location updates to all dispatch users (N² problem)
+- No message prioritization in WebSocket protocol
 
-**How to avoid:**
-1. Use `NotificationManager.IMPORTANCE_LOW` (not MIN) for foreground service channel
-2. Set notification as ongoing: `setOngoing(true)` (prevents swipe-to-dismiss)
-3. Make notification useful, not annoying:
-   - Show current channel name and connection status
-   - Add action buttons (mute, disconnect)
-   - Update dynamically when PTT active
-4. Explain notification purpose in first-run tutorial
-5. Android 13+: Request notification permission with contextual rationale
-6. Test on Samsung/Xiaomi devices with aggressive battery optimization
+**Consequences:**
+- PTT button press takes 2-3 seconds to acquire speaker lock
+- Audio cuts in late, missing first words
+- Dispatch users experience delayed UI updates when managing channels
+- Core PTT functionality degraded by new location feature
 
-**Warning signs:**
-- Service killed shortly after app backgrounded
-- Users report "app stops working when I swipe away notification"
-- Audio playback stops when notification cleared
-- Foreground service killed without `onDestroy()` being called
-- Service restarts frequently due to system killing it
+**Prevention:**
 
-**Phase to address:**
-Phase 17 (Production Infrastructure) — validate notification behavior on multiple OEM devices
+**Strategy 1: Separate WebSocket connections (RECOMMENDED)**
+```typescript
+// High-priority connection for audio signaling
+const signalingWs = new WebSocket('wss://server/signaling');
+
+// Low-priority connection for location updates
+const locationWs = new WebSocket('wss://server/location');
+```
+
+**Strategy 2: Location broadcast throttling (server-side)**
+```typescript
+// Server only broadcasts locations to dispatch users (not all users)
+const dispatchUsers = sessionStore.getUsersByRole('DISPATCH');
+
+// Throttle location broadcasts to 1 Hz per user (not real-time)
+const LOCATION_BROADCAST_INTERVAL = 1000; // 1 second
+
+// Batch location updates into single LOCATION_BATCH message
+const locationBatch = {
+  type: 'LOCATION_BATCH',
+  data: { locations: [...recentUpdates] }
+};
+```
+
+**Strategy 3: Selective location subscriptions**
+```typescript
+// Dispatch client subscribes to specific channels/users only
+sendMessage({
+  type: 'LOCATION_SUBSCRIBE',
+  data: { channelIds: ['channel-1', 'channel-2'] }
+});
+
+// Server only sends locations for subscribed channels
+```
+
+**Strategy 4: Implement message prioritization**
+```typescript
+// Server-side message queue with priority
+enum MessagePriority {
+  CRITICAL = 0, // PTT control, speaker lock
+  HIGH = 1,     // Channel state, permission updates
+  NORMAL = 2,   // PING/PONG
+  LOW = 3,      // Location broadcasts
+}
+
+// Process high-priority messages first
+priorityQueue.sort((a, b) => a.priority - b.priority);
+```
+
+**Detection:**
+- Monitor WebSocket send queue length (alert if >100 messages)
+- Measure PTT button press to speaker lock latency (alert if >500ms)
+- Server logs show LOCATION_BROADCAST message rate >1000/sec
+- User complaints about PTT lag during large events
+
+**Phase to address:** Phase 3 (Protocol Extension) — Plan for message volume when designing protocol
+
+**Sources:**
+- Existing codebase: `src/server/signaling/websocketServer.ts` uses single WebSocket
+- User warning: "be aware of impacts of changes on one [component] that affect others"
+- [WebSocket.org: The WebSocket Protocol](https://websocket.org/guides/websocket-protocol/)
 
 ---
 
-### Pitfall 10: Audio Track Silence Due to Missing AudioRecord Restart on Resume
+### Pitfall 9: SVG Marker Icon Performance on Mobile
 
-**What goes wrong:**
-App backgrounds during active monitoring, then returns to foreground. Incoming audio plays fine, but when user tries to transmit PTT, microphone captures silence. AudioRecord is in stopped state or capturing from wrong audio source. Existing VoicePing "intermittent silence bug" may be related to AudioRecord lifecycle not properly synchronized with Producer lifecycle.
+**What goes wrong:** Custom SVG marker icons with complex paths cause choppy rendering on mobile devices (Android dispatch tablets). Even with canvas-based rendering, SVG decoding becomes the bottleneck.
 
 **Why it happens:**
-Android releases audio resources when app backgrounds. AudioRecord may transition to stopped state or be reclaimed by system. When app resumes, the MediaStreamTrack is still "live" (enabled=true) but not actually capturing audio. WebRTC doesn't automatically restart audio capture after backgrounding. Producer continues sending packets, but they contain silence because AudioRecord isn't running.
+- Mobile GPUs are slower than desktop
+- SVG paths must be decoded and rasterized for each frame
+- Data URI SVG icons (inline base64) are decoded repeatedly
+- Complex gradients/filters in SVG are GPU-intensive
 
-**How to avoid:**
-1. Implement LifecycleObserver in MediasoupClient:
-   ```kotlin
-   class MediasoupClient : LifecycleObserver {
-       @OnLifecycleEvent(Lifecycle.Event.ON_PAUSE)
-       fun onAppBackgrounded() {
-           if (!isForegroundServiceActive) {
-               pauseAudioCapture()
-           }
-       }
+**Prevention:**
+- Pre-render SVG markers to PNG sprites (single texture atlas)
+- Use simple geometric shapes for markers (circles, triangles)
+- Avoid gradients, shadows, filters in marker SVG
+- Test on low-end Android devices (not just flagship phones)
+- Use L.Canvas.Icon with pre-rasterized images, not inline SVG
 
-       @OnLifecycleEvent(Lifecycle.Event.ON_RESUME)
-       fun onAppForegrounded() {
-           resumeAudioCapture()
-       }
-   }
-   ```
-2. Before starting Producer, verify AudioRecord state is RECORDSTATE_RECORDING
-3. Add audio level monitoring: if capture level = 0 for >200ms, restart AudioRecord
-4. Use MediaRecorder.AudioSource.VOICE_COMMUNICATION (optimized for PTT)
-5. Request audio focus before capture: `AudioManager.requestAudioFocus()`
-6. Implement watchdog: if Producer active but no audio samples for 500ms, trigger restart
+**Phase to address:** Phase 2 (Marker Optimization)
 
-**Warning signs:**
-- Users report "mic doesn't work after putting app in background"
-- Issue reproduces after app pause/resume cycle
-- Waveform visualization shows flat line during transmission
-- WebRTC stats show packets sent but bytesPerSecond = 0
-- AudioRecord.getRecordingState() returns RECORDSTATE_STOPPED during capture
-- Known "intermittent silence" bug reports correlate with app lifecycle events
-
-**Phase to address:**
-Phase 18 (Audio Reliability Fixes) — critical fix for existing known bug, high priority
+**Sources:**
+- [Leaflet icon custom marker SVG performance](https://github.com/eJuke/Leaflet.Canvas-Markers)
+- [Creating dynamic text on icons in Leaflet using SVG](https://blog.pesky.moe/posts/2024-06-02-leaflet-dynamic-icon-text/)
 
 ---
 
-## Technical Debt Patterns
+## Minor Pitfalls
 
-| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
-|----------|-------------------|----------------|-----------------|
-| Skip battery optimization testing, ship and monitor in production | Faster release, defer optimization | Play Store warnings, user complaints, 1-star reviews, emergency patches | Never — battery is top user complaint for background apps |
-| Use global wake lock exemption instead of FCM high-priority | Simpler implementation, guaranteed delivery | 2-3x battery drain, Play Store flags, user uninstalls | Never — audio wake locks already exempt |
-| Pin leaf certificate instead of CA | Easier to implement (single cert) | Service outage on cert expiry, emergency releases | Never — 90-day cert lifetimes make this non-viable |
-| Request all permissions on first launch | User granted permissions immediately | High denial rate, poor first impression, users skip onboarding | Never — Android 11+ recommends contextual requests |
-| Global cleartext allowed for faster debug iteration | Skip HTTPS setup during development | Security vulnerabilities in production if forgotten | Only in debug builds with build-variant-specific configs |
-| Implement location tracking without adaptive strategy | Simpler code, fewer states to manage | 3-5x battery drain, feature disabled by users | Only for MVP proof-of-concept, must optimize before public release |
-| Skip Doze mode testing on physical devices | Faster test cycles (emulator only) | Unexpected behavior on real devices, late discovery of power bugs | Only in early prototyping, must test on physical devices before beta |
-| Use single network security config for all build types | Less configuration overhead | Cleartext allowed in production accidentally | Never — build variants must have separate configs |
+Minor UX issues or edge cases that are easily fixed.
 
-## Integration Gotchas
+### Pitfall 10: Offline Map Tile Handling
 
-| Integration | Common Mistake | Correct Approach |
-|-------------|----------------|------------------|
-| Fused Location Provider | Requesting location without checking Play Services availability | Always check `GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable()` before location requests, handle SERVICE_MISSING, SERVICE_VERSION_UPDATE_REQUIRED |
-| Android 14+ Location in Foreground Service | Starting service then requesting location | Request ACCESS_FINE_LOCATION FIRST, then start foreground service with type="location", then access location API |
-| WebRTC AudioManager | Setting audio mode globally without restoring | Save previous audio mode, restore on release: `savedMode = audioManager.mode; audioManager.mode = MODE_IN_COMMUNICATION; /* later */ audioManager.mode = savedMode` |
-| Bluetooth Headset Button | Registering MediaButtonReceiver without priority | Use ordered broadcast with priority > 0, handle in onReceive before system default handler |
-| Notification Permission (Android 13+) | Requesting on app launch before user sees value | Request when user enables first notification-worthy feature (e.g., enable scan mode), show rationale first |
-| Network Security Config | Testing only on Android 10+, shipping to Android 9 | Android 9 introduced cleartext restrictions, test on API 28 specifically, verify TLS handshake in packet capture |
-| Battery Optimization Exemption | Using `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` intent | Use high-priority FCM for time-sensitive work, rely on audio wake lock exemptions, design for Doze windows |
+**What goes wrong:** When user's network drops or tile server is unreachable, map shows gray squares for missing tiles. No user feedback that tiles are loading vs. permanently unavailable.
 
-## Performance Traps
+**Prevention:**
+- Implement `errorTileUrl` with placeholder image showing "Offline"
+- Add event listener for `tileerror` to show user-facing notification
+- Consider service worker caching for recently viewed map tiles
 
-| Trap | Symptoms | Prevention | When It Breaks |
-|------|----------|------------|----------------|
-| Continuous GPS lock without movement detection | 15-25% battery/hour, device warm, GPS icon always visible | Use Fused Location Provider with `setMaxWaitTime()` to batch updates, switch to LOW_POWER when stationary for >5min | Immediately on first production use, scales linearly with usage time |
-| WebSocket reconnection creating orphaned Producers | Silent audio transmission failures, "sounds fine here but others hear nothing" | Implement connection observer pattern, coordinate WebSocket state with MediasoupClient, close stale Producers | Network switches (WiFi/cellular), intermittent connectivity, affects ~5-10% of transmissions |
-| AudioRecord not restarted after app resume | Mic captures silence after backgrounding, flat waveform | Monitor audio levels, restart AudioRecord if silent for >200ms during capture, verify RECORDSTATE_RECORDING before producing | Every background/foreground cycle, affects all transmissions after first background |
-| Foreground service notification dismissed by user | Service killed, audio stops, location tracking ends | Set notification channel importance to LOW (not MIN), use `setOngoing(true)`, make notification useful not annoying | Varies by OEM (Samsung/Xiaomi more aggressive), affects long-running sessions |
-| Location updates during idle periods | Unnecessary battery drain even when not in use | Stop location updates after 30min of user inactivity, resume on next interaction, use geofencing for area monitoring | After first 30min of idle, cumulative waste over days/weeks |
-| Multiple wake locks held simultaneously | Excessive wake lock metric in Play Console (>2hrs/24hrs) | Audit wake lock acquisition, release when audio stops, use reference counting for nested holds | Threshold: >2 cumulative hours in 24hr period triggers Play Store warning |
+**Phase to address:** Phase 1 (Map Component Foundation)
 
-## Security Mistakes
-
-| Mistake | Risk | Prevention |
-|---------|------|------------|
-| Cleartext traffic allowed in production build | Authentication tokens, user data exposed to network eavesdropping, MITM attacks | Use build-variant-specific network security configs, CI check for cleartext allowances, test with network traffic inspection |
-| Certificate pinning to single leaf certificate | Service outage on cert rotation (90-day expiry), emergency release required | Don't pin (preferred 2026 approach), or pin to CA root + backup, implement remote pin updates |
-| No TLS hostname verification | MITM with valid certificate for different domain | Verify OkHttp `hostnameVerifier` uses default strict checking, don't override without strong reason |
-| WebSocket over WS instead of WSS in production | All signaling messages (join, PTT state, audio metadata) transmitted in cleartext | Enforce WSS:// URLs in release build, reject WS:// connections, use network security config to block cleartext |
-| Location data logged to crash reporting | Precise user location exposed in crash logs, privacy violation | Strip location from exception messages, use coarse location buckets in analytics, comply with data retention policies |
-| No rate limiting on PTT transmission | Abusive user can DoS channel by holding PTT indefinitely | Server-side max transmission duration (30-60s), client-side transmission timeout, exponential backoff on repeated long transmissions |
-| Audio recordings stored without encryption | Sensitive conversation content accessible if device lost/stolen | Use Android Keystore for encryption keys, encrypt audio files at rest, use FILE_PROVIDER with restricted permissions |
-
-## UX Pitfalls
-
-| Pitfall | User Impact | Better Approach |
-|---------|-------------|-----------------|
-| Permission rationale shown after user denies | User already said no, seeing explanation after denial feels pushy and annoying | Show rationale BEFORE first request (if `shouldShowRequestPermissionRationale()` == false), or after first denial (if == true) |
-| Generic "Location Permission Required" message | User doesn't understand why PTT app needs location | Explain specific feature benefit: "Share your location with dispatch during emergencies" or "Auto-switch to nearest repeater" |
-| No visual indication during network reconnection | User holds PTT, thinks they're transmitting, but audio not sent during reconnect | Show "Reconnecting..." badge on PTT button, vibrate differently when transmission actually starts |
-| Battery optimization prompt on first launch | User doesn't trust app yet, high denial rate | Request after user successfully uses app for 3-5 sessions, show value first |
-| Foreground notification says "App is running" | Waste of notification space, no useful info | Show current channel, connection status, last speaker, make actionable (mute/disconnect buttons) |
-| App appears running but actually killed | User misses messages, thinks app is monitoring but it's not | Implement heartbeat check, show warning if service not actually running, auto-restart service with WorkManager |
-| Silent audio failures without user feedback | User transmits, thinks others heard, but audio was silent | Implement transmission acknowledgment (server confirms audio received), show warning if no ACK within 2s |
-| No graceful degradation when permissions denied | Core features blocked, user forced to grant or uninstall | Essential features work without location (basic PTT), premium features require permission (location sharing) |
-
-## "Looks Done But Isn't" Checklist
-
-- [ ] **Location Tracking:** Often missing background location permission separate from fine location — verify both `ACCESS_FINE_LOCATION` AND `ACCESS_BACKGROUND_LOCATION` requested on Android 10+
-- [ ] **Foreground Service:** Often missing service type declaration for Android 14+ — verify `android:foregroundServiceType="location|microphone"` in manifest AND `FOREGROUND_SERVICE_LOCATION` permission
-- [ ] **Network Security Config:** Often allows cleartext in production accidentally — verify build-variant-specific configs, no `cleartextTrafficPermitted="true"` in release
-- [ ] **Permission Rationale:** Often requests permissions without checking prior denial — verify `shouldShowRequestPermissionRationale()` checked, denial count tracked, no infinite loops
-- [ ] **Battery Optimization:** Often exempts app unnecessarily — verify no `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` used, audio wake locks rely on built-in exemptions
-- [ ] **Doze Mode Compatibility:** Often breaks during Doze windows — verify tested with `adb shell dumpsys deviceidle force-idle`, app functions in idle mode
-- [ ] **Audio Device Changes:** Often doesn't handle Bluetooth connect/disconnect mid-stream — verify tested with headset toggle during PTT, audio recovers gracefully
-- [ ] **WebSocket Reconnection Coordination:** Often reconnects socket but not MediasoupClient — verify Producer/Consumer recreated after reconnect, no orphaned streams
-- [ ] **Notification Channel Importance:** Often set too low, allows dismissal — verify `IMPORTANCE_LOW` (not MIN), notification is ongoing, tested on Samsung/Xiaomi
-- [ ] **Audio Lifecycle:** Often doesn't restart AudioRecord after backgrounding — verify audio capture works after pause/resume cycle, monitor for silent captures
-
-## Recovery Strategies
-
-| Pitfall | Recovery Cost | Recovery Steps |
-|---------|---------------|----------------|
-| Certificate pinning breaks production | HIGH — emergency release required, 24-48hr user migration | 1. Deploy new certificate to server. 2. Release emergency app update with new pin + old pin. 3. Monitor adoption rate. 4. After 95% updated, rotate server cert. 5. Future: remove pinning entirely |
-| Cleartext traffic in production | MEDIUM — release required, no downtime | 1. Emergency release with network_security_config enforcing TLS. 2. No server changes needed if already using HTTPS. 3. Release within 24hrs to minimize exposure |
-| Location permission missing service type | LOW — app update only | 1. Add foreground service type to manifest. 2. Add FOREGROUND_SERVICE_LOCATION permission. 3. Release update. No server changes needed |
-| Battery optimization exemption granted | MEDIUM — requires user action | 1. Release update removing exemption request. 2. Can't revoke already-granted exemptions programmatically. 3. Educate users to manually disable in Settings > Battery Optimization |
-| GPS battery drain excessive | LOW — app update only | 1. Implement adaptive location strategy (HIGH_ACCURACY → BALANCED_POWER). 2. Add idle detection. 3. Release update. Users see immediate battery improvement |
-| Audio device change causes silence | MEDIUM — requires testing multiple device types | 1. Implement AudioDeviceCallback. 2. Add Producer restart logic. 3. Test on multiple Bluetooth headsets (different manufacturers). 4. Monitor telemetry for silent transmission events |
-| WebSocket reconnect orphans Producer | MEDIUM — coordination logic needed | 1. Implement ConnectionStateObserver pattern. 2. Add Producer/Consumer lifecycle coordination. 3. Test network switch scenarios. 4. Add end-to-end monitoring |
-| Permission denial loop annoys users | LOW — UX improvement only | 1. Track denial count in SharedPreferences. 2. Add "Don't ask again" detection. 3. Show permanent "Enable in Settings" card after 2 denials. 4. Release update |
-| Foreground notification dismissed | LOW — notification configuration change | 1. Set channel importance to LOW (not MIN). 2. Add `setOngoing(true)`. 3. Make notification useful (show status). 4. Release update |
-| AudioRecord not restarted after resume | MEDIUM — lifecycle handling needed | 1. Implement LifecycleObserver in MediasoupClient. 2. Add audio level monitoring. 3. Restart AudioRecord if silent >200ms during capture. 4. Test pause/resume cycles extensively |
-
-## Pitfall-to-Phase Mapping
-
-| Pitfall | Prevention Phase | Verification |
-|---------|------------------|--------------|
-| Android 14+ location permission crash | Phase 16 (Location Infrastructure) | Test on Android 14+ device, verify no SecurityException when service starts, check manifest has foregroundServiceType |
-| GPS battery drain | Phase 16 (Location Infrastructure) | Run Battery Historian for 1hr session, verify <8% battery drain, GPS not constantly locked |
-| Audio device change silence | Phase 18 (Audio Reliability Fixes) | Connect/disconnect Bluetooth during PTT hold, verify audio recovers, remote user hears continuous audio |
-| Wake lock + Doze exemption | Phase 19 (Power Optimization) | Force Doze mode with adb, verify app still functions, check Android Vitals for excessive wake lock warnings |
-| Certificate pinning breaks updates | Phase 20 (Security Hardening) | If pinning implemented: pin to CA not leaf, include backup pin, test cert rotation in staging |
-| Permission denial loop | Phase 21 (Permission Refactoring) | Deny permission 3 times, verify no infinite prompts, "Enable in Settings" card shown after 2nd denial |
-| Cleartext traffic in production | Phase 20 (Security Hardening) | Inspect release APK network_security_config.xml, verify no cleartext allowed, test with packet capture |
-| WebSocket reconnect orphans Producer | Phase 18 (Audio Reliability Fixes) | Switch WiFi/cellular during PTT, verify transmission continues after reconnect, server receives audio |
-| Notification dismissed kills service | Phase 17 (Production Infrastructure) | Swipe notification on Samsung device, verify service stays running, notification reappears as ongoing |
-| AudioRecord not restarted | Phase 18 (Audio Reliability Fixes) | Background app for 30s, return, transmit PTT, verify mic captures audio (not silence), waveform shows activity |
-
-## Sources
-
-### Location & Battery
-- [About background location and battery life | Android Developers](https://developer.android.com/develop/sensors-and-location/location/battery)
-- [Background location usage best practices | Google Developers](https://developers.google.com/maps/documentation/navigation/android-sdk/background-location-usage)
-- [Background Location Limits Over Different Android Versions | Medium](https://medium.com/@mahbooberezaee68/background-location-limits-over-different-android-versions-df67202250bd)
-- [Restrictions on starting a foreground service from the background | Android Developers](https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start)
-- [Foreground service types are required | Android Developers](https://developer.android.com/about/versions/14/changes/fgs-types-required)
-
-### Power Management & Doze
-- [Optimize for Doze and App Standby | Android Developers](https://developer.android.com/training/monitoring-device-state/doze-standby)
-- [Excessive partial wake locks | Android Developers](https://developer.android.com/topic/performance/vitals/excessive-wakelock)
-- [Android addressing 'excessive' battery drain with new app wake locks metric](https://9to5google.com/2025/04/15/android-excessive-battery-drain-wake-locks/)
-
-### WebRTC & Audio
-- [What reasons for silent audio tracks from remote streams? | W3C GitHub Issue #2564](https://github.com/w3c/webrtc-pc/issues/2564)
-- [Intermittent WebRTC audio fade out issue | discuss-webrtc](https://groups.google.com/g/discuss-webrtc/c/fgJEv_Ziy_g)
-- [What is the proper way of handling audio device changes mid session? | discuss-webrtc](https://groups.google.com/g/discuss-webrtc/c/v69XTuM3Shw)
-- [Audio device handling is poor with WebRTC | Mozilla Fenix Issue #16653](https://github.com/mozilla-mobile/fenix/issues/16653)
-- [WebRTC Issues and How to Debug Them | CloudBees](https://www.cloudbees.com/blog/webrtc-issues-and-how-to-debug-them)
-
-### Security
-- [Security with network protocols | Android Developers](https://developer.android.com/privacy-and-security/security-ssl)
-- [Network security configuration | Android Developers](https://developer.android.com/privacy-and-security/security-config)
-- [Cleartext communications | Android Developers](https://developer.android.com/privacy-and-security/risks/cleartext-communications)
-- [Android SSL Certificate Pinning A Practical Guide | NextNative](https://nextnative.dev/blog/android-ssl-certificate-pinning)
-- [Avoiding downtime: modern alternatives to outdated certificate pinning practices | Cloudflare](https://blog.cloudflare.com/why-certificate-pinning-is-outdated/)
-- [The Obsolescence of SSL Pinning in Mobile App Security](https://caverav.cl/posts/ssl-pinning/ssl-pinning/)
-
-### Permissions
-- [Request runtime permissions | Android Developers](https://developer.android.com/training/permissions/requesting)
-- [App permissions best practices | Android Developers](https://developer.android.com/training/permissions/usage-notes)
-- [Permission Denials | Android Vitals](https://developer.android.com/topic/performance/vitals/permissions)
-- [Better permissions on Android | Sid Patil](https://siddroid.com/post/post-android-rationale-permission-dialogs-2020/)
-
-### Production & Monitoring
-- [Websocket closes connection with EOF exception | OkHttp Issue #4012](https://github.com/square/okhttp/issues/4012)
-- [Okhttp Websocket client crashes Android application | Ktor Issue #1356](https://github.com/ktorio/ktor/issues/1356)
-- [Build Real-Time Android Apps with WebSockets and Kotlin | Bugfender](https://bugfender.com/blog/android-websockets/)
-- [Foreground Services with Notification Channel | Android Developers](https://medium.com/huawei-developers/foreground-services-with-notification-channel-in-android-7a272f07ad1)
+**Sources:**
+- [Handling Tile Load Errors in Leaflet](https://runebook.dev/en/articles/leaflet/index/tilelayer-load)
+- [Leaflet with offline maps discussion](https://groups.google.com/g/leaflet-js/c/oX31C6KcXVw)
 
 ---
 
-*Pitfalls research for: v4.0 Production Hardening (Location, Audio Reliability, Power, Security)*
-*Researched: 2026-02-15*
-*Focus: Integration pitfalls when adding production features to existing Android PTT app*
+### Pitfall 11: Map Container Resize Issues
+
+**What goes wrong:** When user resizes dispatch console split panel, Leaflet map doesn't recalculate its size automatically. Map appears cropped or has gray areas.
+
+**Prevention:**
+```typescript
+// Call map.invalidateSize() after container resize
+const handleResize = () => {
+  map.invalidateSize();
+};
+
+// Use ResizeObserver to detect container size changes
+const resizeObserver = new ResizeObserver(handleResize);
+resizeObserver.observe(mapContainerRef.current);
+```
+
+**Phase to address:** Phase 6 (Layout Optimization)
+
+**Sources:**
+- Leaflet documentation: `map.invalidateSize()` method
+
+---
+
+### Pitfall 12: Location Timestamp Timezone Mismatches
+
+**What goes wrong:** Android client sends location timestamp in device timezone, server stores in UTC, web UI displays in browser timezone. Dispatch sees "last updated 5 hours ago" when it was actually 5 seconds ago.
+
+**Prevention:**
+- Standardize on ISO8601 timestamps with UTC timezone (existing pattern in `LocationData.timestamp`)
+- Android: Use `Instant.now().toString()` (always UTC)
+- Server: Store as ISO string, don't convert timezone
+- Web UI: Parse with `new Date(isoString)` and display relative time ("5 seconds ago")
+
+**Phase to address:** Phase 5 (Location Tracking)
+
+**Sources:**
+- Existing codebase: `src/server/location/types.ts` already uses ISO8601 string
+
+---
+
+## Phase-Specific Warnings
+
+Pitfalls mapped to implementation phases to guide planner.
+
+| Phase Topic | Likely Pitfall | Mitigation | Priority |
+|-------------|---------------|------------|----------|
+| Phase 1: Map Component Foundation | Leaflet memory leak (Pitfall 1) | Implement proper cleanup pattern in initial component | CRITICAL |
+| Phase 1: Map Component Foundation | Esri tile CORS (Pitfall 7) | Use Esri Leaflet plugin, configure errorTileUrl | HIGH |
+| Phase 1: Map Component Foundation | React Strict Mode conflicts (Pitfall 1) | Test with Strict Mode enabled from start | HIGH |
+| Phase 2: Marker Optimization | DOM marker performance (Pitfall 2) | Use Canvas-based markers or clustering from start | CRITICAL |
+| Phase 2: Marker Optimization | SVG icon performance on mobile (Pitfall 9) | Pre-render markers to PNG, test on low-end devices | MEDIUM |
+| Phase 3: Protocol Extension | Breaking existing clients (Pitfall 3) | Use optional fields, test backward compatibility matrix | CRITICAL |
+| Phase 3: Protocol Extension | WebSocket message queue blocking (Pitfall 8) | Plan separate connection or throttling before implementation | HIGH |
+| Phase 4: State Management | React Context re-render storm (Pitfall 4) | Split contexts, use Zustand for high-frequency data | CRITICAL |
+| Phase 4: State Management | Virtualization missing (Pitfall 4) | Use react-window for user lists from start | HIGH |
+| Phase 5: Location Tracking Android | Background battery drain (Pitfall 5) | Implement motion-aware intervals, profile before deploy | CRITICAL |
+| Phase 5: Location Tracking Android | Timezone mismatches (Pitfall 12) | Use ISO8601 UTC timestamps consistently | LOW |
+| Phase 6: Layout Optimization | CSS Grid thrashing (Pitfall 6) | Use CSS containment, profile layout performance | MEDIUM |
+| Phase 6: Layout Optimization | Map resize issues (Pitfall 11) | Implement ResizeObserver pattern | LOW |
+
+---
+
+## Cross-Component Impact Analysis
+
+User warning: "be aware of impacts of changes on one [component] that affect others."
+
+### Server → Android Impact
+- **Protocol change (battery field):** Android must handle optional field gracefully (Pitfall 3)
+- **Location broadcast throttling:** Android won't see immediate feedback on location updates (acceptable trade-off)
+
+### Server → Web Impact
+- **WebSocket message volume:** Location broadcasts can block audio signaling (Pitfall 8)
+- **Protocol change:** Web UI must handle missing optional fields (Pitfall 3)
+
+### Android → Server Impact
+- **High-frequency location updates:** Can saturate WebSocket connection (Pitfall 8)
+- **Battery drain concerns:** May limit feature adoption, reducing value of server investment (Pitfall 5)
+
+### Web → Server Impact
+- **React re-render performance:** Doesn't affect server, but may require server throttling to fix client issue (Pitfall 8)
+- **Map performance:** Client-only issue, no server impact
+
+### Critical Cross-Component Risks
+1. **Protocol versioning:** Changes require synchronized deployment across all components (Pitfall 3)
+2. **WebSocket saturation:** High location update rate (Android) + broadcast to all dispatch (server) + render all markers (web) = compounding performance problem (Pitfalls 2, 4, 8)
+3. **Battery drain → feature abandonment:** If Android battery drain is severe, dispatch disables feature, making web map useless (Pitfall 5)
+
+---
+
+## Testing Checklist
+
+Must-verify items before production deployment.
+
+### Performance Testing
+- [ ] Load test: 1000 simulated users sending location updates at 1 Hz
+- [ ] Measure map frame rate with 1000+ markers visible
+- [ ] Profile React re-renders with 1000 location updates/sec
+- [ ] Measure PTT button latency under location broadcast load
+- [ ] Test map memory usage over 30-minute session with navigation in/out
+
+### Compatibility Testing
+- [ ] Deploy v5.0 server with v4.0 Android client (must not break)
+- [ ] Deploy v5.0 Android client with v4.0 server (must degrade gracefully)
+- [ ] Test location data with missing optional fields (battery, isCharging)
+- [ ] Verify Gson deserialization on Android handles unknown fields
+
+### Mobile Testing
+- [ ] Android battery profiling: <5% drain per hour with location tracking
+- [ ] Test on low-end Android device (not just flagship)
+- [ ] Verify motion-aware location intervals adjust correctly
+- [ ] Test background location tracking with app in background for 1 hour
+
+### Browser Testing
+- [ ] Chrome DevTools memory profiler: No detached DOM trees after navigation
+- [ ] React 18 Strict Mode: No "Map container already initialized" errors
+- [ ] Test map resize when adjusting split panel
+- [ ] Verify tile error handling when network drops
+
+### Integration Testing
+- [ ] End-to-end: Android sends location → server broadcasts → web displays marker
+- [ ] PTT latency remains <500ms during high location broadcast load
+- [ ] Verify location timestamps display correctly across timezones
+- [ ] Test graceful degradation when Esri tile service unavailable
+
+---
+
+## Summary of Top 5 Risks
+
+**Risk priority:** Impact × Likelihood of occurrence if not addressed
+
+1. **Leaflet memory leak (Pitfall 1)** — HIGH impact, HIGH likelihood
+   - Causes browser crashes in production dispatch console
+   - Easy to miss without explicit Strict Mode testing
+   - **Must address in Phase 1**
+
+2. **Marker performance collapse (Pitfall 2)** — HIGH impact, HIGH likelihood
+   - Makes feature unusable at production scale (1000+ users)
+   - DOM-based markers are default, canvas optimization not obvious
+   - **Must address in Phase 2**
+
+3. **Protocol breaking changes (Pitfall 3)** — HIGH impact, MEDIUM likelihood
+   - Causes production outages if not handled carefully
+   - Requires careful planning and deployment coordination
+   - **Must address in Phase 3**
+
+4. **React Context re-render storm (Pitfall 4)** — HIGH impact, MEDIUM likelihood
+   - Degrades entire dispatch console UX, not just map
+   - Easy to introduce with naive Context usage
+   - **Must address in Phase 4**
+
+5. **Android battery drain (Pitfall 5)** — MEDIUM impact, HIGH likelihood
+   - Doesn't break app, but causes feature abandonment
+   - Continuous GPS is default behavior, optimization requires deliberate design
+   - **Must address in Phase 5**
+
+---
+
+## Confidence Assessment
+
+| Pitfall | Confidence | Evidence |
+|---------|------------|----------|
+| 1. Leaflet memory leak | HIGH | Multiple GitHub issues, React 18 Strict Mode documentation |
+| 2. Marker performance | HIGH | Benchmarks showing 10K+ marker capability with canvas, <300 with DOM |
+| 3. Protocol breaking changes | HIGH | RFC 6455, existing codebase protocol.ts, standard practice |
+| 4. React Context re-renders | HIGH | Multiple authoritative sources, React documentation |
+| 5. Android battery drain | HIGH | Android official documentation, 2026 industry reports |
+| 6. CSS Grid thrashing | MEDIUM | Performance analysis articles, general browser rendering knowledge |
+| 7. Esri CORS/rate limits | MEDIUM | Esri Leaflet documentation, common development experience |
+| 8. WebSocket message queue | MEDIUM | WebSocket protocol knowledge, existing codebase analysis |
+| 9. SVG marker performance | MEDIUM | General mobile performance knowledge, plugin documentation |
+| 10. Offline tile handling | MEDIUM | Leaflet documentation, standard practice |
+| 11. Map resize issues | HIGH | Leaflet documentation, well-known requirement |
+| 12. Timezone mismatches | HIGH | Existing codebase already uses ISO8601 correctly |
+
+**Overall confidence:** HIGH
+
+All critical pitfalls (1-5) backed by authoritative sources (official documentation, GitHub issues from library maintainers, or existing codebase analysis). Moderate pitfalls (6-9) based on established web performance principles and library documentation. Minor pitfalls (10-12) are well-documented requirements.
+
+**Gaps identified:**
+- No specific information on mediasoup + high-frequency WebSocket message interaction (Pitfall 8 is based on general WebSocket knowledge)
+- Limited information on Esri tile service rate limits for production scale (Pitfall 7)
+
+**Recommendation:** All critical pitfalls should be addressed in their designated phases. Moderate pitfalls can be addressed reactively if needed, but prevention is preferred. Minor pitfalls can be fixed during polish phase if not addressed earlier.
