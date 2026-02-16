@@ -35,6 +35,11 @@ import org.webrtc.AudioTrack
 import org.webrtc.MediaConstraints
 import org.webrtc.PeerConnection
 import org.webrtc.PeerConnectionFactory
+import org.webrtc.VideoCodecInfo
+import org.webrtc.VideoDecoder
+import org.webrtc.VideoDecoderFactory
+import org.webrtc.VideoEncoder
+import org.webrtc.VideoEncoderFactory
 import org.webrtc.audio.JavaAudioDeviceModule
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -188,8 +193,24 @@ class MediasoupClient @Inject constructor(
             })
             .createAudioDeviceModule()
 
+        // CRITICAL: Explicitly set empty video factories to prevent Samsung hardware video codecs
+        // from appearing in the SDP offer generated during Device.load(). On Samsung Android 16,
+        // the default hardware video codec SDP entries cause a null pointer dereference (SIGSEGV)
+        // in mediasoupclient::Sdp::Utils::extractRtpCapabilities(), killing the process.
+        // Since we only use audio, no video factories are needed.
+        val noVideoEncoderFactory = object : VideoEncoderFactory {
+            override fun createEncoder(info: VideoCodecInfo): VideoEncoder? = null
+            override fun getSupportedCodecs(): Array<VideoCodecInfo> = emptyArray()
+        }
+        val noVideoDecoderFactory = object : VideoDecoderFactory {
+            override fun createDecoder(info: VideoCodecInfo): VideoDecoder? = null
+            override fun getSupportedCodecs(): Array<VideoCodecInfo> = emptyArray()
+        }
+
         peerConnectionFactory = PeerConnectionFactory.builder()
             .setAudioDeviceModule(audioDeviceModule)
+            .setVideoEncoderFactory(noVideoEncoderFactory)
+            .setVideoDecoderFactory(noVideoDecoderFactory)
             .createPeerConnectionFactory()
 
         // Create Device with PeerConnectionFactory
