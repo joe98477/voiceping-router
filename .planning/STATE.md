@@ -11,8 +11,8 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 
 Phase: 20 of 20 (all complete)
 Plan: All plans complete
-Status: v4.0 SHIPPED
-Last activity: 2026-02-16 - Completed quick task 7: Persist channel subscriptions across app restart
+Status: v4.1.0 TAGGED
+Last activity: 2026-02-16 - Completed quick task 8: Introduce simple versioning strategy
 
 Progress: [████████████████████████████████] 100% (73/73 plans complete across all milestones)
 
@@ -55,11 +55,12 @@ All decisions logged in PROJECT.md Key Decisions table (43 entries across 4 mile
 | 5 | Update docs to reflect Android-to-Web audio fix is verified working | 2026-02-16 | 636d2f6 | [5-update-docs-to-reflect-android-to-web-au](./quick/5-update-docs-to-reflect-android-to-web-au/) |
 | 6 | Rewrite README for Connect Voice rebrand with quick-start guide | 2026-02-16 | 894c036 | [6-rewrite-readme-for-connect-voice-rebrand](./quick/6-rewrite-readme-for-connect-voice-rebrand/) |
 | 7 | Persist channel subscriptions across app restart | 2026-02-16 | 03fa2d8 | [7-persist-channel-subscriptions-across-app](./quick/7-persist-channel-subscriptions-across-app/) |
+| 8 | Introduce simple versioning strategy | 2026-02-16 | cdf2410 | [8-introduce-a-simple-versioning-strategy-f](./quick/8-introduce-a-simple-versioning-strategy-f/) |
 
 ## Session Continuity
 
 Last session: 2026-02-16
-Stopped at: Completed quick-7 persist channel subscriptions
+Stopped at: Completed quick-8 introduce simple versioning strategy
 Resume file: None
 
 **Next action:** `/gsd:new-milestone` — start next milestone
@@ -71,4 +72,4 @@ Resume file: None
 - v4.0 Production Hardening & Location — SHIPPED 2026-02-16
 
 ---
-*Last updated: 2026-02-16 after quick task 7 completion*
+*Last updated: 2026-02-16 after quick task 8 completion*
