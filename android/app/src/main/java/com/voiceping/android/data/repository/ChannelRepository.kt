@@ -412,6 +412,10 @@ class ChannelRepository @Inject constructor(
 
                 // Start battery saver monitoring
                 batterySaverMonitor.start()
+
+                // Defensive: reset PTT/transport state in case previous session left stale state
+                mediasoupClient.resetTransportHealth()
+                pttManager.pttDisabledForReconnect = false
             }
 
             // Create recv transport for every channel (each channel needs its own for audio consumption)

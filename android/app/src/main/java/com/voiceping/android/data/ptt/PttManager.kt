@@ -129,6 +129,12 @@ class PttManager @Inject constructor(
      * @param channelId Channel to request PTT for
      */
     fun requestPtt(channelId: String) {
+        // Debug: log all guard values for diagnosing silent PTT failures
+        Log.d(TAG, "requestPtt($channelId): state=${_pttState.value}, " +
+            "connected=${signalingClient.connectionState.value}, " +
+            "reconnecting=$pttDisabledForReconnect, " +
+            "health=${mediasoupClient.transportHealthState.value}")
+
         // Guard: already in use
         if (_pttState.value !is PttState.Idle) {
             Log.w(TAG, "PTT already active, ignoring request")
@@ -179,10 +185,16 @@ class PttManager @Inject constructor(
                     currentChannelId = channelId
 
                     // Step 3: Start foreground service (microphone permission)
-                    val startIntent = Intent(context, AudioCaptureService::class.java).apply {
-                        action = AudioCaptureService.ACTION_START
+                    try {
+                        val startIntent = Intent(context, AudioCaptureService::class.java).apply {
+                            action = AudioCaptureService.ACTION_START
+                        }
+                        context.startForegroundService(startIntent)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to start AudioCaptureService: ${e.message}", e)
+                        // Continue anyway — mic capture works via WebRTC AudioSource
+                        // even without the foreground service when app is in foreground
                     }
-                    context.startForegroundService(startIntent)
 
                     // Steps 4 & 5: Create send transport and start producing with retry logic
                     // Producer creation retries up to 2 times with exponential backoff on failure

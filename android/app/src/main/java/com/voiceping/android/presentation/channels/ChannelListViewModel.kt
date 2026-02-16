@@ -189,7 +189,6 @@ class ChannelListViewModel @Inject constructor(
     // Battery optimization tracking
     private val _showBatteryOptimizationPrompt = MutableStateFlow(false)
     val showBatteryOptimizationPrompt: StateFlow<Boolean> = _showBatteryOptimizationPrompt.asStateFlow()
-    private var hasCheckedBatteryOptimization = false
 
     // Network quality indicator
     val latency: StateFlow<Long?> = signalingClient.latency
@@ -226,6 +225,9 @@ class ChannelListViewModel @Inject constructor(
 
         // Initialize permission states
         refreshPermissionStates()
+
+        // Check battery optimization on startup (user wants it upfront with other permissions)
+        checkBatteryOptimization()
 
         // Battery saver toast: show every time app is opened while active
         if (batterySaverMonitor.isBatterySaverEnabled.value) {
@@ -315,13 +317,7 @@ class ChannelListViewModel @Inject constructor(
             } else {
                 // Join this channel (may fail if at 5-channel limit)
                 val result = channelRepository.joinChannel(channel.id, channel.name, channel.teamName)
-                if (result.isSuccess) {
-                    // Check battery optimization on first channel join
-                    if (!hasCheckedBatteryOptimization) {
-                        checkBatteryOptimization()
-                        hasCheckedBatteryOptimization = true
-                    }
-                } else {
+                if (result.isFailure) {
                     val error = result.exceptionOrNull()?.message ?: "Failed to join channel"
                     _toastMessage.value = error  // Show toast for max 5 limit
                     Log.e(TAG, "Failed to join channel: $error")
