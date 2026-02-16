@@ -1,1043 +1,763 @@
-# Architecture Patterns: v4.0 Production Hardening & Location
+# Architecture Research: Dispatch Map Integration
 
-**Domain:** Enterprise PTT communications platform (production hardening phase)
-**Researched:** 2026-02-15
-**Focus:** Integration of location tracking, audio reliability fixes, permission management, and power optimization into existing architecture
+**Domain:** React 18 web UI with Leaflet map integration for real-time location tracking
+**Researched:** 2026-02-16
+**Confidence:** HIGH
 
-## Executive Summary
-
-v4.0 adds production-critical features to the existing singleton-based Hilt DI architecture without major structural changes. Location tracking, permission management, and power optimization slot cleanly into the established patterns. Audio reliability improvements target the existing MediasoupClient/PttManager pipeline with buffer tuning and state machine hardening.
-
-**Key Integration Points:**
-- LocationManager fits as a new @Singleton alongside existing managers (AudioRouter, AudioDeviceManager, PttManager)
-- Location data flows: LocationManager → SignalingClient → Server → Redis pub/sub → Dispatch web UI (existing pattern)
-- Audio reliability: WebRTC jitter buffer tuning + MediasoupClient state machine hardening (no new components)
-- Permission management: New PermissionManager @Singleton with Activity/ViewModel delegation
-- Power optimization: Leverage existing foreground service + WorkManager for location batching
-
-**Architectural Philosophy:**
-Maintain the v2.0/v3.0 clean architecture: presentation → data → domain layers with @Singleton providers in the data layer. No circular dependencies. New features add singletons, not new layers.
-
-## Existing Architecture Overview (v3.0 Baseline)
-
-### Component Map
-
-| Layer | Component | Type | Responsibility |
-|-------|-----------|------|----------------|
-| **Data** | MediasoupClient | @Singleton | WebRTC Device, transports (RecvTransport map, SendTransport singleton), consumers/producers, lifecycle |
-| **Data** | SignalingClient | @Singleton | WebSocket connection, request/response correlation, heartbeat, reconnect logic |
-| **Data** | PttManager | @Singleton | PTT state machine (Idle/Requesting/Transmitting/Denied), audio production lifecycle |
-| **Data** | ChannelRepository | @Singleton | Multi-channel monitoring, speaker tracking, primary channel concept, consumer management |
-| **Data** | AudioRouter | @Singleton | Audio focus, mode control (earpiece/speaker/BT), phone call handling |
-| **Data** | AudioDeviceManager | @Singleton | BT device enumeration, output device selection, BT disconnect detection |
-| **Data** | AuthRepository | @Singleton | Login, JWT token refresh, router token acquisition |
-| **Data** | SettingsRepository | @Singleton | DataStore preferences (6 groups), Flow-based settings observation |
-| **Data** | NetworkMonitor | @Singleton | Network connectivity state, WiFi/cellular transitions |
-| **Data** | HapticFeedback | @Singleton | Vibration patterns (PTT press/release/busy) |
-| **Data** | TonePlayer | @Singleton | Audio cues (PTT start, roger beep, error, connection/disconnection) |
-| **Data** | MediaButtonHandler | @Singleton | Bluetooth media button PTT integration via MediaSession |
-| **Presentation** | ViewModels | @HiltViewModel | UI state, user actions → repository calls |
-| **Service** | ChannelMonitoringService | ForegroundService | Persistent notification, pocket radio mode, wake lock |
-| **Service** | AudioCaptureService | ForegroundService | Microphone permission foreground indicator (PTT transmission) |
-
-### Dependency Flow (No Circular Dependencies)
+## System Overview
 
 ```
-ViewModels
-  ↓
-Repositories (ChannelRepository, AuthRepository, EventRepository)
-  ↓
-Managers (PttManager, AudioRouter, AudioDeviceManager, MediaButtonHandler)
-  ↓
-Clients (MediasoupClient, SignalingClient, NetworkMonitor)
-  ↓
-Infrastructure (OkHttpClient, Gson, Room Database, DataStore)
+┌─────────────────────────────────────────────────────────────────────┐
+│                       DISPATCH CONSOLE                               │
+├─────────────────────┬───────────────────────────────────────────────┤
+│   CHANNELS PANEL    │           MAP PANEL                            │
+│   (existing)        │           (new)                                │
+├─────────────────────┼───────────────────────────────────────────────┤
+│ ChannelProvider     │  MapContainer (Leaflet)                        │
+│   ├─ ChannelGrid    │    ├─ TileLayer                                │
+│   └─ DispatchCards  │    ├─ UserMarker[] (DivIcon)                   │
+│                     │    ├─ MapController (useEffect hooks)          │
+│                     │    └─ MarkerPopup (selected user details)      │
+├─────────────────────┼───────────────────────────────────────────────┤
+│                     │  LocationProvider (separate context)           │
+│   (uses existing)   │    ├─ positions: Map<userId, LocationData>     │
+│                     │    ├─ WebSocket listener (LOCATION_BROADCAST)  │
+│                     │    └─ batch update (requestAnimationFrame)     │
+└─────────────────────┴───────────────────────────────────────────────┘
+                                    ↑
+                            WebSocket messages
+                                    │
+┌─────────────────────────────────────────────────────────────────────┐
+│                          SERVER LAYER                                │
+│  LocationBroadcaster → dispatch users (role filter)                  │
+│  LocationStore (SQLite) → query history, initial load                │
+└─────────────────────────────────────────────────────────────────────┘
+                                    ↑
+                            WebSocket messages
+                                    │
+┌─────────────────────────────────────────────────────────────────────┐
+│                         ANDROID CLIENT                               │
+│  LocationManager → LOCATION_UPDATE (with battery %)                  │
+│  MotionDetector → adaptive intervals (STILL/WALKING/DRIVING)         │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-**Critical Pattern:** Callbacks for cross-layer communication without circular deps
-- Example: `PttManager.onPttGranted` callback wired by `ChannelRepository` to trigger `TonePlayer.playPttStartTone()`
-- Example: `AudioRouter.onPhoneCallStarted` callback wired by `ChannelRepository` to force-release PTT
+## Recommended Project Structure
 
-### Data Flow: Existing WebRTC Audio
-
-**Receive Path (Multi-channel):**
-```
-Server producer → SignalingClient (SPEAKER_CHANGED event)
-  → ChannelRepository.observeSpeakerChanges()
-  → MediasoupClient.createRecvTransport(channelId) [per-channel map]
-  → MediasoupClient.consumeAudio(channelId, producerId, peerId)
-  → Consumer.resume() → AudioTrack playback (volume 0-10)
-  → AudioRouter (earpiece/speaker/BT routing)
-```
-
-**Transmit Path (PTT):**
-```
-User PTT press → PttManager.requestPtt(channelId)
-  → SignalingClient.request(PTT_START) [wait for server grant]
-  → MediasoupClient.createSendTransport(channelId) [singleton]
-  → MediasoupClient.startProducing()
-  → AudioSource (WebRTC mic capture) → AudioTrack → Producer (Opus CBR, DTX, FEC)
-  → SendTransport → RTP packets to server
-User PTT release → PttManager.releasePtt()
-  → MediasoupClient.stopProducing() [dispose AudioSource, AudioTrack, Producer]
-  → SignalingClient.send(PTT_STOP)
-```
-
-## v4.0 Architecture Integration
-
-### 1. Location Tracking Architecture
-
-#### Component: LocationManager (@Singleton)
-
-**Placement:** Data layer, peer to PttManager/AudioRouter/AudioDeviceManager
-
-**Responsibilities:**
-- FusedLocationProviderClient initialization and lifecycle
-- Adaptive location update strategy (precise/general/throttled modes)
-- Motion-aware throttling using activity recognition
-- Location batching for power efficiency
-- Permission state coordination with PermissionManager
-
-**DI Wiring:**
-```kotlin
-@Module
-@InstallIn(SingletonComponent::class)
-object LocationModule {
-    @Provides
-    @Singleton
-    fun provideLocationManager(
-        @ApplicationContext context: Context,
-        signalingClient: SignalingClient,
-        settingsRepository: SettingsRepository,
-        permissionManager: PermissionManager
-    ): LocationManager
-}
-```
-
-**Why FusedLocationProvider:**
-- Battery-optimized (batches location requests from multiple apps)
-- Adaptive fused strategy (GPS, WiFi, cellular based on accuracy needs)
-- PRIORITY_BALANCED_POWER_ACCURACY default (sufficient for dispatch tracking)
-- Official Google recommendation for 2026+ (getCurrentLocation() pattern)
-
-Source: [Android FusedLocationProvider Documentation](https://developers.google.com/location-context/fused-location-provider)
-
-#### Data Flow: Android → Server → Dispatch
+### New Files
 
 ```
-LocationManager.startTracking(mode: LocationTrackingMode)
-  ↓
-FusedLocationProviderClient.getCurrentLocation() [batched every 5-60s based on mode]
-  ↓
-LocationManager processes location fix (lat/lon/accuracy/timestamp)
-  ↓
-SignalingClient.send(LOCATION_UPDATE, { channelId, location: { lat, lon, accuracy, timestamp } })
-  ↓
-Server: channelRouter receives location update
-  ↓
-Server: Redis pub/sub broadcasts to dispatch console subscribers
-  ↓
-Web UI: React dispatch console updates marker on map
+web-ui/src/
+├── context/
+│   ├── ChannelContext.jsx          # [EXISTS] Channel state
+│   └── LocationContext.jsx         # [NEW] Location state (separate from channels)
+├── components/
+│   ├── DispatchChannelCard.jsx     # [EXISTS] Channel monitoring
+│   ├── ChannelGrid.jsx             # [EXISTS] Team-grouped channels
+│   ├── DispatchMap.jsx             # [NEW] Leaflet map container
+│   ├── UserMarker.jsx              # [NEW] Custom DivIcon marker with motion state
+│   └── MapController.jsx           # [NEW] useMap hook consumer for side effects
+├── hooks/
+│   ├── useChannelConnection.js     # [EXISTS] WebRTC per channel
+│   ├── useLocationUpdates.js       # [NEW] WebSocket location listener
+│   └── useMapBounds.js             # [NEW] Auto-fit all markers or remember zoom
+└── pages/
+    └── DispatchConsole.jsx         # [MODIFIED] Split layout wrapper
 ```
 
-**Server Changes (Minimal):**
-- New signaling type: `LOCATION_UPDATE` (send-only from Android, no response)
-- channelRouter handler: validate user is in channel, broadcast to dispatch subscribers
-- Redis pub/sub pattern: reuse existing `channel:${channelId}:events` pattern
-- Database persistence: optional (store last known location per user for dispatch history)
+### Modified Files
 
-#### Location Tracking Modes
-
-| Mode | Update Interval | Accuracy | Use Case | Battery Impact |
-|------|----------------|----------|----------|----------------|
-| PRECISE | 5s | PRIORITY_HIGH_ACCURACY | Active PTT transmission | High (5-8%/hour) |
-| GENERAL | 60s | PRIORITY_BALANCED_POWER_ACCURACY | Monitoring (idle) | Low (1-2%/hour) |
-| MOTION_AWARE | Variable | Dynamic (high when moving, low when stationary) | Auto-detect motion | Medium (2-4%/hour) |
-| OFF | - | - | User disabled location | None |
-
-**Implementation Strategy:**
-```kotlin
-@Singleton
-class LocationManager @Inject constructor(
-    @ApplicationContext private val context: Context,
-    private val signalingClient: SignalingClient,
-    private val settingsRepository: SettingsRepository,
-    private val permissionManager: PermissionManager
-) {
-    private val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
-    private var currentMode: LocationTrackingMode = LocationTrackingMode.OFF
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
-    // Motion detection for adaptive throttling
-    private val activityRecognitionClient = ActivityRecognition.getClient(context)
-
-    suspend fun startTracking(mode: LocationTrackingMode) {
-        if (!permissionManager.hasLocationPermission()) {
-            Log.w(TAG, "Location permission not granted, cannot start tracking")
-            return
-        }
-
-        currentMode = mode
-        val interval = when (mode) {
-            LocationTrackingMode.PRECISE -> 5_000L
-            LocationTrackingMode.GENERAL -> 60_000L
-            LocationTrackingMode.MOTION_AWARE -> 15_000L // Base interval, adjusted by motion
-            LocationTrackingMode.OFF -> return
-        }
-
-        val priority = when (mode) {
-            LocationTrackingMode.PRECISE -> Priority.PRIORITY_HIGH_ACCURACY
-            else -> Priority.PRIORITY_BALANCED_POWER_ACCURACY
-        }
-
-        val request = LocationRequest.Builder(priority, interval)
-            .setMaxUpdateDelayMillis(interval * 3) // Batch up to 3 intervals for power efficiency
-            .build()
-
-        fusedLocationClient.requestLocationUpdates(request, locationCallback, Looper.getMainLooper())
-    }
-
-    private val locationCallback = object : LocationCallback() {
-        override fun onLocationResult(locationResult: LocationResult) {
-            locationResult.lastLocation?.let { location ->
-                sendLocationUpdate(location)
-            }
-        }
-    }
-
-    private fun sendLocationUpdate(location: Location) {
-        scope.launch {
-            // Send to server via existing SignalingClient
-            val channelId = getCurrentChannelId() ?: return@launch
-            signalingClient.send(
-                SignalingType.LOCATION_UPDATE,
-                mapOf(
-                    "channelId" to channelId,
-                    "location" to mapOf(
-                        "latitude" to location.latitude,
-                        "longitude" to location.longitude,
-                        "accuracy" to location.accuracy,
-                        "timestamp" to location.time
-                    )
-                )
-            )
-        }
-    }
-}
+```
+web-ui/src/
+├── pages/
+│   └── DispatchConsole.jsx         # Add CSS Grid: "channels map" layout
+├── theme/
+│   └── connectvoice.css            # Add .dispatch-console--split, .map-panel
+└── package.json                    # Add react-leaflet, leaflet dependencies
 ```
 
-**ViewModel Integration:**
-```kotlin
-@HiltViewModel
-class ChannelListViewModel @Inject constructor(
-    private val channelRepository: ChannelRepository,
-    private val locationManager: LocationManager,
-    private val settingsRepository: SettingsRepository
-) : ViewModel() {
+### Server Files (Modified)
 
-    init {
-        // Start location tracking when monitoring channels
-        viewModelScope.launch {
-            combine(
-                monitoredChannels,
-                settingsRepository.getLocationTrackingMode()
-            ) { channels, mode ->
-                if (channels.isNotEmpty() && mode != LocationTrackingMode.OFF) {
-                    locationManager.startTracking(mode)
-                } else {
-                    locationManager.stopTracking()
-                }
-            }.collect()
-        }
-    }
-}
+```
+src/server/location/
+├── LocationBroadcaster.ts          # [MODIFIED] Add batteryPercent field to broadcast
+└── types.ts                        # [MODIFIED] Add batteryPercent?: number to LocationData
 ```
 
-**Foreground Service Integration:**
+### Android Files (Modified)
 
-Location tracking requires `ACCESS_BACKGROUND_LOCATION` permission and background location access is subject to strict Google Play Store policy. The existing `ChannelMonitoringService` (foreground service type `mediaPlayback`) provides user-visible justification.
-
-Add to service:
-```kotlin
-// ChannelMonitoringService.kt
-@Inject lateinit var locationManager: LocationManager
-
-override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-    when (intent?.action) {
-        ACTION_START -> {
-            // ... existing notification code ...
-
-            // Start location tracking if enabled
-            scope.launch {
-                settingsRepository.getLocationTrackingMode().first().let { mode ->
-                    if (mode != LocationTrackingMode.OFF) {
-                        locationManager.startTracking(mode)
-                    }
-                }
-            }
-        }
-        ACTION_STOP -> {
-            locationManager.stopTracking()
-            // ... existing cleanup ...
-        }
-    }
-}
+```
+android/app/src/main/java/com/voiceping/android/data/location/
+├── LocationManager.kt              # [MODIFIED] Include battery % in LOCATION_UPDATE
+└── LocationUpdate.kt               # [NEW or MODIFIED] Add batteryPercent field
 ```
 
-**Permission Requirements:**
-- `ACCESS_FINE_LOCATION`: For precise GPS location (required)
-- `ACCESS_COARSE_LOCATION`: Fallback for network-based location (optional but recommended)
-- `ACCESS_BACKGROUND_LOCATION`: For location updates when app in background (required for foreground service location)
+### Structure Rationale
 
-Source: [Android Location Permissions](https://developer.android.com/develop/sensors-and-location/location/permissions)
+- **LocationContext separate from ChannelContext:** Channel state and location state update at different frequencies (PTT events vs. location updates). Separating them prevents unnecessary re-renders of channel cards when location updates arrive. This follows React best practices where "state more logically separated and located closer to where it matters" avoids Context performance problems.
 
-#### Dispatch Web UI Integration
+- **Custom hooks (useLocationUpdates, useMapBounds):** Encapsulate WebSocket listener and map interaction logic for reusability and testing. React Leaflet requires useMap hook consumers to be descendants of MapContainer, so MapController component wraps these hooks.
 
-Server-side changes are minimal:
+- **Component splitting (DispatchMap, UserMarker, MapController):** DispatchMap contains MapContainer, UserMarker renders individual markers with DivIcon for CSS styling, MapController handles side effects (auto-fit, marker updates). This matches React Leaflet's component model where React renders a `<div>` and Leaflet renders layers imperatively.
 
+## Architectural Patterns
+
+### Pattern 1: Separate LocationContext (Not Extending ChannelContext)
+
+**What:** Create a standalone LocationProvider with its own state Map for location data, parallel to ChannelProvider.
+
+**When to use:** When two state domains update at different frequencies and are consumed by different components. Channel state updates on PTT events (low frequency), location updates on motion tracking (medium-high frequency).
+
+**Trade-offs:**
+- **Pros:** Prevents channel card re-renders on location updates, cleaner separation of concerns, easier testing
+- **Cons:** Two providers to wrap, slightly more boilerplate
+
+**Example:**
 ```typescript
-// server/src/signaling/channelRouter.ts (NEW handler)
-case 'location-update': {
-    const { channelId, location } = data;
+// LocationContext.jsx
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 
-    // Validate user is in channel
-    const channelState = channelStates.get(channelId);
-    if (!channelState?.members.has(ws)) {
-        return { error: 'Not a member of channel' };
+const LocationContext = createContext(null);
+
+export const LocationProvider = ({ children }) => {
+  // Map<userId, LocationPosition> for O(1) updates
+  const [positions, setPositions] = useState(new Map());
+  const batchQueueRef = useRef([]);
+  const rafIdRef = useRef(null);
+
+  // Batch location updates with requestAnimationFrame
+  const queueLocationUpdate = (userId, locationData) => {
+    batchQueueRef.current.push({ userId, locationData });
+
+    if (!rafIdRef.current) {
+      rafIdRef.current = requestAnimationFrame(() => {
+        setPositions(prev => {
+          const next = new Map(prev);
+          batchQueueRef.current.forEach(({ userId, locationData }) => {
+            next.set(userId, locationData);
+          });
+          return next;
+        });
+        batchQueueRef.current = [];
+        rafIdRef.current = null;
+      });
     }
+  };
 
-    // Broadcast to dispatch console subscribers (existing pattern)
-    const locationEvent = {
-        type: 'location-update',
-        userId: ws.userId,
-        userName: ws.userName,
-        location: {
-            latitude: location.latitude,
-            longitude: location.longitude,
-            accuracy: location.accuracy,
-            timestamp: location.timestamp
-        }
-    };
+  const value = { positions, queueLocationUpdate };
+  return <LocationContext.Provider value={value}>{children}</LocationContext.Provider>;
+};
 
-    // Use existing Redis pub/sub for dispatch updates
-    await redisPublisher.publish(
-        `channel:${channelId}:events`,
-        JSON.stringify(locationEvent)
-    );
-
-    // Optional: persist to database for dispatch history
-    await prisma.locationHistory.create({
-        data: {
-            userId: ws.userId,
-            channelId,
-            latitude: location.latitude,
-            longitude: location.longitude,
-            accuracy: location.accuracy,
-            timestamp: new Date(location.timestamp)
-        }
-    });
-
-    break;
-}
-```
-
-Web dispatch console subscribes to location updates via existing Redis subscription:
-
-```typescript
-// web/src/components/DispatchConsole.tsx (NEW map overlay)
-const [userLocations, setUserLocations] = useState<Map<string, Location>>(new Map());
-
-useEffect(() => {
-    socket.on('location-update', (event: LocationUpdateEvent) => {
-        setUserLocations(prev => new Map(prev).set(event.userId, event.location));
-    });
-}, []);
-
-return (
-    <MapContainer>
-        {Array.from(userLocations.entries()).map(([userId, location]) => (
-            <Marker
-                key={userId}
-                position={[location.latitude, location.longitude]}
-                icon={userMarkerIcon}
-            >
-                <Popup>{userName} - Accuracy: {location.accuracy}m</Popup>
-            </Marker>
-        ))}
-    </MapContainer>
-);
-```
-
-### 2. Audio Reliability Fixes
-
-**Problem:** Intermittent PTT silence, choppy audio, late arrivals
-
-**Root Causes (from research):**
-1. WebRTC jitter buffer too small for mobile networks ([WebRTC NetEQ Jitter Buffer](https://webrtchacks.com/how-webrtcs-neteq-jitter-buffer-provides-smooth-audio/))
-2. Producer/Consumer state race conditions (already fixed in Phase 15-02 with `@Volatile producingRequested` flag)
-3. Network flapping causing transport disconnection before auto-recovery window
-
-**Architecture Changes:** No new components, tune existing MediasoupClient
-
-#### Jitter Buffer Tuning
-
-WebRTC's NetEQ adaptive jitter buffer defaults to 40ms initial, can grow to 120ms. For mobile PTT with cellular packet variance, increase target:
-
-```kotlin
-// MediasoupClient.kt
-private fun createConsumerWithJitterBuffer(transport: RecvTransport, ...): Consumer {
-    val consumer = transport.consume(...)
-
-    // Increase jitter buffer target for mobile networks
-    // Note: crow-misia library exposes jitterBufferTarget via Consumer.setJitterBufferTarget()
-    // if available in libmediasoup-android 0.21.0 bindings
-    consumer.setJitterBufferTarget(80) // 80ms target (vs default 40ms)
-
-    consumer.resume()
-    return consumer
-}
-```
-
-**Caveat:** Check crow-misia 0.21.0 API documentation for actual jitter buffer control. If not exposed, this becomes server-side mediasoup configuration:
-
-```typescript
-// server/src/mediasoup/worker.ts
-const rtpCapabilities = router.rtpCapabilities;
-
-// Enable Opus in-band FEC (forward error correction) for packet loss recovery
-rtpCapabilities.codecs.find(c => c.mimeType === 'audio/opus')?.parameters = {
-    ...existingParams,
-    useinbandfec: 1, // Enable FEC
-    maxaveragebitrate: 48000, // Higher bitrate for better quality
+export const useLocation = () => {
+  const context = useContext(LocationContext);
+  if (!context) throw new Error('useLocation must be within LocationProvider');
+  return context;
 };
 ```
 
-Source: [mediasoup Opus FEC](https://github.com/versatica/mediasoup/issues/234)
+### Pattern 2: CSS Grid Split Layout
 
-#### State Machine Hardening
+**What:** Use CSS Grid to create a two-column layout: channels panel (left), map panel (right), with responsive breakpoints.
 
-Already addressed in v3.0 Phase 14-15:
-- Mutex-protected transport lifecycle (prevents concurrent creation/destruction)
-- `@Volatile producingRequested` flag (prevents orphaned producer on PTT release during `produce()` blocking call)
-- Connection state differentiation (disconnected vs failed for auto-recovery window)
+**When to use:** When adding a persistent sidebar to an existing full-width page. Matches existing CSS Grid usage in DispatchConsole (header, stats bar, channel grid).
 
-**Additional Hardening (v4.0):**
+**Trade-offs:**
+- **Pros:** Native responsive behavior, simple to implement, no JS layout calculation
+- **Cons:** Limited to predefined breakpoints, less dynamic than flexbox for resizing
 
-```kotlin
-// MediasoupClient.kt
-private val transportHealthMonitor = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+**Example:**
+```css
+/* connectvoice.css */
+.dispatch-console--split {
+  display: grid;
+  grid-template-columns: 1fr 1fr; /* 50/50 split */
+  gap: 16px;
+  height: calc(100vh - 160px); /* Account for header + stats */
+}
 
-fun startTransportHealthMonitoring() {
-    transportHealthMonitor.launch {
-        while (isActive) {
-            delay(5_000L) // Check every 5 seconds
+.dispatch-console__channels-panel {
+  overflow-y: auto;
+  border-right: 1px solid var(--cv-border);
+}
 
-            // Monitor SendTransport health
-            sendTransport?.let { transport ->
-                val state = transport.connectionState
-                if (state == "disconnected") {
-                    val disconnectedDuration = System.currentTimeMillis() - disconnectedSince
-                    if (disconnectedDuration > 15_000L) {
-                        // Auto-recovery failed, force cleanup
-                        Log.w(TAG, "SendTransport disconnected >15s, forcing cleanup")
-                        audioProducer?.close()
-                        audioProducer = null
-                        sendTransport = null
-                    }
-                }
-            }
+.dispatch-console__map-panel {
+  position: relative; /* For Leaflet absolute positioning */
+  overflow: hidden;
+}
 
-            // Monitor RecvTransport health per channel
-            recvTransports.forEach { (channelId, transport) ->
-                val state = transport.connectionState
-                if (state == "disconnected") {
-                    // Similar auto-recovery monitoring
-                }
-            }
-        }
-    }
+/* Responsive: stack vertically on narrow screens */
+@media (max-width: 1200px) {
+  .dispatch-console--split {
+    grid-template-columns: 1fr;
+    grid-template-rows: 400px 1fr; /* Map on top, channels below */
+  }
+
+  .dispatch-console__channels-panel {
+    border-right: none;
+    border-top: 1px solid var(--cv-border);
+  }
 }
 ```
 
-#### Retry Logic for Produce Failures
+### Pattern 3: DivIcon with Motion State CSS Classes
 
-```kotlin
-// PttManager.kt
-suspend fun requestPtt(channelId: String) {
-    // ... existing PTT_START request ...
+**What:** Use Leaflet's DivIcon to render markers as HTML divs with CSS classes for motion state (STILL, WALKING, DRIVING) and stale indicator.
 
-    // Step 5: Start producing with retry
-    var produceAttempts = 0
-    while (produceAttempts < 3) {
-        try {
-            mediasoupClient.startProducing()
-            break // Success
-        } catch (e: Exception) {
-            produceAttempts++
-            Log.w(TAG, "Produce failed (attempt $produceAttempts/3): ${e.message}")
-            if (produceAttempts >= 3) {
-                // Give up, release PTT
-                _pttState.value = PttState.Idle
-                onPttDenied?.invoke()
-                signalingClient.send(SignalingType.PTT_STOP, mapOf("channelId" to channelId))
-                throw e
-            }
-            delay(500L * produceAttempts) // Exponential backoff
-        }
-    }
+**When to use:** When markers need custom styling beyond what's possible with image icons. Allows CSS animations, pseudo-elements, and dynamic styling.
+
+**Trade-offs:**
+- **Pros:** Full CSS control, easy to add badges (battery %), can use pseudo-elements for pulses
+- **Cons:** Slightly slower than canvas rendering for 1000+ markers (not a concern for dispatch use case)
+
+**Example:**
+```jsx
+// UserMarker.jsx
+import { Marker, Popup } from 'react-leaflet';
+import L from 'leaflet';
+import { useMemo } from 'react';
+
+const UserMarker = ({ position }) => {
+  const { userId, username, latitude, longitude, motionState, isStale, batteryPercent } = position;
+
+  const icon = useMemo(() => {
+    const motionClass = `marker--${motionState.toLowerCase()}`;
+    const staleClass = isStale ? 'marker--stale' : '';
+    const lowBatteryClass = batteryPercent < 20 ? 'marker--low-battery' : '';
+
+    return L.divIcon({
+      className: `user-marker ${motionClass} ${staleClass} ${lowBatteryClass}`,
+      html: `
+        <div class="marker-pin"></div>
+        <div class="marker-label">${username}</div>
+        ${batteryPercent ? `<div class="marker-battery">${batteryPercent}%</div>` : ''}
+      `,
+      iconSize: [40, 50],
+      iconAnchor: [20, 50],
+      popupAnchor: [0, -50]
+    });
+  }, [username, motionState, isStale, batteryPercent]);
+
+  return (
+    <Marker position={[latitude, longitude]} icon={icon}>
+      <Popup>
+        <strong>{username}</strong><br/>
+        Motion: {motionState}<br/>
+        Battery: {batteryPercent}%<br/>
+        Last update: {new Date(position.timestamp).toLocaleTimeString()}
+      </Popup>
+    </Marker>
+  );
+};
+```
+
+```css
+/* Map marker styles */
+.user-marker {
+  font-family: var(--cv-font);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--cv-text);
+  text-align: center;
+}
+
+.marker-pin {
+  width: 24px;
+  height: 24px;
+  border-radius: 50% 50% 50% 0;
+  background: var(--cv-ok);
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%) rotate(-45deg);
+  border: 2px solid var(--cv-surface);
+  box-shadow: var(--cv-glow);
+}
+
+.marker--driving .marker-pin {
+  background: var(--cv-accent);
+  animation: pulse-driving 1.5s ease-in-out infinite;
+}
+
+.marker--walking .marker-pin {
+  background: var(--cv-warn);
+}
+
+.marker--still .marker-pin {
+  background: var(--cv-ok);
+}
+
+.marker--stale .marker-pin {
+  background: var(--muted);
+  opacity: 0.5;
+  box-shadow: none;
+}
+
+.marker-label {
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  background: rgba(12, 18, 32, 0.9);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--cv-border);
+}
+
+.marker-battery {
+  position: absolute;
+  top: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--cv-surface-2);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 9px;
+  border: 1px solid var(--cv-border);
+}
+
+.marker--low-battery .marker-battery {
+  background: var(--cv-alert);
+  color: white;
+}
+
+@keyframes pulse-driving {
+  0%, 100% { transform: translateX(-50%) rotate(-45deg) scale(1); }
+  50% { transform: translateX(-50%) rotate(-45deg) scale(1.1); }
 }
 ```
 
-### 3. Permission Management Architecture
+### Pattern 4: Batch Marker Updates with requestAnimationFrame
 
-**Problem:** Android 6+ runtime permissions require request-at-usage pattern. Currently implicit (crash on permission denial).
+**What:** Queue incoming location updates and batch-apply them to React state on next animation frame to prevent layout thrashing.
 
-**Solution:** Centralized PermissionManager @Singleton with Activity/ViewModel delegation
+**When to use:** When receiving high-frequency WebSocket updates (10-30 per second) that would trigger excessive re-renders. Essential for real-time location tracking.
 
-#### Component: PermissionManager (@Singleton)
+**Trade-offs:**
+- **Pros:** Reduces re-renders from N updates/sec to 60 updates/sec max, smooth 60fps rendering
+- **Cons:** Adds ~16ms latency (one frame), slightly more complex than direct setState
 
-**Placement:** Data layer (peer to SettingsRepository, AuthRepository)
+**Example:**
+```jsx
+// useLocationUpdates.js
+import { useEffect, useRef } from 'react';
+import { useLocation } from '../context/LocationContext';
 
-**Responsibilities:**
-- Permission state checking (granted/denied/never-ask-again)
-- Permission request coordination with Activity via callback
-- Rationale display logic (when to show explanation before request)
-- Settings redirect for "never ask again" state
+export const useLocationUpdates = (ws) => {
+  const { queueLocationUpdate } = useLocation();
 
-**DI Wiring:**
-```kotlin
-@Module
-@InstallIn(SingletonComponent::class)
-object PermissionModule {
-    @Provides
-    @Singleton
-    fun providePermissionManager(
-        @ApplicationContext context: Context
-    ): PermissionManager
+  useEffect(() => {
+    if (!ws) return;
+
+    const handleMessage = (event) => {
+      const msg = JSON.parse(event.data);
+
+      if (msg.type === 'location-broadcast') {
+        const { userId, latitude, longitude, accuracy, speed, heading,
+                motionState, timestamp, batteryPercent } = msg.data;
+
+        // Queue update (batched with requestAnimationFrame in LocationContext)
+        queueLocationUpdate(userId, {
+          userId,
+          username: msg.data.username || userId, // Server should include username
+          latitude,
+          longitude,
+          accuracy,
+          speed,
+          heading,
+          motionState,
+          timestamp,
+          batteryPercent,
+          isStale: false // Server calculates, or client computes from timestamp
+        });
+      }
+    };
+
+    ws.addEventListener('message', handleMessage);
+    return () => ws.removeEventListener('message', handleMessage);
+  }, [ws, queueLocationUpdate]);
+};
+```
+
+### Pattern 5: Protocol Versioning with Optional Fields
+
+**What:** Add new fields (batteryPercent) as optional to maintain backward compatibility with older clients/servers.
+
+**When to use:** When extending WebSocket message schemas in production systems with staged rollouts.
+
+**Trade-offs:**
+- **Pros:** No breaking changes, graceful degradation, staged deployment possible
+- **Cons:** Must handle undefined values, can't rely on field being present
+
+**Example:**
+```typescript
+// types.ts (server)
+export interface LocationData {
+  userId: string;
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+  speed: number | null;
+  heading: number | null;
+  motionState: 'still' | 'walking' | 'driving' | 'unknown';
+  timestamp: string; // ISO8601 from client
+  batteryPercent?: number; // [NEW] Optional for backward compatibility
 }
 ```
 
-**Implementation Pattern:**
-
 ```kotlin
-@Singleton
-class PermissionManager @Inject constructor(
-    @ApplicationContext private val context: Context
+// LocationUpdate.kt (Android)
+data class LocationUpdate(
+    val latitude: Double,
+    val longitude: Double,
+    val accuracy: Float,
+    val speed: Float?,
+    val heading: Float?,
+    val motionState: MotionState,
+    val timestamp: String,
+    val batteryPercent: Int? = null // [NEW] Optional, defaults to null
 ) {
-    // Callback for Activity to handle permission request UI
-    var requestPermissionCallback: ((Array<String>, (Map<String, Boolean>) -> Unit) -> Unit)? = null
-
-    fun hasAudioPermissions(): Boolean {
-        return ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.RECORD_AUDIO
-        ) == PackageManager.PERMISSION_GRANTED
-    }
-
-    fun hasLocationPermission(): Boolean {
-        return ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-    }
-
-    fun hasBackgroundLocationPermission(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.ACCESS_BACKGROUND_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
-        } else {
-            true // Not required on Android 9 and below
-        }
-    }
-
-    suspend fun requestAudioPermission(): Boolean = suspendCancellableCoroutine { continuation ->
-        val callback = requestPermissionCallback
-        if (callback == null) {
-            Log.e(TAG, "Permission request callback not set (Activity not ready)")
-            continuation.resume(false)
-            return@suspendCancellableCoroutine
-        }
-
-        callback(arrayOf(Manifest.permission.RECORD_AUDIO)) { results ->
-            continuation.resume(results[Manifest.permission.RECORD_AUDIO] == true)
-        }
-    }
-
-    suspend fun requestLocationPermissions(): Boolean = suspendCancellableCoroutine { continuation ->
-        val callback = requestPermissionCallback
-        if (callback == null) {
-            continuation.resume(false)
-            return@suspendCancellableCoroutine
-        }
-
-        // Incremental request: foreground first, then background
-        callback(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)) { results ->
-            if (results[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
-                // Foreground granted, now request background
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    callback(arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION)) { bgResults ->
-                        continuation.resume(bgResults[Manifest.permission.ACCESS_BACKGROUND_LOCATION] == true)
-                    }
-                } else {
-                    continuation.resume(true)
-                }
-            } else {
-                continuation.resume(false)
-            }
-        }
-    }
-
-    fun openAppSettings() {
-        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-            data = Uri.fromParts("package", context.packageName, null)
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
-        }
-        context.startActivity(intent)
-    }
-}
-```
-
-Source: [Android Permission Best Practices](https://developer.android.com/training/permissions/usage-notes)
-
-**Activity Integration:**
-
-```kotlin
-// MainActivity.kt
-@AndroidEntryPoint
-class MainActivity : ComponentActivity() {
-
-    @Inject lateinit var permissionManager: PermissionManager
-
-    private val permissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        currentPermissionCallback?.invoke(permissions)
-        currentPermissionCallback = null
-    }
-
-    private var currentPermissionCallback: ((Map<String, Boolean>) -> Unit)? = null
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-
-        // Wire permission request callback
-        permissionManager.requestPermissionCallback = { permissions, callback ->
-            currentPermissionCallback = callback
-            permissionLauncher.launch(permissions)
-        }
-
-        // ... existing Compose setup ...
-    }
-}
-```
-
-**ViewModel Usage:**
-
-```kotlin
-// ChannelListViewModel.kt
-fun onPttButtonPressed() {
-    viewModelScope.launch {
-        if (!permissionManager.hasAudioPermissions()) {
-            val granted = permissionManager.requestAudioPermission()
-            if (!granted) {
-                _uiState.update { it.copy(
-                    errorMessage = "Microphone permission required for PTT"
-                ) }
-                return@launch
-            }
-        }
-
-        // Permission granted, proceed with PTT
-        val targetChannelId = getHardwarePttTargetChannelId()
-        if (targetChannelId != null) {
-            pttManager.requestPtt(targetChannelId)
+    fun toJsonObject(): JsonObject {
+        return JsonObject().apply {
+            addProperty("latitude", latitude)
+            addProperty("longitude", longitude)
+            addProperty("accuracy", accuracy)
+            if (speed != null) addProperty("speed", speed)
+            if (heading != null) addProperty("heading", heading)
+            addProperty("motionState", motionState.name.lowercase())
+            addProperty("timestamp", timestamp)
+            if (batteryPercent != null) addProperty("batteryPercent", batteryPercent) // Only add if present
         }
     }
 }
 ```
 
-**First Launch Permission Prompt:**
+## Data Flow
 
-```kotlin
-// LoadingViewModel.kt
-fun checkAndRequestPermissions() {
-    viewModelScope.launch {
-        val missingPermissions = mutableListOf<String>()
-
-        if (!permissionManager.hasAudioPermissions()) {
-            missingPermissions.add("Microphone (for PTT)")
-        }
-        if (!permissionManager.hasLocationPermission()) {
-            missingPermissions.add("Location (for dispatch tracking)")
-        }
-
-        if (missingPermissions.isNotEmpty()) {
-            _uiState.update { it.copy(
-                showPermissionRationale = true,
-                requiredPermissions = missingPermissions
-            ) }
-        } else {
-            proceedToApp()
-        }
-    }
-}
-```
-
-### 4. Power Optimization Architecture
-
-**Goal:** Minimize battery drain for 24/7 pocket radio operation
-
-**Current Baseline (v3.0):** 5%/hour with screen off, foreground service, active WebSocket
-
-**Optimization Targets:**
-- Location tracking: 1-2%/hour additional (GENERAL mode with batching)
-- Network monitoring: Reduce polling frequency
-- Wake lock optimization: Use partial wake lock only when needed
-
-#### Strategy 1: Location Batching with WorkManager
-
-For GENERAL mode (60s updates), batch location updates instead of real-time transmission:
-
-```kotlin
-@Singleton
-class LocationBatchManager @Inject constructor(
-    @ApplicationContext private val context: Context,
-    private val locationManager: LocationManager
-) {
-    private val workManager = WorkManager.getInstance(context)
-
-    fun startBatchedTracking() {
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
-            .build()
-
-        val request = PeriodicWorkRequestBuilder<LocationUploadWorker>(
-            repeatInterval = 15,
-            repeatIntervalTimeUnit = TimeUnit.MINUTES
-        )
-            .setConstraints(constraints)
-            .setBackoffCriteria(
-                BackoffPolicy.EXPONENTIAL,
-                WorkRequest.MIN_BACKOFF_MILLIS,
-                TimeUnit.MILLISECONDS
-            )
-            .build()
-
-        workManager.enqueueUniquePeriodicWork(
-            "location_batch_upload",
-            ExistingPeriodicWorkPolicy.KEEP,
-            request
-        )
-    }
-}
-
-class LocationUploadWorker @Inject constructor(
-    context: Context,
-    params: WorkerParameters,
-    private val signalingClient: SignalingClient,
-    private val locationDatabase: LocationDatabase
-) : CoroutineWorker(context, params) {
-
-    override suspend fun doWork(): Result {
-        // Upload batched location updates
-        val pendingLocations = locationDatabase.getPendingLocations()
-
-        pendingLocations.forEach { location ->
-            try {
-                signalingClient.send(SignalingType.LOCATION_UPDATE, location.toMap())
-                locationDatabase.markUploaded(location.id)
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to upload location", e)
-            }
-        }
-
-        return Result.success()
-    }
-}
-```
-
-Source: [Android WorkManager Battery Optimization](https://developer.android.com/develop/background-work/background-tasks/optimize-battery)
-
-#### Strategy 2: Network Quality Polling Reduction
-
-Current: 5-second consumer stats polling (Phase 12-02)
-
-Optimization: Increase to 15 seconds for idle channels, 5 seconds for active speakers
-
-```kotlin
-// ChannelRepository.kt
-private fun startNetworkQualityMonitoring(channelId: String, consumerId: String) {
-    scope.launch {
-        while (isActive) {
-            // Dynamic polling interval based on activity
-            val interval = if (isChannelActivelyTransmitting(channelId)) {
-                5_000L // Active: 5s
-            } else {
-                15_000L // Idle: 15s
-            }
-
-            delay(interval)
-
-            val stats = mediasoupClient.getConsumerStats(consumerId)
-            _networkQuality.update { it + (channelId to stats?.indicator.orEmpty()) }
-        }
-    }
-}
-```
-
-#### Strategy 3: Wake Lock Scoping
-
-Current: Foreground service holds wake lock continuously
-
-Optimization: Release wake lock when no active audio (no speakers for >30s)
-
-```kotlin
-// ChannelMonitoringService.kt
-private var wakeLock: PowerManager.WakeLock? = null
-private var lastSpeakerActivityMs: Long = System.currentTimeMillis()
-private val wakeLockScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
-fun startWakeLockMonitoring() {
-    wakeLockScope.launch {
-        while (isActive) {
-            delay(10_000L) // Check every 10s
-
-            val idleDuration = System.currentTimeMillis() - lastSpeakerActivityMs
-            if (idleDuration > 30_000L) {
-                // No speaker activity for 30s, release wake lock
-                wakeLock?.let {
-                    if (it.isHeld) {
-                        it.release()
-                        Log.d(TAG, "Released wake lock (idle for 30s)")
-                    }
-                }
-            }
-        }
-    }
-}
-
-fun onSpeakerActivity() {
-    lastSpeakerActivityMs = System.currentTimeMillis()
-
-    // Acquire wake lock on speaker activity
-    wakeLock?.let {
-        if (!it.isHeld) {
-            it.acquire(10*60*1000L /*10 minutes max*/)
-            Log.d(TAG, "Acquired wake lock (speaker activity)")
-        }
-    }
-}
-```
-
-**Battery Target (v4.0):**
-- Base (screen off, monitoring): 5%/hour (existing)
-- + Location tracking (GENERAL): +1%/hour
-- + Network quality polling reduction: -0.5%/hour
-- + Wake lock optimization: -1%/hour
-- **Total: ~4.5%/hour** (22+ hours of operation)
-
-### 5. Security Hardening Architecture
-
-**Goal:** Production-ready security audit compliance
-
-#### TLS Certificate Validation
-
-**Current:** OkHttpClient uses default TLS with system CA trust
-
-**Hardening:** Add certificate transparency enforcement, optional pinning
-
-```kotlin
-// AppModule.kt
-@Provides
-@Singleton
-fun provideOkHttpClient(cookieJar: SessionCookieJar): OkHttpClient {
-    val certificatePinner = CertificatePinner.Builder()
-        // Optional: Pin server certificate for MITM protection
-        // .add("your-domain.com", "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
-        .build()
-
-    return OkHttpClient.Builder()
-        .cookieJar(cookieJar)
-        .certificatePinner(certificatePinner)
-        .connectionSpecs(listOf(ConnectionSpec.MODERN_TLS))
-        .addInterceptor(loggingInterceptor)
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .build()
-}
-```
-
-**Note:** Certificate pinning NOT recommended for production by Google (operational risk during certificate rotation). Use only if required by client security policy.
-
-Source: [Android TLS Security](https://developer.android.com/training/articles/security-ssl)
-
-#### WebSocket TLS Enforcement
-
-```kotlin
-// SignalingClient.kt
-fun connect(url: String, token: String) {
-    // Enforce wss:// (TLS WebSocket)
-    if (!url.startsWith("wss://")) {
-        throw IllegalArgumentException("WebSocket URL must use wss:// (TLS)")
-    }
-
-    // ... existing connection logic ...
-}
-```
-
-#### Secure Token Storage
-
-Current: DataStore (encrypted at rest by Android)
-
-Additional: Use EncryptedSharedPreferences for JWT tokens
-
-```kotlin
-@Singleton
-class SecureTokenManager @Inject constructor(
-    @ApplicationContext private val context: Context
-) {
-    private val masterKey = MasterKey.Builder(context)
-        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-        .build()
-
-    private val encryptedPrefs = EncryptedSharedPreferences.create(
-        context,
-        "secure_tokens",
-        masterKey,
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-    )
-
-    fun saveToken(token: String) {
-        encryptedPrefs.edit().putString("jwt_token", token).apply()
-    }
-
-    fun getToken(): String? {
-        return encryptedPrefs.getString("jwt_token", null)
-    }
-}
-```
-
-## Build Order and Dependencies
-
-### Dependency Graph
+### Real-Time Location Broadcast Flow
 
 ```
-Phase 16: Permission Management (no dependencies)
-  ↓
-Phase 17: Location Tracking (depends on PermissionManager)
-  ↓
-Phase 18: Audio Reliability (independent, can run parallel with 17)
-  ↓
-Phase 19: Power Optimization (depends on LocationManager, audio fixes)
-  ↓
-Phase 20: Security Hardening (independent, can run parallel with 18-19)
+[Android LocationManager]
+    ↓ (every 30s-5min based on motion)
+getBatteryLevel() → LOCATION_UPDATE with batteryPercent
+    ↓ (WebSocket to server)
+[Server SignalingHandler]
+    ↓ (validate, store in LocationStore)
+LocationBroadcaster.broadcastLocation()
+    ↓ (filter to dispatch users only)
+sendToDispatchUsers({ type: 'location-broadcast', data: { userId, lat, lng, battery%, ... }})
+    ↓ (WebSocket to all dispatch console clients)
+[Web DispatchConsole]
+    ↓ (useLocationUpdates hook)
+queueLocationUpdate(userId, locationData)
+    ↓ (batched with requestAnimationFrame)
+LocationContext.setPositions(Map<userId, LocationData>)
+    ↓ (React re-render)
+DispatchMap renders UserMarker[]
+    ↓ (Leaflet updates DOM)
+Map shows updated marker position with battery badge
 ```
 
-### Suggested Phase Structure
+### Initial Load Flow (Query Historical Positions)
 
-**Phase 16: Permission Management Foundation**
-- Plan 1: PermissionManager @Singleton, MainActivity integration, first-launch flow
-- Plan 2: Permission rationale dialogs, settings redirect for denied permissions
+```
+[Web DispatchConsole mounts]
+    ↓ (useEffect on mount)
+WebSocket send({ type: 'location-query' })
+    ↓
+[Server LocationBroadcaster]
+    ↓
+getAllLatestPositions() → LocationPosition[] with isStale flags
+    ↓
+sendToDispatchUser({ type: 'location-snapshot', positions: [...] })
+    ↓
+[Web LocationContext]
+    ↓
+setPositions(new Map(positions.map(p => [p.userId, p])))
+    ↓
+DispatchMap renders all markers (including stale ones with opacity)
+```
 
-**Phase 17: Location Tracking**
-- Plan 1: LocationManager @Singleton, FusedLocationProviderClient, adaptive modes
-- Plan 2: Server signaling type LOCATION_UPDATE, Redis pub/sub, dispatch web UI map overlay
+### Split Layout Render Flow
 
-**Phase 18: Audio Reliability Fixes**
-- Plan 1: WebRTC jitter buffer tuning, Opus FEC configuration, state machine hardening
-- Plan 2: Produce retry logic, transport health monitoring, error recovery
+```
+[DispatchConsole.jsx]
+    ↓
+<div className="dispatch-console--split">
+  <div className="dispatch-console__channels-panel">
+    <ChannelProvider> {/* Existing context */}
+      <ChannelGrid {...props} />
+    </ChannelProvider>
+  </div>
+  <div className="dispatch-console__map-panel">
+    <LocationProvider> {/* New separate context */}
+      <DispatchMap />
+    </LocationProvider>
+  </div>
+</div>
+```
 
-**Phase 19: Power Optimization**
-- Plan 1: Location batching with WorkManager, network quality polling reduction
-- Plan 2: Wake lock scoping, battery profiling validation
+## Component Responsibilities
 
-**Phase 20: Security Audit and Hardening**
-- Plan 1: TLS enforcement, secure token storage, certificate transparency
-- Plan 2: Full security audit (penetration testing, dependency scan), documentation
+| Component | Responsibility | Integration Points |
+|-----------|----------------|-------------------|
+| **DispatchConsole** (MODIFIED) | Wrap both panels in CSS Grid split layout, manage shared WebSocket connection | Passes ws instance to both ChannelGrid and DispatchMap |
+| **LocationProvider** (NEW) | Manage Map<userId, LocationData>, batch updates with rAF, expose useLocation hook | WebSocket listener for LOCATION_BROADCAST, LOCATION_SNAPSHOT |
+| **DispatchMap** (NEW) | Leaflet MapContainer with TileLayer, render UserMarker[] from positions Map | Consumes LocationContext.positions |
+| **UserMarker** (NEW) | Leaflet Marker with custom DivIcon, CSS classes for motion state/stale/battery | Receives LocationPosition props |
+| **MapController** (NEW) | useMap consumer for side effects: auto-fit bounds, handle query/broadcast | Calls map.fitBounds() on initial load |
+| **useLocationUpdates** (NEW) | WebSocket message listener hook, parse LOCATION_BROADCAST and queue updates | Calls LocationContext.queueLocationUpdate |
+| **useMapBounds** (NEW) | Auto-fit all markers or remember last zoom/center in localStorage | Calls map.fitBounds() or map.setView() |
+| **LocationBroadcaster** (MODIFIED) | Add batteryPercent to broadcast message schema | Server-side component, no React integration |
+| **LocationManager.kt** (MODIFIED) | Include getBatteryLevel() in LOCATION_UPDATE message | Android client, sends to server WebSocket |
 
-## Component Boundaries
+## Scaling Considerations
 
-| Component | What It Owns | What It Delegates |
-|-----------|--------------|-------------------|
-| **LocationManager** | FusedLocationProviderClient lifecycle, location update batching, mode switching | Permission checks (to PermissionManager), server transmission (to SignalingClient) |
-| **PermissionManager** | Permission state checking, request coordination, rationale display | Actual request UI (to Activity via callback) |
-| **MediasoupClient** | WebRTC Device, transports, producers/consumers, jitter buffer tuning | Permission checks (implicit via Android), network state (to NetworkMonitor) |
-| **PttManager** | PTT state machine, produce retry logic, duration tracking | Audio feedback (to TonePlayer/HapticFeedback via callbacks), permissions (to PermissionManager) |
-| **ChannelRepository** | Multi-channel state, speaker tracking, consumer management | PTT logic (to PttManager), audio routing (to AudioRouter), location (to LocationManager) |
+| Scale | Architecture Adjustments |
+|-------|--------------------------|
+| 10-50 users | Current architecture sufficient. Real-time updates with rAF batching handles 50 updates/sec smoothly at 60fps. Map renders all markers (no clustering needed). |
+| 50-200 users | Add viewport-based rendering: only render markers within map bounds + small buffer. Remove markers outside viewport to reduce DOM nodes. Still no clustering needed if using DivIcon efficiently. |
+| 200-500 users | Implement marker clustering (react-leaflet-cluster or supercluster). Batch updates at server (LocationBroadcaster sends digest every 2-5 seconds instead of individual broadcasts). Consider Canvas rendering for marker icons (faster than DivIcon but less flexible styling). |
+| 500+ users | Move to Canvas rendering with manual marker drawing (Leaflet.Canvas or custom layer). Server-side clustering (only send cluster centroids). Add map-based filters (show only DRIVING users, or by team). Consider WebSocket message compression (already using notepack.io for PTT). |
 
-## Anti-Patterns to Avoid
+### Scaling Priorities
 
-### Anti-Pattern 1: Permission Requests in @Singleton Constructors
-**What goes wrong:** Singletons initialize before Activity exists, permission dialogs crash
-**Prevention:** Use lazy permission checks with PermissionManager callback pattern
-**Detection:** App crashes with "Can't request permissions before Activity created"
+1. **First bottleneck (200+ markers):** DOM node count. Each DivIcon adds HTML to DOM. **Fix:** Add clustering with react-leaflet-cluster, shows count badge for nearby markers.
 
-### Anti-Pattern 2: Location Updates on Main Thread
-**What goes wrong:** ANR (application not responding) during location fix
-**Prevention:** Always use Dispatchers.IO for FusedLocationProviderClient calls
-**Detection:** StrictMode warnings, ANR crashes
+2. **Second bottleneck (500+ broadcasts/sec):** WebSocket message flood. With 500 users moving, dispatch console receives 500 updates every 30-60 seconds = ~10/sec average, but bursts higher. **Fix:** Server-side aggregation (LocationBroadcaster batches updates every 2 seconds, sends digest array).
 
-### Anti-Pattern 3: Circular Dependencies Between LocationManager and ChannelRepository
-**What goes wrong:** Hilt DI fails with cycle detection
-**Prevention:** LocationManager depends on SignalingClient (NOT ChannelRepository), ChannelRepository depends on LocationManager
-**Detection:** Hilt compilation error: "Dependency cycle detected"
+## Anti-Patterns
 
-### Anti-Pattern 4: Synchronous Permission Requests in Suspend Functions
-**What goes wrong:** Coroutine blocks indefinitely waiting for user action
-**Prevention:** Use suspendCancellableCoroutine for permission callbacks
-**Detection:** App freezes on permission request, no timeout
+### Anti-Pattern 1: Extending ChannelContext with Location State
 
-### Anti-Pattern 5: Certificate Pinning Without Backup Pins
-**What goes wrong:** Certificate rotation breaks app, requires APK redeployment
-**Prevention:** Include backup pins, use certificate transparency instead
-**Detection:** All API calls fail after certificate rotation
+**What people do:** Add location data to existing ChannelContext to avoid creating a second provider.
 
-## Scalability Considerations
+**Why it's wrong:** ChannelContext updates trigger re-renders of all DispatchChannelCards. Adding high-frequency location updates causes channel cards to re-render unnecessarily, degrading PTT UI responsiveness. "When a React Context.Provider gets a new value, all the components that consume that value are updated and have to render."
 
-| Concern | At 100 users | At 10K users | At 1M users |
-|---------|--------------|--------------|-------------|
-| Location updates | 100 updates/min, trivial server load | 10K updates/min, batch to Redis every 5s | 1M updates/min, use time-series DB (InfluxDB), WebSocket broadcast only to active dispatch consoles |
-| Audio jitter buffer | 40ms default sufficient | 80ms target for mobile variance | Consider dedicated edge servers per region to reduce RTT |
-| Permission state | In-memory per device | In-memory per device | In-memory per device (no server-side permission state) |
-| Battery consumption | 4.5%/hour acceptable | Same (per-device concern) | Same (per-device concern) |
+**Do this instead:** Separate LocationProvider consumed only by map components. Channels and locations are independent concerns with different update frequencies.
+
+### Anti-Pattern 2: Individual setState Calls for Each Location Update
+
+**What people do:** Call setPositions() immediately in WebSocket message handler for each LOCATION_BROADCAST.
+
+**Why it's wrong:** Triggers React re-render for every WebSocket message. With 10-50 users sending updates, causes 10-50 re-renders/sec, layout thrashing, dropped frames, janky map panning.
+
+**Do this instead:** Batch updates with requestAnimationFrame. Queue updates in array, apply all on next frame (max 60 renders/sec). Reduces re-renders by 10-50x with 16ms latency trade-off.
+
+### Anti-Pattern 3: Using Image Icons for Motion State Indicators
+
+**What people do:** Pre-create 12 PNG marker icons (STILL/WALKING/DRIVING × fresh/stale × low-battery/normal), load with L.icon().
+
+**Why it's wrong:** Inflexible (CSS theme changes require regenerating PNGs), larger bundle size, no smooth animations, hard to add dynamic text (username, battery %), no pseudo-elements for pulse effects.
+
+**Do this instead:** Use L.divIcon() with className. CSS handles motion state colors, stale opacity, battery badge, username label, pulse animations. Theme changes are pure CSS. Battery % is dynamic HTML.
+
+### Anti-Pattern 4: Fetching All Historical Locations on Mount
+
+**What people do:** Query LocationStore for all historical positions (24 hours of data) on DispatchConsole mount to show "trails."
+
+**Why it's wrong:** Sends MB of data over WebSocket, slows initial load, clutters map with stale positions (users not currently active). LocationStore grows unbounded if not pruned.
+
+**Do this instead:** Query only latest position per user (LocationBroadcaster.getAllLatestPositions()). Mark stale (> 5 minutes) with isStale flag and render with opacity. If trails are desired later, add as opt-in feature with time range selector.
+
+### Anti-Pattern 5: Tight Coupling Map to Channel Selection
+
+**What people do:** Click marker → auto-join that user's channel, or click channel card → center map on user.
+
+**Why it's wrong:** Confuses dispatch monitoring (passive observation) with active participation. Dispatch users monitor all channels simultaneously; auto-joining breaks multi-channel monitoring. Tight coupling makes features harder to test independently.
+
+**Do this instead:** Keep map and channels independent. Marker click shows popup with user details (battery, last update, motion state). Optional: highlight user's channel card with subtle border, but don't auto-join. Map is location awareness, channels are audio monitoring.
+
+## Integration Points
+
+### External Services
+
+| Service | Integration Pattern | Notes |
+|---------|---------------------|-------|
+| **Leaflet** | React component wrappers via react-leaflet | MapContainer must be parent of all Leaflet components. useMap hook only works inside MapContainer descendants. |
+| **OpenStreetMap Tiles** | TileLayer with attribution | `https://tile.openstreetmap.org/{z}/{x}/{y}.png` — free tier, rate-limited. Consider Mapbox/Maptiler for production. |
+| **WebSocket (existing)** | Shared instance passed to LocationProvider | Reuse existing ws from DispatchConsole, don't create second connection. |
+
+### Internal Boundaries
+
+| Boundary | Communication | Notes |
+|----------|---------------|-------|
+| **DispatchConsole ↔ LocationProvider** | WebSocket instance prop, no state coupling | DispatchConsole creates ws, passes to LocationProvider. Providers are siblings. |
+| **LocationProvider ↔ DispatchMap** | React Context (useLocation hook) | DispatchMap consumes positions Map, doesn't write to it. |
+| **DispatchMap ↔ UserMarker** | Props (LocationPosition) | UserMarker is pure component, receives position data via props. |
+| **Server LocationBroadcaster ↔ Web LocationContext** | WebSocket messages (LOCATION_BROADCAST, LOCATION_SNAPSHOT) | Server pushes updates, client pulls initial snapshot. No REST API. |
+| **Android LocationManager ↔ Server** | WebSocket LOCATION_UPDATE message | Android includes batteryPercent (optional field). Server validates, stores, broadcasts. |
+
+## Build Order (Dependency-Driven)
+
+Integration should follow dependency order to avoid breaking changes and enable incremental testing:
+
+### Phase 1: Server + Android (Backend-First)
+
+**Goal:** Extend protocol with battery % field, validate backward compatibility.
+
+1. **Server: Extend LocationData type** (types.ts)
+   - Add `batteryPercent?: number` to LocationData interface
+   - No breaking changes (optional field)
+
+2. **Server: Modify LocationBroadcaster** (LocationBroadcaster.ts)
+   - Include batteryPercent in broadcast message if present
+   - Test: Old clients ignore unknown field, new clients receive it
+
+3. **Android: Add battery % to LocationUpdate** (LocationManager.kt)
+   - Call getBatteryLevel() in emitLocationUpdate()
+   - Add batteryPercent to LOCATION_UPDATE JSON
+   - Test: Verify server receives and stores battery %
+
+**Deliverable:** Protocol extended, backward-compatible. Server broadcasts battery %.
+
+### Phase 2: Web Dependencies (React Setup)
+
+**Goal:** Install Leaflet, create split layout without breaking existing UI.
+
+4. **Install dependencies** (package.json)
+   - `npm install react-leaflet leaflet`
+   - `npm install -D @types/leaflet` (if using TypeScript)
+
+5. **Add CSS Grid split layout** (connectvoice.css, DispatchConsole.jsx)
+   - Define `.dispatch-console--split` grid layout
+   - Wrap existing ChannelGrid in `.dispatch-console__channels-panel`
+   - Add empty `.dispatch-console__map-panel` div (placeholder)
+   - Test: Existing channel grid still works, map panel shows as empty space
+
+**Deliverable:** Layout structure ready, no map yet. Channels work as before.
+
+### Phase 3: Map Foundation (Leaflet Integration)
+
+**Goal:** Render basic Leaflet map with OpenStreetMap tiles.
+
+6. **Create DispatchMap component** (DispatchMap.jsx)
+   - MapContainer with default center/zoom
+   - TileLayer with OpenStreetMap
+   - Test: Map renders, can pan/zoom
+
+7. **Add to DispatchConsole** (DispatchConsole.jsx)
+   - Render DispatchMap in map panel
+   - Test: Map visible alongside channel grid
+
+**Deliverable:** Static map displays, no markers yet.
+
+### Phase 4: Location State (Context + WebSocket)
+
+**Goal:** Manage location state separately from channel state.
+
+8. **Create LocationContext** (LocationContext.jsx)
+   - LocationProvider with positions Map state
+   - queueLocationUpdate with requestAnimationFrame batching
+   - useLocation hook
+   - Test: Context mounts, no errors
+
+9. **Create useLocationUpdates hook** (useLocationUpdates.js)
+   - Listen for LOCATION_BROADCAST WebSocket messages
+   - Parse and queue updates via LocationContext
+   - Test: Mock WebSocket messages update positions Map
+
+10. **Implement LOCATION_QUERY on mount** (MapController.jsx)
+    - Send LOCATION_QUERY on DispatchMap mount
+    - Handle LOCATION_SNAPSHOT response
+    - Populate initial positions Map
+    - Test: Initial positions load on page refresh
+
+**Deliverable:** Location state management works, WebSocket integration complete.
+
+### Phase 5: Marker Rendering (DivIcon + Styling)
+
+**Goal:** Display user markers on map with motion state indicators.
+
+11. **Create UserMarker component** (UserMarker.jsx)
+    - Leaflet Marker with DivIcon
+    - Motion state CSS classes
+    - Stale indicator (opacity)
+    - Battery % badge
+    - Popup with user details
+    - Test: Markers render, click shows popup
+
+12. **Add marker CSS** (connectvoice.css)
+    - `.user-marker`, `.marker-pin` base styles
+    - `.marker--driving`, `.marker--walking`, `.marker--still` colors
+    - `.marker--stale` opacity
+    - `.marker--low-battery` red badge
+    - `@keyframes pulse-driving` animation
+    - Test: Markers styled correctly, animations smooth
+
+13. **Render markers in DispatchMap** (DispatchMap.jsx)
+    - Map over positions from LocationContext
+    - Render UserMarker for each position
+    - Test: Multiple markers display, update in real-time
+
+**Deliverable:** Markers render with motion state, battery %, stale indicators.
+
+### Phase 6: Polish + UX (Auto-Fit, Performance)
+
+**Goal:** Improve map UX, optimize performance.
+
+14. **Create MapController for auto-fit** (MapController.jsx)
+    - useMap hook to access Leaflet map instance
+    - fitBounds on initial load (all markers)
+    - Remember zoom/center in localStorage
+    - Test: Map auto-fits markers, remembers zoom on refresh
+
+15. **Add useMapBounds hook** (useMapBounds.js)
+    - Toggle between auto-fit and manual control
+    - Persist preference in localStorage
+    - Test: User can disable auto-fit, manually zoom/pan
+
+16. **Performance testing** (existing components)
+    - Simulate 50+ users sending updates
+    - Verify rAF batching keeps 60fps
+    - Check React DevTools profiler for unnecessary re-renders
+    - Test: Map smooth with 50 simultaneous updates
+
+**Deliverable:** Production-ready map with good UX and performance.
+
+## Dependencies Summary
+
+```
+Server batteryPercent (Phase 1)
+    ↓
+Android batteryPercent (Phase 1)
+    ↓
+Web layout split (Phase 2)
+    ↓
+Web map foundation (Phase 3)
+    ↓
+Web LocationContext + WebSocket (Phase 4)
+    ↓
+Web markers + styling (Phase 5)
+    ↓
+Web auto-fit + performance (Phase 6)
+```
+
+**Why this order:**
+- Server/Android first: Ensures data is available before web consumes it
+- Layout split before map: Prevents breaking existing UI, validates CSS structure
+- Map foundation before state: Tests Leaflet integration in isolation
+- State before markers: Markers need positions to render
+- Polish last: Performance tuning requires full stack to test end-to-end
 
 ## Sources
 
-### Location Tracking
-- [About background location and battery life](https://developer.android.com/develop/sensors-and-location/location/battery)
-- [Optimize location use for real-world scenarios](https://developer.android.com/develop/sensors-and-location/location/battery/scenarios)
-- [Fused Location Provider API](https://developers.google.com/location-context/fused-location-provider)
-- [Request location permissions](https://developer.android.com/develop/sensors-and-location/location/permissions)
-- [Request background location](https://developer.android.com/develop/sensors-and-location/location/permissions/background)
-
-### Audio Reliability
-- [How WebRTC's NetEQ Jitter Buffer Provides Smooth Audio](https://webrtchacks.com/how-webrtcs-neteq-jitter-buffer-provides-smooth-audio/)
-- [WebRTC and Buffers](https://getstream.io/resources/projects/webrtc/advanced/buffers/)
-- [mediasoup Opus FEC Issue](https://github.com/versatica/mediasoup/issues/234)
-- [mediasoup API Documentation](https://mediasoup.org/documentation/v3/mediasoup/api/)
-
-### Permission Management
-- [App permissions best practices](https://developer.android.com/training/permissions/usage-notes)
-- [Request runtime permissions](https://developer.android.com/training/permissions/requesting)
-- [Permissions on Android](https://developer.android.com/guide/topics/permissions/overview)
-
-### Power Optimization
-- [Optimize battery use for task scheduling APIs](https://developer.android.com/develop/background-work/background-tasks/optimize-battery)
-- [Android Performance Optimization & Battery Efficiency Guide](https://www.oneclickitsolution.com/centerofexcellence/android/android-performance-optimization-battery-efficiency-guide)
-- [Battery Optimization for Android Apps](https://blog.mindorks.com/battery-optimization-for-android-apps-f4ef6170ff70)
-
-### Security
-- [Security with network protocols](https://developer.android.com/training/articles/security-ssl)
-- [Android SSL Certificate Pinning](https://nextnative.dev/blog/android-ssl-certificate-pinning)
-- [Secure Android Apps with TLS/SSL Pinning](https://proandroiddev.com/secure-android-apps-with-tls-ssl-pinning-c087fc7ef828)
-
-### Dispatch Integration
-- [Real-Time Location Tracking APIs](https://www.pubnub.com/how-to/explore-real-time-geolocation-solutions/)
-- [Implementing Real-Time Location Tracking with WebSockets](https://slaptijack.com/programming/implementing-real-time-location-tracking-with-websockets.html)
+- [React Leaflet Documentation](https://react-leaflet.js.org/)
+- [React Leaflet Introduction](https://react-leaflet.js.org/docs/start-introduction/)
+- [Optimizing Leaflet Performance with Large Number of Markers](https://medium.com/@silvajohnny777/optimizing-leaflet-performance-with-a-large-number-of-markers-0dea18c2ec99)
+- [Leaflet Realtime Plugin](https://github.com/perliedman/leaflet-realtime)
+- [Leaflet Developer's Guide to High-Performance Map Visualizations in React](https://andrejgajdos.com/leaflet-developer-guide-to-high-performance-map-visualizations-in-react/)
+- [React Context is Not a State Management Tool](https://blog.isquaredsoftware.com/2021/01/context-redux-differences/)
+- [Application State Management with React](https://kentcdodds.com/blog/application-state-management-with-react)
+- [React State Management: Redux vs Context API](https://codeparrot.ai/blogs/react-state-management-redux-vs-context-api)
+- [MDN: Realizing Common Layouts Using Grids](https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Grid_layout/Common_grid_layouts)
+- [CSS Grid Complete Guide](https://css-tricks.com/snippets/css/complete-guide-grid/)
+- [Creating Custom Leaflet Marker Icon with DivIcon](https://www.drupal.org/node/2554137)
+- [Leaflet Custom Icons Example](https://leafletjs.com/examples/custom-icons/)
+- [Geoapify: Map Marker Icon with HTML and CSS](https://www.geoapify.com/create-custom-map-marker-icon/)
+- [Optimizing Real-Time Performance: WebSockets and React.js Part II](https://medium.com/@SanchezAllanManuel/optimizing-real-time-performance-websockets-and-react-js-integration-part-ii-4a3ada319630)
+- [Mastering requestAnimationFrame in React](https://medium.com/@mohantaankit2002/mastering-requestanimationframe-and-cancelanimationframe-in-react-31bbee576137)
+- [How React 18 Improves Application Performance](https://vercel.com/blog/how-react-18-improves-application-performance)
 
 ---
-*Last updated: 2026-02-15*
+*Architecture research for: Dispatch Map Integration*
+*Researched: 2026-02-16*
