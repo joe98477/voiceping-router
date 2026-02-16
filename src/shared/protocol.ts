@@ -53,6 +53,7 @@ export enum SignalingType {
   LOCATION_BATCH = 'location-batch',
   LOCATION_QUERY = 'location-query',
   LOCATION_BROADCAST = 'location-broadcast',
+  LOW_BATTERY_ALERT = 'low-battery-alert',
 }
 
 /**

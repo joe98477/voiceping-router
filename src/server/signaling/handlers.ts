@@ -31,7 +31,7 @@ import { config } from '../config';
 import { ClientContext } from './websocketServer';
 import { LocationStore } from '../location/LocationStore';
 import { LocationBroadcaster } from '../location/LocationBroadcaster';
-import { validateLocation, isValidMotionState } from '../location/types';
+import { validateLocation, isValidMotionState, isValidNetworkType } from '../location/types';
 
 const logger = createLogger('SignalingHandlers');
 
@@ -1002,7 +1002,18 @@ export class SignalingHandlers {
         return;
       }
 
-      const { latitude, longitude, accuracy, speed, heading, motionState, timestamp } = message.data as {
+      const {
+        latitude,
+        longitude,
+        accuracy,
+        speed,
+        heading,
+        motionState,
+        timestamp,
+        batteryPercentage,
+        powerSaveMode,
+        networkType,
+      } = message.data as {
         latitude: number;
         longitude: number;
         accuracy: number;
@@ -1010,6 +1021,9 @@ export class SignalingHandlers {
         heading: number | null;
         motionState: string;
         timestamp: string;
+        batteryPercentage?: number | null;
+        powerSaveMode?: boolean | null;
+        networkType?: string | null;
       };
 
       // Validate lat/lng
@@ -1025,6 +1039,16 @@ export class SignalingHandlers {
         return;
       }
 
+      // Validate network type if provided
+      let validatedNetworkType: 'wifi' | 'cellular' | null = null;
+      if (networkType !== null && networkType !== undefined) {
+        if (isValidNetworkType(networkType)) {
+          validatedNetworkType = networkType;
+        } else {
+          logger.warn(`Invalid network type received: ${networkType}, setting to null`);
+        }
+      }
+
       const locationData = {
         userId: ctx.userId,
         latitude,
@@ -1034,6 +1058,9 @@ export class SignalingHandlers {
         heading,
         motionState,
         timestamp,
+        batteryPercentage: batteryPercentage ?? null,
+        powerSaveMode: powerSaveMode ?? null,
+        networkType: validatedNetworkType,
       };
 
       // Store in SQLite
@@ -1071,6 +1098,9 @@ export class SignalingHandlers {
           heading: number | null;
           motionState: string;
           timestamp: string;
+          batteryPercentage?: number | null;
+          powerSaveMode?: boolean | null;
+          networkType?: string | null;
         }>;
       };
 
@@ -1093,6 +1123,16 @@ export class SignalingHandlers {
           continue;
         }
 
+        // Validate network type if provided
+        let validatedNetworkType: 'wifi' | 'cellular' | null = null;
+        if (update.networkType !== null && update.networkType !== undefined) {
+          if (isValidNetworkType(update.networkType)) {
+            validatedNetworkType = update.networkType;
+          } else {
+            logger.warn(`Invalid network type in batch: ${update.networkType}, setting to null`);
+          }
+        }
+
         validUpdates.push({
           userId: ctx.userId,
           latitude: update.latitude,
@@ -1102,6 +1142,9 @@ export class SignalingHandlers {
           heading: update.heading,
           motionState: update.motionState,
           timestamp: update.timestamp,
+          batteryPercentage: update.batteryPercentage ?? null,
+          powerSaveMode: update.powerSaveMode ?? null,
+          networkType: validatedNetworkType,
         });
       }
 

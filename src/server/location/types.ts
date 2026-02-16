@@ -11,6 +11,9 @@ export interface LocationData {
   heading: number | null;
   motionState: 'still' | 'walking' | 'driving' | 'unknown';
   timestamp: string; // ISO8601 from client
+  batteryPercentage: number | null; // 0-100, null means unavailable
+  powerSaveMode: boolean | null; // Android battery saver on/off, null means unavailable
+  networkType: 'wifi' | 'cellular' | null; // simplified network classification, null means unavailable
 }
 
 /**
@@ -45,4 +48,11 @@ export function validateLocation(lat: number, lng: number): string | null {
  */
 export function isValidMotionState(state: string): state is LocationData['motionState'] {
   return ['still', 'walking', 'driving', 'unknown'].includes(state);
+}
+
+/**
+ * Validate network type value
+ */
+export function isValidNetworkType(type: string): type is NonNullable<LocationData['networkType']> {
+  return ['wifi', 'cellular'].includes(type);
 }
