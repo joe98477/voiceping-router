@@ -77,7 +77,20 @@ Reliable, secure real-time audio communication for coordinating 1000+ distribute
 
 ### Active
 
-(No active milestone — all 4 milestones shipped)
+## Current Milestone: v5.0 Dispatch Map View
+
+**Goal:** Add real-time interactive map to the dispatch console showing field worker locations, with configurable status popups and battery telemetry.
+
+**Target features:**
+- Split dispatch layout (channels/PTT left, map right)
+- Leaflet map with Esri World Imagery satellite tiles + layer switching
+- Real-time user markers (radio icon + username) via LOCATION_BROADCAST
+- Initial position load via LOCATION_QUERY
+- Hover popup with full status card (location, channel, PTT, battery, motion)
+- Configurable popup fields in dispatch settings
+- Battery % telemetry (Android → server → web, backward-compatible protocol extension)
+- Stale marker visual treatment (>5 min no update)
+- Interactive zoom, pan, map controls
 
 ### Out of Scope
 
@@ -96,7 +109,7 @@ Reliable, secure real-time audio communication for coordinating 1000+ distribute
 
 ### Current State
 
-Four milestones shipped. Production-hardened PTT communications platform with server-side mediasoup SFU, React web UI, native Android client with real WebRTC audio, adaptive location tracking, TLS security, and power optimization. 20 phases, 73 plans executed across all milestones.
+Four milestones shipped. Production-hardened PTT communications platform with server-side mediasoup SFU, React web UI, native Android client with real WebRTC audio, adaptive location tracking, TLS security, and power optimization. 20 phases, 73 plans executed across all milestones. Location data pipeline fully operational (Android → server SQLite → LOCATION_BROADCAST to dispatch clients) but web UI has no location consumption yet.
 
 **Server:** ~14,187 LOC TypeScript — Node.js v24, mediasoup 3.19, Redis, PostgreSQL/Prisma, SQLite (location), Docker deployment
 **Android:** ~12,877 LOC Kotlin — Jetpack Compose, Hilt DI, Room database, Media3, libmediasoup-android 0.21.0, ~100 source files
@@ -117,7 +130,7 @@ Four milestones shipped. Production-hardened PTT communications platform with se
 
 - **Platform:** Android 8+ (API 26) — covers ~95% of devices
 - **Stack:** Server: Node.js/TypeScript/mediasoup. Android: Kotlin/Compose/Hilt. Web: React/Vite
-- **Backend:** Android app is a pure client consuming existing WebSocket protocol (minimal server changes)
+- **Backend:** Clients consume existing WebSocket protocol; protocol extensions must be backward-compatible (additive fields only)
 - **Latency:** 100-300ms target for PTT activation to audio
 - **Background:** Foreground service with partial wake lock for pocket radio mode
 - **Channels:** Max 5 simultaneous monitored channels per general user (bandwidth constraint)
@@ -166,5 +179,10 @@ Four milestones shipped. Production-hardened PTT communications platform with se
 | Location multiplier cascade (2x/4x) | Coordinated power reduction across subsystems | ✓ Good — gradual recovery |
 | Skip battery profiling | User decision, all optimizations implemented | ✓ Good — deferred validation |
 
+| Leaflet + Esri World Imagery for dispatch map | Free, no API key, high quality satellite tiles, lightweight | — Pending |
+| OpenStreetMap over Google Maps | No API key costs, free unlimited usage, good enough satellite via Esri | — Pending |
+| Battery % as additive protocol field | Backward-compatible — old clients omit field, server/web handle missing gracefully | — Pending |
+| Cross-component stability constraint | v5.0 touches server, Android, web — all protocol changes must be backward-compatible | — Pending |
+
 ---
-*Last updated: 2026-02-16 after v4.0 milestone*
+*Last updated: 2026-02-16 after v5.0 milestone start*

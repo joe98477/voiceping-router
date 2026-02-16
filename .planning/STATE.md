@@ -5,16 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-02-16)
 
 **Core value:** Reliable, secure real-time audio communication for coordinating 1000+ distributed team members during high-profile events where security and uptime are critical
-**Current focus:** All milestones complete — planning next milestone
+**Current focus:** v5.0 Dispatch Map View
 
 ## Current Position
 
-Phase: 20 of 20 (all complete)
-Plan: All plans complete
-Status: v4.1.0 TAGGED
-Last activity: 2026-02-16 - Completed quick task 8: Introduce simple versioning strategy
-
-Progress: [████████████████████████████████] 100% (73/73 plans complete across all milestones)
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-02-16 — Milestone v5.0 started
 
 ## Performance Metrics
 
