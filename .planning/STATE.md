@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 Phase: 20 of 20 (all complete)
 Plan: All plans complete
 Status: v4.0 SHIPPED
-Last activity: 2026-02-16 — v4.0 milestone archived
+Last activity: 2026-02-16 - Completed quick task 4: Fix no-audio bug: Android speaker to web listener
 
 Progress: [████████████████████████████████] 100% (73/73 plans complete across all milestones)
 
@@ -46,6 +46,12 @@ All decisions logged in PROJECT.md Key Decisions table (43 entries across 4 mile
 - HW-02 rugged phone PTT hardware unavailable — deferred
 - PWR-04 battery profiling not validated — implementation complete, profiling deferred
 - Hardcoded JWT secret default — production MUST override via ROUTER_JWT_SECRET
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 4 | Fix no-audio bug: Android speaker to web listener | 2026-02-16 | 5eb84cc | [4-fix-no-audio-bug-android-speaker-to-web-](./quick/4-fix-no-audio-bug-android-speaker-to-web-/) |
 
 ## Session Continuity
 
