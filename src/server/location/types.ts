@@ -21,6 +21,7 @@ export interface LocationData {
  */
 export interface LocationPosition extends LocationData {
   isStale: boolean; // true if timestamp > 5 minutes old
+  lowBattery: boolean; // true if batteryPercentage < 20, computed server-side
 }
 
 /**
