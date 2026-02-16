@@ -225,6 +225,11 @@ export class SignalingHandlers {
       // Subscribe to channel state events
       await this.channelStateManager.subscribeToChannel(channelId, (state: ChannelState) => {
         // Broadcast speaker change to all channel members
+        // NOTE: This Redis pub/sub callback broadcasts to ALL clients without excludeUserId.
+        // It may send SPEAKER_CHANGED messages without producerId (for Android PTT flow).
+        // The web client's handleSpeakerChanged now tolerates missing producerId when
+        // isBusy=true, preventing audio consumption cancellation. This broadcast is
+        // intentional for multi-server scenarios where pub/sub notifies other servers.
         this.broadcastToChannel(channelId, createMessage(SignalingType.SPEAKER_CHANGED, state as any));
       });
 
@@ -598,11 +603,25 @@ export class SignalingHandlers {
         this.sendResponse(ctx, message.id, { success: true, state: result.state });
 
         // Broadcast speaker change to channel (include producerId for audio consumption)
-        this.broadcastToChannel(
-          channelId,
-          createMessage(SignalingType.SPEAKER_CHANGED, { ...result.state, producerId } as any),
-          ctx.userId,
-        );
+        // Only broadcast with producerId if it exists. For Android clients that send
+        // PTT_START before PRODUCE, producerId is undefined here. handleProduce will
+        // send the authoritative SPEAKER_CHANGED with the real producerId after the
+        // producer is created.
+        if (producerId) {
+          this.broadcastToChannel(
+            channelId,
+            createMessage(SignalingType.SPEAKER_CHANGED, { ...result.state, producerId } as any),
+            ctx.userId,
+          );
+        } else {
+          // Broadcast without producerId so listeners know channel is busy
+          // (UI shows speaker name) but don't trigger audio consumption yet
+          this.broadcastToChannel(
+            channelId,
+            createMessage(SignalingType.SPEAKER_CHANGED, result.state as any),
+            ctx.userId,
+          );
+        }
       } else {
         // Lock denied - send PTT_DENIED to requesting client
         const deniedMessage = createMessage(SignalingType.PTT_DENIED, {
