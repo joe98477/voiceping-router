@@ -84,36 +84,44 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MAP-01 | — | Pending |
-| MAP-02 | — | Pending |
-| MAP-03 | — | Pending |
-| MAP-04 | — | Pending |
-| MAP-05 | — | Pending |
-| MAP-06 | — | Pending |
-| MAP-07 | — | Pending |
-| CTRL-01 | — | Pending |
-| CTRL-02 | — | Pending |
-| CTRL-03 | — | Pending |
-| CTRL-04 | — | Pending |
-| POPUP-01 | — | Pending |
-| POPUP-02 | — | Pending |
-| POPUP-03 | — | Pending |
-| POPUP-04 | — | Pending |
-| POPUP-05 | — | Pending |
-| POPUP-06 | — | Pending |
-| LAYOUT-01 | — | Pending |
-| LAYOUT-02 | — | Pending |
-| TELEM-01 | — | Pending |
-| TELEM-02 | — | Pending |
-| TELEM-03 | — | Pending |
-| SETTINGS-01 | — | Pending |
-| SETTINGS-02 | — | Pending |
+| MAP-01 | Phase 23 | Pending |
+| MAP-02 | Phase 24 | Pending |
+| MAP-03 | Phase 24 | Pending |
+| MAP-04 | Phase 24 | Pending |
+| MAP-05 | Phase 25 | Pending |
+| MAP-06 | Phase 25 | Pending |
+| MAP-07 | Phase 25 | Pending |
+| CTRL-01 | Phase 25 | Pending |
+| CTRL-02 | Phase 23 | Pending |
+| CTRL-03 | Phase 26 | Pending |
+| CTRL-04 | Phase 26 | Pending |
+| POPUP-01 | Phase 25 | Pending |
+| POPUP-02 | Phase 25 | Pending |
+| POPUP-03 | Phase 25 | Pending |
+| POPUP-04 | Phase 25 | Pending |
+| POPUP-05 | Phase 25 | Pending |
+| POPUP-06 | Phase 25 | Pending |
+| LAYOUT-01 | Phase 22 | Pending |
+| LAYOUT-02 | Phase 24 | Pending |
+| TELEM-01 | Phase 21 | Pending |
+| TELEM-02 | Phase 21 | Pending |
+| TELEM-03 | Phase 21 | Pending |
+| SETTINGS-01 | Phase 26 | Pending |
+| SETTINGS-02 | Phase 26 | Pending |
 
 **Coverage:**
 - v5.0 requirements: 24 total
-- Mapped to phases: 0
-- Unmapped: 24
+- Mapped to phases: 24/24 (100%)
+- Unmapped: 0
+
+**Phase distribution:**
+- Phase 21 (Backend Protocol Extension): 3 requirements
+- Phase 22 (Web Layout Split): 1 requirement
+- Phase 23 (Map Foundation): 2 requirements
+- Phase 24 (Location State and Real-Time Markers): 4 requirements
+- Phase 25 (Interactive Markers and Motion State): 10 requirements
+- Phase 26 (Map Controls and Polish): 4 requirements
 
 ---
 *Requirements defined: 2026-02-16*
-*Last updated: 2026-02-16 after initial definition*
+*Last updated: 2026-02-16 after v5.0 roadmap creation (100% coverage validated)*
