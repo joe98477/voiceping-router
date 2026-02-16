@@ -167,6 +167,18 @@ Created producer [producerId] for [userId] in channel [channelId]
 Auto-resumed producer [producerId] (PTT already active for [userId])
 ```
 
+## Device Verification
+
+**Status:** VERIFIED on physical device
+**Device:** Samsung Galaxy S22 Ultra (SM-S906E), Android 16
+**Date:** 2026-02-16
+**Tested by:** User (physical device test)
+
+**Results:**
+- Android speaker presses PTT -> web listener hears audio: PASS
+- Web-to-web PTT (regression check): PASS
+- Speaker releases PTT -> audio stops: PASS
+
 ## Architecture Impact
 
 **Before this fix:**
@@ -214,9 +226,9 @@ Android PRODUCE -> Server creates producer -> Auto-resume -> Broadcast SPEAKER_C
 ## Next Steps
 
 **Immediate:**
-1. Deploy to production Docker via `docker compose down && docker compose up -d --build`
-2. Test Android speaker -> web listener audio path
-3. Verify no regression in web-to-web PTT
+1. ~~Deploy to production Docker via `docker compose down && docker compose up -d --build`~~ DONE
+2. ~~Test Android speaker -> web listener audio path~~ VERIFIED
+3. ~~Verify no regression in web-to-web PTT~~ VERIFIED
 
 **Future:**
 - Consider end-to-end integration tests for Android PTT flow
