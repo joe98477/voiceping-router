@@ -64,7 +64,7 @@ ConnectVoice is a WebRTC-based PTT audio routing system with event, team, and ch
 **Prerequisites:** Docker and Docker Compose
 
 ```bash
-git clone https://github.com/SmartWalkieOrg/voiceping-router.git
+git clone https://github.com/joe98477/voiceping-router.git
 cd voiceping-router
 cp .env.example .env
 # IMPORTANT: Edit .env and set MEDIASOUP_ANNOUNCED_IP to your host's IP address
