@@ -1072,6 +1072,28 @@ class MediasoupClient @Inject constructor(
     }
 
     /**
+     * Close the send transport and null it out.
+     * Called by PttManager when transport is degraded so a fresh one can be created on next PTT.
+     */
+    fun closeSendTransport() {
+        try {
+            audioProducer?.close()
+            audioProducer = null
+            cleanupAudioResources()
+            sendTransport?.close()
+            sendTransport = null
+            sendTransportChannelId = null
+            sendGracePeriodJob?.cancel()
+            sendOrphanCleanupJob?.cancel()
+            Log.d(TAG, "Send transport closed for recovery")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error closing send transport", e)
+            sendTransport = null
+            sendTransportChannelId = null
+        }
+    }
+
+    /**
      * Reset transport health state to HEALTHY.
      * Used by ChannelRepository when starting auto-rejoin.
      */

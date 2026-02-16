@@ -166,12 +166,13 @@ class PttManager @Inject constructor(
             return
         }
 
-        // Guard: Send transport degraded (amber state)
+        // Recovery: Send transport degraded — close stale transport so a fresh one is created.
+        // This replaces the previous "block PTT" behavior which permanently prevented
+        // transmission after the first send transport's ICE timed out.
         if (mediasoupClient.transportHealthState.value == com.voiceping.android.domain.model.TransportHealthState.SEND_DEGRADED) {
-            Log.w(TAG, "PTT press during send transport degradation")
-            // Toast will be shown by ViewModel observing this
-            onPttDenied?.invoke() // Triggers existing denied feedback
-            return
+            Log.w(TAG, "Send transport degraded, closing stale transport for fresh creation")
+            mediasoupClient.closeSendTransport()
+            mediasoupClient.resetTransportHealth()
         }
 
         pendingRelease = false
