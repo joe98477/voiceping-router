@@ -1,182 +1,200 @@
-voiceping-router
-================
+# ConnectVoice
 
-### This is the server for [VoicePing Android SDK](https://github.com/SmartWalkieOrg/VoicePingAndroidSDK)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20.0.0-green.svg)](https://nodejs.org/)
 
-A real-time push-to-talk server to route and broadcast voice messaging. The server is using NodeJS with native websocket, and also using Redis as temporary storage.
+Real-time push-to-talk communication platform for coordinating distributed teams during large-scale events.
 
-You may want to try first, you could try to connect the SDK to `wss://router-lite.voiceping.info`
+## Overview
 
-# Running the service
+ConnectVoice is a WebRTC-based PTT audio routing system with event, team, and channel management. Built on mediasoup with Opus codec, it delivers low-latency voice communication through a Node.js + TypeScript server, React dispatch console, and native Android PTT client. The architecture is designed to scale to 1000+ concurrent users across multiple channels.
 
-## Requirements
-In order to run the server, you need to have at least:
-* Ubuntu 24.04 LTS (or newer)
-* **NodeJS 8.16.0** (this needs to be exact, higher nodejs/npm will probably cause installation and run issue)
-* Redis
-* Docker (optional if you want run in docker)
+**Key Technologies:**
+- mediasoup WebRTC SFU (Selective Forwarding Unit)
+- Opus audio codec
+- Node.js 20+ with TypeScript
+- Redis for state management and pub/sub
+- PostgreSQL for persistent data
+- React dispatch console
+- Android client (Jetpack Compose + mediasoup-android)
 
-## Environment variables
-To use environment variable, simply copy `.env.example` into `.env` and adjust the value accordingly.
-
-Below are the required environment variables that need to be set before running the server.
-
-Server related:
-
-* `PORT` (int): The port number the server will listen to. Default: `3000`.
-* `USE_AUTHENTICATION` (boolean): The configuration whether you want to use JWT authentication or not. Default: `false`
-* `SECRET_KEY` (string): JWT secret key. This is required when `USE_AUTHENTICATION` is set true.
-* `ROUTER_JWT_SECRET` (string): JWT secret used by the control-plane to sign router tokens.
-* `LEGACY_JOIN_ENABLED` (boolean): Enable legacy company/user-id join (default false).
-
-Database related:
-
-* `REDIS_HOST` (string): Redis host. Default: `localhost`.
-* `REDIS_PORT` (string): Redis host. Default: `6379`.
-* `REDIS_PASSWORD` (string): Redis host. Default: `localhost`.
-
-Control-plane / web UI related:
-
-* `SESSION_SECRET` (string): Session cookie secret for the control-plane API.
-* `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`: SMTP settings (Office 365 compatible) for invites and password resets.
-* `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`: Optional bootstrap admin credentials on first start.
-* `VITE_ROUTER_WS` (string): Optional WS/WSS URL for the router from the dispatch UI (defaults to `ws(s)://<host>:3000`).
-* `TEST_SEED_ENABLED`, `TEST_SEED_EVENT_NAME`, `TEST_SEED_TEAM_NAME`, `TEST_SEED_CHANNEL_NAME`: Optional test seed defaults for QA.
-
-SMTP can also be managed in the dispatch web UI under **System Settings**. Env values are used as the initial defaults.
-
-## Run the server ##
-
-### Production
-
-Install dependencies with `npm` and start
-
-    $ npm install
-    $ npm run build
-    $ npm run start
-
-The server should be running on `ws://localhost:3000` by default. You can check in browser using `http://<your-ip-or-hostname>` it should be showing something like this:
-```
-Welcome to VoicePing Router 1.0.0
-```
-
-### Development
-Start development server with `nodemon`. It will automatically watch file changes, lint it and restart the server.
-
-    $ npm run dev
-
-
-
-## Test ##
-
-### Unit Test
-
-Run test with npm
-
-    $ npm test
-
-### Manual Test
-To run properly, voiceping-router needs to run together with redis (by default on port 6379). So you need to run redis on OS port 6379. Easiest with docker (using the repo's Redis config):
-
-    $ docker run -p 6379:6379 \
-      -v $(pwd)/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro \
-      --name voiceping-redis \
-      -d redis \
-      redis-server /usr/local/etc/redis/redis.conf
-
-In order to test whether this router server is running correctly. You need to use it from Android SDK. We also provide a simple web page for you to test: https://voiceping-router-test.netlify.app. Input any company name and user ID. Router URL input will be something like `ws://localhost:3000` or `ws://127.0.0.1:3000` depends on your own IP and port setting.
-
-## Running in Docker
-
-The easiest way to run voiceping-server using a single command is by using Docker Compose. Simply run the command below
-
-    $ cp .env.example .env
-    $ docker compose up -d --build
-
-For a local test stack with safe defaults:
-
-    $ cp .env.test.example .env.test
-    $ docker compose --env-file .env.test up -d --build
-
-See `docs/deployment-compose.md` for a complete walkthrough.
-For audio codec details and browser expectations, see `docs/opus-implementation.md`.
-
-The test env enables an optional seed event/team/channel for quick QA. You can disable the auto-seed via
-`TEST_SEED_ENABLED=false` or remove it from **System Settings → Test seed**.
-
-The compose file will also start Redis using the repo's configuration file at `redis/redis.conf`, which disables persistence (VoicePing Router uses Redis as temporary storage) and sets an LRU eviction policy. It also boots the control-plane API (port 4000), a Postgres instance for the control plane, and the dispatch web UI (port 8080).
-
-If you need to customize Redis settings, edit `redis/redis.conf` and restart the compose stack.
-
-Same as above. When you access `http://<your-ip-or-hostname>` from your browser, you should see:
+## Architecture
 
 ```
-Welcome to VoicePing Router 1.0.0
+┌─────────────────┐     ┌─────────────────┐
+│  Android Client │     │   Web Browser   │
+│   (PTT App)     │     │ (Dispatch UI)   │
+└────────┬────────┘     └────────┬────────┘
+         │                       │
+         └───────────┬───────────┘
+                     │
+              ┌──────▼──────┐
+              │    nginx    │  Port 3000
+              │   (proxy)   │
+              └──────┬──────┘
+                     │
+        ┌────────────┼────────────┐
+        │            │            │
+   ┌────▼────┐  ┌───▼────┐  ┌───▼────┐
+   │ audio-  │  │control-│  │ web-ui │
+   │ server  │  │ plane  │  │        │
+   │(mediasoup)│ │ (API)  │  │ (React)│
+   └────┬────┘  └───┬────┘  └────────┘
+        │           │
+   ┌────┴───────────┴────┐
+   │                     │
+┌──▼──┐            ┌─────▼──┐
+│redis│            │postgres│
+└─────┘            └────────┘
 ```
 
-For the dispatch console MVP, open `http://localhost:8080` and the control-plane API will answer on `http://localhost:4000`.
+### Docker Compose Services
 
-### Control-plane migrations
-The control-plane uses Prisma with Postgres. On startup in Docker it will run `prisma migrate deploy`. For local dev:
+| Service | Role | Port |
+|---------|------|------|
+| **audio-server** | mediasoup WebRTC audio routing, PTT session management | internal (via nginx) |
+| **control-plane** | REST API: authentication, events, teams, channels | 4000 |
+| **web-ui** | React dispatch console for event coordination | 8080 |
+| **nginx** | Reverse proxy, WebSocket upgrade, single entry point | 3000 |
+| **redis** | State management, pub/sub for real-time sync | internal |
+| **postgres** | Persistent storage for users, events, channels | internal |
 
-    $ cd control-plane
-    $ npm install
-    $ npm run prisma:migrate
-    $ npm start
+## Quick Start
 
-### Ubuntu 24.04 LTS Docker smoke test
-On Ubuntu 24.04 LTS, you can do a quick smoke test of the Docker stack with:
+**Prerequisites:** Docker and Docker Compose
 
-    $ docker compose up -d
-    $ docker compose ps
-    $ curl -s http://localhost:3000
-
-You should see `Welcome to VoicePing Router 1.0.0` in the response. If you need to stop the stack:
-
-    $ docker compose down
-
-## Self-hosted VoicePing Router
-
-If you choose to self-host the VoicePing Router, you will need to update the server URL **on your app that uses the VoicePing Android SDK** to your new self-hosted domain or IP address. 
-
-## User Authentication
-
-By default, this server doesn't use any authentication. But you can enable authentication by setting thru environment variables. Below are the environment variables that you need to set:
-- USE_AUTHENTICATION
-- SECRET_KEY
-
-Once you set that, the server will require JWT authentication in order to receive connection from client.
-
-#### Encode JWT in Your Client / Server
-Instead of using `user_id` to connect to voiceping-router server. You need to decode the whole user information to JWT token. You can do this either in your client or in your own server.
-
-Example in Javascript
-```
-var jwt = require('jsonwebtoken');
-var SECRET_KEY = 'something';
-
-var user = {
-  user_id: 1,
-  name: 'John'
-}
-var token = jwt.sign(user, SECRET_KEY);
+```bash
+git clone https://github.com/SmartWalkieOrg/voiceping-router.git
+cd voiceping-router
+cp .env.example .env
+# IMPORTANT: Edit .env and set MEDIASOUP_ANNOUNCED_IP to your host's IP address
+docker compose up -d --build
 ```
 
-#### Connect to VoicePing Router Using Encoded Token
-Once you get the encode the user information into JWT. You can connect to voiceping-router using that token.
-
-Example using Javascript:
-```
-var WebSocket = require("ws");
-
-var connection = new WebSocket(WS_URL, [VoicePingToken, DeviceId]);
-
-connection.on("open", () => {
-  console.log("connection.on.open");
-});
+**Verification:**
+```bash
+docker compose ps  # All 6 services should be running
+curl http://localhost:3000  # Should return welcome message
 ```
 
-On VoicePing SDK demo apk, the token is simply concatenation of company name and user id. Something like: `${companyName}_${userId}`
+**Access Points:**
+- Dispatch console: http://localhost:8080
+- Control-plane API: http://localhost:4000
+- Audio router WebSocket: ws://localhost:3000
 
-## Centralized event/team/user flow
-The control-plane now supports events, teams, channels, and role-based access. Legacy company/user-id join can be disabled with `LEGACY_JOIN_ENABLED=false`. Users should authenticate via the control-plane and request a router JWT (`/api/router/token`) for event access.
+**Note:** On first startup, Prisma migrations run automatically to initialize the database schema.
+
+## Environment Configuration
+
+The `.env` file controls all aspects of deployment. Copy `.env.example` as a starting point and configure the following:
+
+### Core Settings
+- **`NODE_ENV`**: `production` or `development`
+- **`PORT`**: Audio server port (default: 3000)
+- **`SECRET_KEY`**: Legacy JWT secret (change in production)
+- **`ROUTER_JWT_SECRET`**: JWT secret for router tokens (MUST change in production)
+- **`SESSION_SECRET`**: Session cookie secret (MUST change in production)
+- **`LEGACY_JOIN_ENABLED`**: Enable legacy company/user-id join flow (default: false)
+
+### Database
+- **`POSTGRES_USER`**, **`POSTGRES_PASSWORD`**, **`POSTGRES_DB`**: PostgreSQL credentials
+- **`DATABASE_URL`**: Full Postgres connection string (e.g., `postgres://user:pass@postgres:5432/voiceping`)
+- **`REDIS_HOST`**, **`REDIS_PORT`**, **`REDIS_PASSWORD`**: Redis connection details
+
+### mediasoup (WebRTC)
+- **`MEDIASOUP_ANNOUNCED_IP`**: **CRITICAL** — Set to your host's public or LAN IP address. Without this, remote WebRTC clients cannot connect. Example: `192.168.1.100` for LAN or your public IP for internet access.
+- **`MEDIASOUP_LISTEN_IP`**: IP to bind mediasoup workers (default: `0.0.0.0`)
+- **`MEDIASOUP_MIN_PORT`**, **`MEDIASOUP_MAX_PORT`**: UDP port range for RTP (default: 40000-49999). Each user requires ~2 ports. Adjust for scale.
+- **`MEDIASOUP_LOG_LEVEL`**: mediasoup logging (`debug`, `warn`, `error`)
+
+### STUN/TURN (NAT Traversal)
+- **`STUN_SERVER`**: STUN server URL (default: `stun:stun.l.google.com:19302`)
+- **`TURN_SERVER`**, **`TURN_USERNAME`**, **`TURN_PASSWORD`**: Optional TURN server for restrictive NATs
+
+### Web UI
+- **`WEB_BASE_URL`**: Public URL of the dispatch console (e.g., `https://dispatch.example.com`)
+- **`VITE_API_BASE`**: Control-plane API base URL (e.g., `https://api.example.com`)
+- **`VITE_ROUTER_WS`**: WebSocket URL for the audio router (e.g., `wss://router.example.com`)
+
+### SMTP (Optional)
+- **`SMTP_HOST`**, **`SMTP_PORT`**, **`SMTP_USER`**, **`SMTP_PASS`**, **`SMTP_FROM`**: Office 365-compatible SMTP for password resets and invites
+
+### Bootstrap (Optional)
+- **`BOOTSTRAP_ADMIN_EMAIL`**, **`BOOTSTRAP_ADMIN_PASSWORD`**: Create an admin user on first startup
+
+**Most Important Variable:** `MEDIASOUP_ANNOUNCED_IP` must be set correctly or WebRTC connections will fail for any client not running on localhost. Set it to your host's IP address (use `ip addr` or `ifconfig` to find it).
+
+## Android Client
+
+The Android PTT client is in the `android/` directory. It uses Jetpack Compose, Hilt, and mediasoup-android for native WebRTC.
+
+**Prerequisites:**
+- Android Studio (latest)
+- JDK 21
+- Android SDK 35 (compile target)
+
+**Build:**
+```bash
+cd android
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./gradlew assembleDebug
+```
+
+**Output:** `android/app/build/outputs/apk/debug/app-debug.apk`
+
+**Requirements:**
+- Minimum SDK: 26 (Android 8.0)
+- Target SDK: 35 (Android 15)
+- AGP: 9.0.0 (bundles Kotlin 2.2)
+
+**Testing:** Install the APK on a physical device (emulators have limited WebRTC support). Configure the server URL in the app settings to point to your MEDIASOUP_ANNOUNCED_IP.
+
+## Development
+
+For local development without Docker:
+
+**Prerequisites:** Node.js 20+, Redis running locally, PostgreSQL instance
+
+**Audio Server:**
+```bash
+npm install
+npm run dev
+```
+
+**Control-plane:**
+```bash
+cd control-plane
+npm install
+npm run prisma:migrate  # Run database migrations
+npm start
+```
+
+**Web UI:**
+```bash
+cd web-ui
+npm install
+npm run dev
+```
+
+**Tests:**
+```bash
+npm test          # Run vitest unit tests
+npm run lint      # ESLint + Prettier
+```
+
+**Note:** Local development requires setting up Redis and PostgreSQL separately. The easiest path is to use `docker compose` for dependencies and run only the Node.js services locally if needed.
+
+## Documentation
+
+Detailed guides are available in the `docs/` directory:
+
+- **[Architecture](docs/architecture.md)** - Control-plane design, authentication flow, Redis state sync
+- **[Deployment Guide](docs/deployment-compose.md)** - Production Docker Compose walkthrough, nginx config, SSL setup
+- **[API Reference](docs/api.md)** - Control-plane REST endpoints for events, teams, channels, users
+- **[User Manual](docs/user-manual.md)** - Dispatch console usage guide for coordinators
+- **[Opus Implementation](docs/opus-implementation.md)** - Audio codec details, browser compatibility, Opus parameters
+
+## License
+
+MIT License - see [LICENSE](LICENSE) file for details.
+
+Copyright © 2024-2026 Smart Walkie Pte Ltd
