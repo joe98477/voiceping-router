@@ -1857,3 +1857,45 @@ input[type="checkbox"] {
   background: transparent;
   border: none;
 }
+
+/* === Motion State Variations (Phase 25) === */
+
+/* All motion state classes use the same orange color — only the SVG icon shape differs */
+.user-marker--still .user-marker__pin,
+.user-marker--walking .user-marker__pin,
+.user-marker--driving .user-marker__pin {
+  background: #FF9800;
+}
+
+/* Override Leaflet DivIcon for motion state classes */
+.leaflet-div-icon.user-marker--still,
+.leaflet-div-icon.user-marker--walking,
+.leaflet-div-icon.user-marker--driving {
+  background: transparent;
+  border: none;
+}
+
+/* === Staleness Treatment (Phase 25) === */
+
+/* 5+ minute no-update markers become grayscale with reduced opacity */
+.user-marker--stale {
+  filter: grayscale(100%) opacity(0.6);
+  transition: none; /* No animation on recovery — instant state change */
+}
+
+/* Stale treatment applies to label as well */
+.user-marker--stale .user-marker__label {
+  filter: grayscale(100%) opacity(0.6);
+}
+
+/* === Zoom-Dependent Label Visibility (Phase 25) === */
+
+/* Labels hidden by default when zoomed out */
+.user-marker__label {
+  display: none;
+}
+
+/* Labels shown when map container has show-marker-labels class (zoom >= 15) */
+.show-marker-labels .user-marker__label {
+  display: block;
+}
