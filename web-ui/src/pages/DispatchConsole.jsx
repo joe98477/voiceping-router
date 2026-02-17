@@ -338,7 +338,7 @@ const DispatchConsole = ({ user, onLogout }) => {
 
       {/* Main content: split layout with channels panel and map panel */}
       <div className="dispatch-console__main-content">
-        <LocationProvider eventId={eventId}>
+        <LocationProvider eventId={eventId} overview={overview}>
           {/* Channels panel */}
           <div className={`channels-panel ${isCollapsed ? 'channels-panel--collapsed' : ''} ${activeTab === 'channels' ? 'active' : ''}`}>
             <button
