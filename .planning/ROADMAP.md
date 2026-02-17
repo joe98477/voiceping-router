@@ -187,11 +187,11 @@ Plans:
   2. Map component properly cleans up on unmount (no memory leaks in React Strict Mode)
   3. Dispatch user can switch between satellite and street map layers
   4. Map controls (zoom, pan) work correctly alongside channel monitoring
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 23-01: TBD
-- [ ] 23-02: TBD
+- [ ] 23-01-PLAN.md -- Install Leaflet deps and create MapView component with tile layers, controls, geolocation, localStorage persistence, and React cleanup
+- [ ] 23-02-PLAN.md -- Mount MapView in DispatchConsole, update CSS for edge-to-edge map, human verify integration
 
 ### Phase 24: Location State and Real-Time Markers
 **Goal**: Connect WebSocket location broadcasts to map markers showing real-time user positions
