@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-minimap/dist/Control.MiniMap.min.css';
@@ -11,6 +11,8 @@ import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import { useLocations } from '../context/LocationContext.jsx';
 import { generatePopupContent, generateTooltipContent } from '../context/LocationContext.jsx';
 import MapToolbar from './MapToolbar.jsx';
+import PopupSettingsPanel, { DEFAULT_POPUP_SETTINGS } from './PopupSettingsPanel.jsx';
+import useLocalStorage from '../hooks/useLocalStorage.js';
 
 /**
  * Create motion-state-aware marker icon with staleness treatment
@@ -66,6 +68,14 @@ const MapView = ({ eventId, ws, isMapVisible, channels }) => {
   const initialFitDoneRef = useRef(false);
   const { locations, updateLocation, setAllLocations, mergeLocations, removeLocation } = useLocations();
 
+  // Popup settings state with localStorage persistence
+  const [popupSettings, setPopupSettings, resetPopupSettings] = useLocalStorage(
+    'cv.dispatch.popup.settings',
+    DEFAULT_POPUP_SETTINGS
+  );
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const popupSettingsRef = useRef(popupSettings);
+
   // Constants
   const DEFAULT_CENTER = [-33.8688, 151.2093]; // Sydney, Australia
   const DEFAULT_ZOOM = 12;
@@ -77,6 +87,16 @@ const MapView = ({ eventId, ws, isMapVisible, channels }) => {
   useEffect(() => {
     locationsRef.current = locations;
   }, [locations]);
+
+  // Keep popupSettingsRef in sync for popup interval closure
+  useEffect(() => {
+    popupSettingsRef.current = popupSettings;
+  }, [popupSettings]);
+
+  // Toggle setting handler
+  const handleToggleSetting = useCallback((field) => {
+    setPopupSettings(prev => ({ ...prev, [field]: !prev[field] }));
+  }, [setPopupSettings]);
 
   useEffect(() => {
     // Guard: prevent double initialization
@@ -491,7 +511,7 @@ const MapView = ({ eventId, ws, isMapVisible, channels }) => {
 
         // Update popup content if open (live updates per locked decision)
         if (existingMarker.isPopupOpen()) {
-          existingMarker.getPopup().setContent(generatePopupContent(position));
+          existingMarker.getPopup().setContent(generatePopupContent(position, popupSettings));
         }
       } else {
         // Create new marker with motion-state-aware icon
@@ -512,7 +532,7 @@ const MapView = ({ eventId, ws, isMapVisible, channels }) => {
         });
 
         // Click popup (locked decision: autoClose: true for single popup)
-        marker.bindPopup(generatePopupContent(position), {
+        marker.bindPopup(generatePopupContent(position, popupSettings), {
           maxWidth: 300,
           closeButton: true,
           autoClose: true,
@@ -525,7 +545,7 @@ const MapView = ({ eventId, ws, isMapVisible, channels }) => {
           this._popupUpdateInterval = setInterval(() => {
             const latest = locationsRef.current.get(uid);
             if (latest && this.isPopupOpen()) {
-              this.getPopup().setContent(generatePopupContent(latest));
+              this.getPopup().setContent(generatePopupContent(latest, popupSettingsRef.current));
             }
           }, 2000); // Update every 2 seconds while popup is open
         });
@@ -577,7 +597,7 @@ const MapView = ({ eventId, ws, isMapVisible, channels }) => {
 
       initialFitDoneRef.current = true;
     }
-  }, [locations, STALE_THRESHOLD]);
+  }, [locations, popupSettings, STALE_THRESHOLD]);
 
   // Stale marker cleanup timer (every 5 minutes, removes markers older than 1 hour)
   useEffect(() => {
@@ -629,7 +649,14 @@ const MapView = ({ eventId, ws, isMapVisible, channels }) => {
         locations={locations}
         channels={channels || []}
         onSelectUser={handleSelectUser}
-        onSettingsOpen={() => {}} // Wired in Plan 03
+        onSettingsOpen={() => setIsSettingsOpen(true)}
+      />
+      <PopupSettingsPanel
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        settings={popupSettings}
+        onSettingsChange={handleToggleSetting}
+        onReset={resetPopupSettings}
       />
     </div>
   );
