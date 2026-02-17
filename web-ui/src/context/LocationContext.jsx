@@ -186,6 +186,129 @@ export const LocationProvider = ({ eventId, overview, children }) => {
 };
 
 /**
+ * Derive connection quality from networkType field
+ * Heuristic: wifi is better than cellular, power save mode degrades quality
+ *
+ * @param {object} position - Location position data
+ * @returns {string} Connection quality: 'Good', 'Fair', 'Poor', 'Unknown'
+ */
+export function deriveConnectionQuality(position) {
+  if (!position.networkType) return 'Unknown';
+  if (position.networkType === 'wifi') {
+    return position.powerSaveMode ? 'Fair' : 'Good';
+  }
+  if (position.networkType === 'cellular') {
+    return position.powerSaveMode ? 'Poor' : 'Fair';
+  }
+  return 'Unknown';
+}
+
+/**
+ * Format timestamp as relative time (e.g., "2 min ago", "just now")
+ *
+ * @param {string|number} timestamp - ISO timestamp or epoch milliseconds
+ * @returns {string} Human-readable relative time
+ */
+export function formatRelativeTime(timestamp) {
+  if (!timestamp) return 'Unknown';
+  const now = Date.now();
+  const age = now - new Date(timestamp).getTime();
+  if (age < 0) return 'just now';
+
+  const seconds = Math.floor(age / 1000);
+  if (seconds < 10) return 'just now';
+  if (seconds < 60) return `${seconds}s ago`;
+
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${minutes % 60}m ago`;
+}
+
+/**
+ * Derive latency proxy from timestamp freshness
+ * Shows how recent the position update is
+ *
+ * @param {object} position - Location position data
+ * @returns {string} Latency category: '< 5s', '< 30s', '< 1m', '> 1m', 'N/A'
+ */
+export function deriveLatency(position) {
+  if (!position.timestamp) return 'N/A';
+  const ageMs = Date.now() - new Date(position.timestamp).getTime();
+  if (ageMs < 5000) return '< 5s';
+  if (ageMs < 30000) return '< 30s';
+  if (ageMs < 60000) return '< 1m';
+  return '> 1m';
+}
+
+/**
+ * Generate tooltip content for marker hover
+ * Shows: Name, Team, Channels (identity glance)
+ *
+ * @param {object} position - Enriched location position with teamName and channelNames
+ * @returns {string} HTML string for Leaflet tooltip
+ */
+export function generateTooltipContent(position) {
+  const channels = position.channelNames?.length > 0
+    ? position.channelNames.join(', ')
+    : 'None';
+  return `<strong>${position.userName || 'Unknown'}</strong><br>` +
+    `Team: ${position.teamName || 'Unknown'}<br>` +
+    `Channels: ${channels}`;
+}
+
+/**
+ * Generate popup content for marker click
+ * Shows three grouped sections: Identity, Status, Activity
+ *
+ * @param {object} position - Enriched location position with all telemetry fields
+ * @returns {string} HTML string for Leaflet popup
+ */
+export function generatePopupContent(position) {
+  const channels = position.channelNames?.length > 0
+    ? position.channelNames.join(', ')
+    : 'None';
+  const battery = position.batteryPercentage != null
+    ? `${Math.round(position.batteryPercentage)}%`
+    : 'N/A';
+  const connection = deriveConnectionQuality(position);
+  const latency = deriveLatency(position);
+  const motionState = position.motionState
+    ? position.motionState.charAt(0).toUpperCase() + position.motionState.slice(1).toLowerCase()
+    : 'Unknown';
+  const speed = position.speed != null
+    ? `${Math.round(position.speed * 3.6)} km/h`  // m/s to km/h
+    : 'N/A';
+  const updated = formatRelativeTime(position.timestamp);
+
+  return `<div class="marker-popup">
+    <div class="marker-popup__section">
+      <div class="marker-popup__section-title">Identity</div>
+      <div class="marker-popup__row"><span class="marker-popup__label">Name</span><span>${position.userName || 'Unknown'}</span></div>
+      <div class="marker-popup__row"><span class="marker-popup__label">Team</span><span>${position.teamName || 'Unknown'}</span></div>
+      <div class="marker-popup__row"><span class="marker-popup__label">Channels</span><span>${channels}</span></div>
+    </div>
+    <div class="marker-popup__divider"></div>
+    <div class="marker-popup__section">
+      <div class="marker-popup__section-title">Status</div>
+      <div class="marker-popup__row"><span class="marker-popup__label">Battery</span><span>${battery}</span></div>
+      <div class="marker-popup__row"><span class="marker-popup__label">Connection</span><span>${connection}</span></div>
+      <div class="marker-popup__row"><span class="marker-popup__label">Latency</span><span>${latency}</span></div>
+    </div>
+    <div class="marker-popup__divider"></div>
+    <div class="marker-popup__section">
+      <div class="marker-popup__section-title">Activity</div>
+      <div class="marker-popup__row"><span class="marker-popup__label">Motion</span><span>${motionState}</span></div>
+      <div class="marker-popup__row"><span class="marker-popup__label">Speed</span><span>${speed}</span></div>
+      <div class="marker-popup__row"><span class="marker-popup__label">Updated</span><span>${updated}</span></div>
+    </div>
+    <div class="marker-popup__divider"></div>
+    <button class="marker-popup__ptt-btn" disabled title="Coming soon">PTT (placeholder)</button>
+  </div>`;
+}
+
+/**
  * Hook to access location context
  * Must be used within a LocationProvider
  *
