@@ -19,6 +19,7 @@ import DispatchChannelCard from './DispatchChannelCard.jsx';
  * @param {function} props.onMuteTeam - (teamId, channelIds) => void
  * @param {function} props.onUnmuteTeam - (teamId, channelIds) => void
  * @param {object} props.channelStates - channelStates object from ChannelContext (for stats)
+ * @param {boolean} props.isCollapsed - Whether the panel is collapsed
  */
 const ChannelGrid = ({
   teams,
@@ -29,7 +30,8 @@ const ChannelGrid = ({
   onToggleMute,
   onMuteTeam,
   onUnmuteTeam,
-  channelStates
+  channelStates,
+  isCollapsed
 }) => {
   // Track expanded/collapsed state for each team (all start expanded)
   const [expandedTeams, setExpandedTeams] = useState(() => {
@@ -100,6 +102,31 @@ const ChannelGrid = ({
       onMuteTeam(teamId, channelIds);
     }
   };
+
+  // Collapsed strip view
+  if (isCollapsed) {
+    return (
+      <div className="channel-grid--collapsed">
+        {groupedChannels.sortedGroupIds.map(teamId => {
+          const group = groupedChannels.groups[teamId];
+          if (group.channels.length === 0) return null;
+          // Check if any channel in team has active speaker
+          const hasActivity = group.channels.some(ch => {
+            const state = channelStates[ch.id];
+            return state && state.isBusy;
+          });
+          // Get first letter of team name
+          const initial = group.name.charAt(0).toUpperCase();
+          return (
+            <div key={teamId} className="channel-grid__collapsed-team" title={group.name}>
+              <span className="channel-grid__collapsed-initial">{initial}</span>
+              <span className={`channel-grid__collapsed-dot ${hasActivity ? 'channel-grid__collapsed-dot--active' : ''}`} />
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
 
   return (
     <div className="channel-grid">
