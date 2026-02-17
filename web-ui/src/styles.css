@@ -1646,6 +1646,13 @@ input[type="checkbox"] {
   z-index: 1;
 }
 
+/* Ensure coordinates and attribution sit at the very bottom of the map */
+.leaflet-bottom.leaflet-left .leaflet-control-mouseposition,
+.leaflet-bottom.leaflet-right .leaflet-control-attribution {
+  clear: both;
+  margin-bottom: 0;
+}
+
 /* Channels Panel Collapse Button */
 .channels-panel__collapse-btn {
   position: absolute;
@@ -1659,7 +1666,7 @@ input[type="checkbox"] {
   border-left: none;
   background: var(--surface);
   cursor: pointer;
-  z-index: 5;
+  z-index: 1001;
   display: grid;
   place-items: center;
   font-size: 0.7rem;
