@@ -2040,3 +2040,92 @@ input[type="checkbox"] {
   margin: 8px 12px;
   line-height: 1.4;
 }
+
+/* ===== Map Toolbar (Phase 26-01) ===== */
+.map-toolbar {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+@supports not (backdrop-filter: blur(10px)) {
+  .map-toolbar {
+    background: rgba(255, 255, 255, 0.8);
+  }
+}
+
+.map-toolbar__button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(255, 152, 0, 0.9);
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+  white-space: nowrap;
+}
+
+.map-toolbar__button:hover {
+  background: rgba(255, 152, 0, 1);
+}
+
+.map-toolbar__icon-button {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.3);
+  color: white;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.map-toolbar__icon-button:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.map-toolbar__search-slot {
+  flex: 1;
+  min-width: 200px;
+}
+
+/* ===== Toast Notification (Phase 26-01) ===== */
+.map-toast {
+  position: fixed;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  opacity: 0;
+  padding: 12px 24px;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  font-size: 14px;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transition: opacity 0.3s, transform 0.3s;
+  z-index: 2000;
+  pointer-events: none;
+}
+
+.map-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
