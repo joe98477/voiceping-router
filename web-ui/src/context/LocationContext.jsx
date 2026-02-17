@@ -261,11 +261,21 @@ export function generateTooltipContent(position) {
 /**
  * Generate popup content for marker click
  * Shows three grouped sections: Identity, Status, Activity
+ * Sections conditionally rendered based on settings parameter
  *
  * @param {object} position - Enriched location position with all telemetry fields
+ * @param {object} settings - Optional popup field settings (if undefined, all fields shown)
  * @returns {string} HTML string for Leaflet popup
  */
-export function generatePopupContent(position) {
+export function generatePopupContent(position, settings) {
+  // Default to all fields shown if settings not provided (backward compatible)
+  const showChannel = settings?.showChannel !== false;
+  const showBattery = settings?.showBattery !== false;
+  const showConnection = settings?.showConnection !== false;
+  const showMotion = settings?.showMotion !== false;
+  const showLocation = settings?.showLocation !== false;
+  const showPTTStatus = settings?.showPTTStatus !== false;
+
   const channels = position.channelNames?.length > 0
     ? position.channelNames.join(', ')
     : 'None';
@@ -282,30 +292,63 @@ export function generatePopupContent(position) {
     : 'N/A';
   const updated = formatRelativeTime(position.timestamp);
 
-  return `<div class="marker-popup">
-    <div class="marker-popup__section">
-      <div class="marker-popup__section-title">Identity</div>
-      <div class="marker-popup__row"><span class="marker-popup__label">Name</span><span>${position.userName || 'Unknown'}</span></div>
-      <div class="marker-popup__row"><span class="marker-popup__label">Team</span><span>${position.teamName || 'Unknown'}</span></div>
-      <div class="marker-popup__row"><span class="marker-popup__label">Channels</span><span>${channels}</span></div>
-    </div>
-    <div class="marker-popup__divider"></div>
-    <div class="marker-popup__section">
-      <div class="marker-popup__section-title">Status</div>
-      <div class="marker-popup__row"><span class="marker-popup__label">Battery</span><span>${battery}</span></div>
-      <div class="marker-popup__row"><span class="marker-popup__label">Connection</span><span>${connection}</span></div>
-      <div class="marker-popup__row"><span class="marker-popup__label">Latency</span><span>${latency}</span></div>
-    </div>
-    <div class="marker-popup__divider"></div>
-    <div class="marker-popup__section">
-      <div class="marker-popup__section-title">Activity</div>
-      <div class="marker-popup__row"><span class="marker-popup__label">Motion</span><span>${motionState}</span></div>
-      <div class="marker-popup__row"><span class="marker-popup__label">Speed</span><span>${speed}</span></div>
-      <div class="marker-popup__row"><span class="marker-popup__label">Updated</span><span>${updated}</span></div>
-    </div>
-    <div class="marker-popup__divider"></div>
-    <button class="marker-popup__ptt-btn" disabled title="Coming soon">PTT (placeholder)</button>
-  </div>`;
+  // Build sections conditionally
+  let html = '<div class="marker-popup">';
+
+  // Identity section (always shown, but channels conditional)
+  html += `<div class="marker-popup__section">
+    <div class="marker-popup__section-title">Identity</div>
+    <div class="marker-popup__row"><span class="marker-popup__label">Name</span><span>${position.userName || 'Unknown'}</span></div>
+    <div class="marker-popup__row"><span class="marker-popup__label">Team</span><span>${position.teamName || 'Unknown'}</span></div>`;
+
+  if (showChannel) {
+    html += `<div class="marker-popup__row"><span class="marker-popup__label">Channels</span><span>${channels}</span></div>`;
+  }
+
+  html += '</div>';
+
+  // Status section (only if at least one status field enabled)
+  const hasStatusFields = showBattery || showConnection;
+  if (hasStatusFields) {
+    html += '<div class="marker-popup__divider"></div>';
+    html += '<div class="marker-popup__section">';
+    html += '<div class="marker-popup__section-title">Status</div>';
+
+    if (showBattery) {
+      html += `<div class="marker-popup__row"><span class="marker-popup__label">Battery</span><span>${battery}</span></div>`;
+    }
+    if (showConnection) {
+      html += `<div class="marker-popup__row"><span class="marker-popup__label">Connection</span><span>${connection}</span></div>`;
+      html += `<div class="marker-popup__row"><span class="marker-popup__label">Latency</span><span>${latency}</span></div>`;
+    }
+
+    html += '</div>';
+  }
+
+  // Activity section (always shown, but with conditional fields)
+  html += '<div class="marker-popup__divider"></div>';
+  html += '<div class="marker-popup__section">';
+  html += '<div class="marker-popup__section-title">Activity</div>';
+
+  if (showMotion) {
+    html += `<div class="marker-popup__row"><span class="marker-popup__label">Motion</span><span>${motionState}</span></div>`;
+  }
+  if (showLocation) {
+    html += `<div class="marker-popup__row"><span class="marker-popup__label">Speed</span><span>${speed}</span></div>`;
+  }
+
+  // Updated always shown (dispatchers always need recency info)
+  html += `<div class="marker-popup__row"><span class="marker-popup__label">Updated</span><span>${updated}</span></div>`;
+  html += '</div>';
+
+  // PTT button (conditional)
+  if (showPTTStatus) {
+    html += '<div class="marker-popup__divider"></div>';
+    html += '<button class="marker-popup__ptt-btn" disabled title="Coming soon">PTT (placeholder)</button>';
+  }
+
+  html += '</div>';
+  return html;
 }
 
 /**
