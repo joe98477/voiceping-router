@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 ## Current Position
 
 Phase: 24 of 26 (Location State and Real-Time Markers)
-Plan: 1 of 2 (userName and LocationContext) - COMPLETE
-Status: Phase 24 in progress
-Last activity: 2026-02-17 — Completed 24-01 userName and LocationContext
+Plan: 2 of 2 (WebSocket integration and marker rendering) - COMPLETE
+Status: Phase 24 complete
+Last activity: 2026-02-17 — Completed 24-02 WebSocket integration and marker rendering
 
-Progress: [██████████████████████████████████████████████████████████████████████████░░░] 79/85 plans (92.9%)
+Progress: [███████████████████████████████████████████████████████████████████████████░░] 80/85 plans (94.1%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 79 (v1.0: 24, v2.0: 26, v3.0: 10, v4.0: 13, v5.0: 6)
-- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~4.0 min, v4.0 ~6.2 min, v5.0 ~2.9 min
-- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.67 hours, v4.0 ~1.28 hours, v5.0 ~0.29 hours
+- Total plans completed: 80 (v1.0: 24, v2.0: 26, v3.0: 10, v4.0: 13, v5.0: 7)
+- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~4.0 min, v4.0 ~6.2 min, v5.0 ~3.1 min
+- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.67 hours, v4.0 ~1.28 hours, v5.0 ~0.36 hours
 
 **By Milestone:**
 
@@ -31,7 +31,7 @@ Progress: [███████████████████████
 | v2.0 Android Client | 6 | 26/26 | Complete (2026-02-13) |
 | v3.0 mediasoup Integration | 5 | 10/10 | Complete (2026-02-15) |
 | v4.0 Production Hardening | 5 | 13/13 | Complete (2026-02-16) |
-| v5.0 Dispatch Map View | 6 | 6/12 | In progress |
+| v5.0 Dispatch Map View | 6 | 7/12 | In progress |
 
 **Recent Plan:**
 | Phase | Plan | Duration | Tasks | Files |
@@ -41,6 +41,7 @@ Progress: [███████████████████████
 | Phase 23 P01 | 110 sec | 2 tasks | 3 files | MapView component with Leaflet |
 | Phase 23 P02 | ~5 min | 2 tasks | 4 files | Mount MapView in DispatchConsole |
 | Phase 24 P01 | 258 sec | 2 tasks | 5 files | userName and LocationContext |
+| Phase 24 P02 | 229 sec | 2 tasks | 3 files | WebSocket integration and marker rendering |
 
 ## Accumulated Context
 
@@ -77,6 +78,11 @@ Recent decisions affecting v5.0:
 - Phase 24-01 (v5.0): 1-hour window filter in getAllLatestPositions() — dispatch map shows recent positions only
 - Phase 24-01 (v5.0): LocationContext separate from ChannelContext — high-frequency location updates must not re-render channel components
 - Phase 24-01 (v5.0): Eager stale cleanup in updateLocation() — O(N) iteration per update acceptable for dispatch scale
+- Phase 24-02 (v5.0): Dedicated WebSocket for location updates — separate from channel connections for clean lifecycle
+- Phase 24-02 (v5.0): LOCATION_QUERY correlation ID matching — server uses generic channel-state type, ID is reliable match
+- Phase 24-02 (v5.0): Staggered batch updates for >5 positions — 50ms delay prevents UI freeze on bulk load
+- Phase 24-02 (v5.0): isMapVisible from responsive breakpoint — desktop always true, mobile only when activeTab === 'map'
+- Phase 24-02 (v5.0): Conditional marker icon update — only recreate DivIcon if userName changed (performance optimization)
 
 ### Pending Todos
 
@@ -98,10 +104,10 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-17
-Stopped at: Completed 24-01-PLAN.md (Phase 24 in progress)
-Resume file: .planning/phases/24-location-state-and-real-time-markers/24-01-SUMMARY.md
+Stopped at: Completed 24-02-PLAN.md (Phase 24 complete)
+Resume file: .planning/phases/24-location-state-and-real-time-markers/24-02-SUMMARY.md
 
-**Next action:** Execute 24-02 (WebSocket integration and marker rendering)
+**Next action:** Begin Phase 25 (marker clustering and performance optimization)
 
 **All Milestones:**
 - v1.0 WebRTC Audio Rebuild + Web UI — SHIPPED 2026-02-07
@@ -111,4 +117,4 @@ Resume file: .planning/phases/24-location-state-and-real-time-markers/24-01-SUMM
 - v5.0 Dispatch Map View — IN PROGRESS (Phase 21-26)
 
 ---
-*Last updated: 2026-02-17 after completing 24-01-PLAN.md (Phase 24 in progress)*
+*Last updated: 2026-02-17 after completing 24-02-PLAN.md (Phase 24 complete)*
