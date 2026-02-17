@@ -28,7 +28,7 @@ const getWsUrl = () => {
  * Inner component that uses ChannelContext
  * Must be inside ChannelProvider
  */
-const DispatchGridWithContext = ({ overview, wsUrl, token, mutedChannels, onToggleMute, onMuteTeam, onUnmuteTeam }) => {
+const DispatchGridWithContext = ({ overview, wsUrl, token, mutedChannels, onToggleMute, onMuteTeam, onUnmuteTeam, isCollapsed }) => {
   const { channelStates } = useChannels();
 
   return (
@@ -42,6 +42,7 @@ const DispatchGridWithContext = ({ overview, wsUrl, token, mutedChannels, onTogg
       onMuteTeam={onMuteTeam}
       onUnmuteTeam={onUnmuteTeam}
       channelStates={channelStates}
+      isCollapsed={isCollapsed}
     />
   );
 };
@@ -61,6 +62,7 @@ const DispatchConsole = ({ user, onLogout }) => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [uptime, setUptime] = useState(0);
   const [connectionHealth, setConnectionHealth] = useState('Online');
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   // Mute state: load from localStorage
   const [mutedChannels, setMutedChannels] = useState(() => {
@@ -292,7 +294,14 @@ const DispatchConsole = ({ user, onLogout }) => {
       {/* Main content: split layout with channels panel and map panel */}
       <div className="dispatch-console__main-content">
         {/* Channels panel */}
-        <div className="channels-panel">
+        <div className={`channels-panel ${isCollapsed ? 'channels-panel--collapsed' : ''}`}>
+          <button
+            className="channels-panel__collapse-btn"
+            onClick={() => setIsCollapsed(prev => !prev)}
+            aria-label={isCollapsed ? 'Expand channels panel' : 'Collapse channels panel'}
+          >
+            {isCollapsed ? '\u25B6' : '\u25C0'}
+          </button>
           <ChannelProvider user={user}>
             <DispatchGridWithContext
               overview={overview}
@@ -302,6 +311,7 @@ const DispatchConsole = ({ user, onLogout }) => {
               onToggleMute={toggleMute}
               onMuteTeam={muteTeam}
               onUnmuteTeam={unmuteTeam}
+              isCollapsed={isCollapsed}
             />
           </ChannelProvider>
         </div>

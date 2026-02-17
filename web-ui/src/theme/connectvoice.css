@@ -205,3 +205,21 @@ body {
 .map-container {
   background: rgba(16, 24, 40, 0.85);
 }
+
+/* Channels Panel Collapse Button - Dark Theme */
+.channels-panel__collapse-btn {
+  background: rgba(20, 29, 49, 0.9);
+  border-color: rgba(84, 181, 255, 0.25);
+  color: var(--cv-text-muted);
+}
+
+.channels-panel__collapse-btn:hover {
+  background: rgba(84, 181, 255, 0.15);
+}
+
+/* Collapsed Strip - Dark Theme */
+.channel-grid__collapsed-initial {
+  background: rgba(84, 181, 255, 0.15);
+  color: var(--cv-accent);
+  border: 1px solid rgba(84, 181, 255, 0.3);
+}
