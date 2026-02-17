@@ -289,18 +289,29 @@ const DispatchConsole = ({ user, onLogout }) => {
         </div>
       </div>
 
-      {/* Channel grid (wrapped in ChannelProvider) */}
-      <ChannelProvider user={user}>
-        <DispatchGridWithContext
-          overview={overview}
-          wsUrl={wsUrl}
-          token={token}
-          mutedChannels={mutedChannels}
-          onToggleMute={toggleMute}
-          onMuteTeam={muteTeam}
-          onUnmuteTeam={unmuteTeam}
-        />
-      </ChannelProvider>
+      {/* Main content: split layout with channels panel and map panel */}
+      <div className="dispatch-console__main-content">
+        {/* Channels panel */}
+        <div className="channels-panel">
+          <ChannelProvider user={user}>
+            <DispatchGridWithContext
+              overview={overview}
+              wsUrl={wsUrl}
+              token={token}
+              mutedChannels={mutedChannels}
+              onToggleMute={toggleMute}
+              onMuteTeam={muteTeam}
+              onUnmuteTeam={unmuteTeam}
+            />
+          </ChannelProvider>
+        </div>
+
+        {/* Map panel */}
+        <div className="map-panel">
+          <div className="map-placeholder"></div>
+          <div className="map-container"></div>
+        </div>
+      </div>
 
       {/* Admin drawer */}
       <AdminDrawer
