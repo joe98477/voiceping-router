@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 ## Current Position
 
 Phase: 25 of 26 (Interactive Markers and Motion State)
-Plan: 2 of 3 (Location data enrichment and popup content) - COMPLETE
+Plan: 2 of 3 (Plans 01 and 02 COMPLETE, Plan 03 pending)
 Status: Phase 25 in progress
-Last activity: 2026-02-17 — Completed 25-02 location enrichment and popup utilities
+Last activity: 2026-02-17 — Completed 25-01 motion state icons and staleness visual treatment
 
-Progress: [████████████████████████████████████████████████████████████████████████████░] 81/85 plans (95.3%)
+Progress: [████████████████████████████████████████████████████████████████████████████░] 82/85 plans (96.5%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 81 (v1.0: 24, v2.0: 26, v3.0: 10, v4.0: 13, v5.0: 8)
-- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~4.0 min, v4.0 ~6.2 min, v5.0 ~3.0 min
-- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.67 hours, v4.0 ~1.28 hours, v5.0 ~0.39 hours
+- Total plans completed: 82 (v1.0: 24, v2.0: 26, v3.0: 10, v4.0: 13, v5.0: 9)
+- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~4.0 min, v4.0 ~6.2 min, v5.0 ~3.2 min
+- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.67 hours, v4.0 ~1.28 hours, v5.0 ~0.48 hours
 
 **By Milestone:**
 
@@ -31,7 +31,7 @@ Progress: [███████████████████████
 | v2.0 Android Client | 6 | 26/26 | Complete (2026-02-13) |
 | v3.0 mediasoup Integration | 5 | 10/10 | Complete (2026-02-15) |
 | v4.0 Production Hardening | 5 | 13/13 | Complete (2026-02-16) |
-| v5.0 Dispatch Map View | 6 | 8/12 | In progress |
+| v5.0 Dispatch Map View | 6 | 9/12 | In progress |
 
 **Recent Plan:**
 | Phase | Plan | Duration | Tasks | Files |
@@ -43,6 +43,7 @@ Progress: [███████████████████████
 | Phase 24 P01 | 258 sec | 2 tasks | 5 files | userName and LocationContext |
 | Phase 24 P02 | 229 sec | 2 tasks | 3 files | WebSocket integration and marker rendering |
 | Phase 25 P02 | 178 sec | 2 tasks | 2 files | Location enrichment and popup content |
+| Phase 25 P01 | 269 sec | 2 tasks | 2 files | Motion state icons and staleness |
 
 ## Accumulated Context
 
@@ -89,6 +90,9 @@ Recent decisions affecting v5.0:
 - Phase 25-02 (v5.0): Battery as text percentage only (no color coding) — simple text display in popup per spec
 - Phase 25-02 (v5.0): Connection quality heuristic from networkType — wifi > cellular, power save degrades quality
 - Phase 25-02 (v5.0): PTT button disabled placeholder in popup — reserved for future direct-to-user communication
+- [Phase 25-01]: Same orange color for all motion states — icon shape alone conveys state
+- [Phase 25-01]: 5-minute threshold for stale status with instant recovery (no transition)
+- [Phase 25-01]: Zoom level >= 15 shows username labels for detail when zoomed in
 
 ### Pending Todos
 
@@ -110,10 +114,10 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-17
-Stopped at: Completed 25-02-PLAN.md
-Resume file: .planning/phases/25-interactive-markers-and-motion-state/25-02-SUMMARY.md
+Stopped at: Completed 25-01-PLAN.md (Motion state icons and staleness)
+Resume file: .planning/phases/25-interactive-markers-and-motion-state/25-01-SUMMARY.md
 
-**Next action:** Continue Phase 25 Plan 03 (interactive markers with popups/tooltips)
+**Next action:** Continue Phase 25 Plan 03 (marker clustering with active counts)
 
 **All Milestones:**
 - v1.0 WebRTC Audio Rebuild + Web UI — SHIPPED 2026-02-07
@@ -123,4 +127,4 @@ Resume file: .planning/phases/25-interactive-markers-and-motion-state/25-02-SUMM
 - v5.0 Dispatch Map View — IN PROGRESS (Phase 21-26)
 
 ---
-*Last updated: 2026-02-17 after completing 25-02-PLAN.md*
+*Last updated: 2026-02-17 after completing 25-01-PLAN.md (Motion state icons and staleness)*
