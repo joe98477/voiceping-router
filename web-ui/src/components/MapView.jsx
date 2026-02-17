@@ -106,22 +106,7 @@ const MapView = ({ eventId }) => {
       { position: 'topright' }
     ).addTo(map);
 
-    // Zoom control (bottom-right)
-    L.control.zoom({ position: 'bottomright' }).addTo(map);
-
-    // Scale bar (bottom-left, metric only)
-    L.control.scale({
-      position: 'bottomleft',
-      imperial: false,
-    }).addTo(map);
-
-    // Attribution control (bottom-right, collapsed)
-    L.control.attribution({
-      position: 'bottomright',
-      prefix: false,
-    }).addTo(map);
-
-    // Mouse position / coordinates display (bottom-left, decimal degrees)
+    // Mouse position / coordinates display (bottom-left, at the very bottom)
     if (L.Control.MousePosition) {
       L.control.mousePosition({
         position: 'bottomleft',
@@ -131,6 +116,21 @@ const MapView = ({ eventId }) => {
         emptyString: '',
       }).addTo(map);
     }
+
+    // Attribution control (bottom-right, at the very bottom)
+    L.control.attribution({
+      position: 'bottomright',
+      prefix: false,
+    }).addTo(map);
+
+    // Scale bar (bottom-left, metric only — above coordinates)
+    L.control.scale({
+      position: 'bottomleft',
+      imperial: false,
+    }).addTo(map);
+
+    // Zoom control (bottom-right — above attribution)
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
 
     // Minimap (bottom-right, collapsed by default)
     const minimapTileLayer = L.tileLayer(
