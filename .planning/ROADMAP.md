@@ -236,11 +236,12 @@ Plans:
   3. Dispatch user can configure which fields appear in the status popup via settings
   4. Popup field preferences persist across browser sessions in localStorage
   5. Map remembers zoom and center position across page reloads
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 26-01: TBD
-- [ ] 26-02: TBD
+- [ ] 26-01-PLAN.md -- Glassmorphic toolbar, auto-fit bounds, useLocalStorage hook, toast notifications
+- [ ] 26-02-PLAN.md -- User/channel search autocomplete with keyboard navigation and channel expansion
+- [ ] 26-03-PLAN.md -- Popup field settings panel with toggle switches and localStorage persistence
 
 ## Progress
 
@@ -274,7 +275,7 @@ Phases execute in numeric order: 21 → 22 → 23 → 24 → 25 → 26
 | 23. Map Foundation | v5.0 | Complete    | 2026-02-17 | - |
 | 24. Location State and Real-Time Markers | v5.0 | Complete    | 2026-02-17 | - |
 | 25. Interactive Markers and Motion State | v5.0 | Complete    | 2026-02-17 | - |
-| 26. Map Controls and Polish | v5.0 | 0/2 | Not started | - |
+| 26. Map Controls and Polish | v5.0 | 0/3 | Not started | - |
 
 ---
 *Roadmap created: 2026-02-06*
