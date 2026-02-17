@@ -197,6 +197,7 @@ export class LocationStore {
 
       return rows.map((row) => ({
         userId: row.user_id,
+        userName: row.user_id, // userName not persisted in SQLite, using userId as placeholder
         latitude: row.latitude,
         longitude: row.longitude,
         accuracy: row.accuracy,

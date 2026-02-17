@@ -1051,6 +1051,7 @@ export class SignalingHandlers {
 
       const locationData = {
         userId: ctx.userId,
+        userName: ctx.userName,
         latitude,
         longitude,
         accuracy,
@@ -1135,6 +1136,7 @@ export class SignalingHandlers {
 
         validUpdates.push({
           userId: ctx.userId,
+          userName: ctx.userName,
           latitude: update.latitude,
           longitude: update.longitude,
           accuracy: update.accuracy,
