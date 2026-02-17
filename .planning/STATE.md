@@ -9,19 +9,19 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 
 ## Current Position
 
-Phase: 22 of 26 (Web Layout Split)
-Plan: 2 of 2 (Panel collapse and responsive layout) - COMPLETE
-Status: Phase 22 complete
-Last activity: 2026-02-17 — Completed 22-02 Panel collapse and responsive layout
+Phase: 23 of 26 (Map Foundation)
+Plan: 1 of 2 (MapView component with Leaflet integration) - COMPLETE
+Status: Phase 23 in progress
+Last activity: 2026-02-17 — Completed 23-01 MapView component with Leaflet integration
 
-Progress: [█████████████████████████████████████████████████████████████████████████░░░] 76/85 plans (89.4%)
+Progress: [█████████████████████████████████████████████████████████████████████████░░░] 77/85 plans (90.6%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 76 (v1.0: 24, v2.0: 26, v3.0: 10, v4.0: 13, v5.0: 3)
-- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~4.0 min, v4.0 ~6.2 min, v5.0 ~3.0 min
-- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.67 hours, v4.0 ~1.28 hours, v5.0 ~0.15 hours
+- Total plans completed: 77 (v1.0: 24, v2.0: 26, v3.0: 10, v4.0: 13, v5.0: 4)
+- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~4.0 min, v4.0 ~6.2 min, v5.0 ~2.6 min
+- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.67 hours, v4.0 ~1.28 hours, v5.0 ~0.18 hours
 
 **By Milestone:**
 
@@ -31,7 +31,7 @@ Progress: [███████████████████████
 | v2.0 Android Client | 6 | 26/26 | Complete (2026-02-13) |
 | v3.0 mediasoup Integration | 5 | 10/10 | Complete (2026-02-15) |
 | v4.0 Production Hardening | 5 | 13/13 | Complete (2026-02-16) |
-| v5.0 Dispatch Map View | 6 | 3/12 | In progress |
+| v5.0 Dispatch Map View | 6 | 4/12 | In progress |
 
 **Recent Plan:**
 | Phase | Plan | Duration | Tasks | Files |
@@ -39,6 +39,7 @@ Progress: [███████████████████████
 | Phase 21 P01 | 4 min | 2 tasks | 5 files | Location telemetry integration |
 | Phase 22 P01 | 146 sec | 2 tasks | 3 files | CSS Grid split-panel layout |
 | Phase 22 P02 | 210 sec | 2 tasks | 4 files | Panel collapse and responsive layout |
+| Phase 23 P01 | 110 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -62,6 +63,11 @@ Recent decisions affecting v5.0:
 - Phase 22-02 (v5.0): 40px collapsed strip width — maximizes map space while showing team indicators
 - Phase 22-02 (v5.0): 1200px responsive breakpoint — clean split between desktop/mobile modes
 - Phase 22-02 (v5.0): CSS-only visibility control — both panels stay mounted for continuous audio monitoring
+- Phase 23-01 (v5.0): Vanilla Leaflet with useRef (not react-leaflet) — better cleanup control, React Strict Mode compatible
+- Phase 23-01 (v5.0): Esri satellite + labels overlay — hybrid view with road/place names on satellite imagery
+- Phase 23-01 (v5.0): 5-second geolocation timeout with Sydney fallback — prevents infinite hang
+- Phase 23-01 (v5.0): Event-scoped localStorage key (cv.dispatch.map.{eventId}) — prevents key collision between events
+- Phase 23-01 (v5.0): Keyboard navigation disabled on map — avoids conflicts with app shortcuts
 
 ### Pending Todos
 
@@ -77,17 +83,16 @@ None.
 - Hardcoded JWT secret default — production MUST override via ROUTER_JWT_SECRET
 
 **v5.0 specific:**
-- Leaflet memory leak risk — Phase 23 must establish correct cleanup pattern from start (React Strict Mode validation)
 - Marker performance collapse at 200+ markers — Phase 25 must use canvas or clustering, not DOM markers
 - WebSocket message queue saturation — Phase 24 needs separate LocationContext from ChannelContext
 
 ## Session Continuity
 
 Last session: 2026-02-17
-Stopped at: Completed 22-02-PLAN.md (Phase 22 complete)
-Resume file: .planning/phases/22-web-layout-split/22-02-SUMMARY.md
+Stopped at: Completed 23-01-PLAN.md (Phase 23 in progress)
+Resume file: .planning/phases/23-map-foundation/23-01-SUMMARY.md
 
-**Next action:** Execute Phase 23 Plan 01 (Leaflet integration and location markers)
+**Next action:** Execute Phase 23 Plan 02 (Mount MapView in DispatchConsole)
 
 **All Milestones:**
 - v1.0 WebRTC Audio Rebuild + Web UI — SHIPPED 2026-02-07
@@ -97,4 +102,4 @@ Resume file: .planning/phases/22-web-layout-split/22-02-SUMMARY.md
 - v5.0 Dispatch Map View — IN PROGRESS (Phase 21-26)
 
 ---
-*Last updated: 2026-02-17 after completing 22-02-PLAN.md (Phase 22 complete)*
+*Last updated: 2026-02-17 after completing 23-01-PLAN.md (Phase 23 in progress)*
