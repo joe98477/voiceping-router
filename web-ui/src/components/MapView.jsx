@@ -5,7 +5,11 @@ import 'leaflet-minimap/dist/Control.MiniMap.min.css';
 import 'leaflet-mouse-position/src/L.Control.MousePosition.css';
 import 'leaflet-minimap';
 import 'leaflet-mouse-position';
+import 'leaflet.markercluster';
+import 'leaflet.markercluster/dist/MarkerCluster.css';
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import { useLocations } from '../context/LocationContext.jsx';
+import { generatePopupContent, generateTooltipContent } from '../context/LocationContext.jsx';
 
 /**
  * Create motion-state-aware marker icon with staleness treatment
@@ -55,6 +59,8 @@ const MapView = ({ eventId, ws, isMapVisible }) => {
   const containerRef = useRef(null);
   const activeLayerRef = useRef('satellite');
   const markersRef = useRef(new Map());
+  const clusterGroupRef = useRef(null);
+  const locationsRef = useRef(new Map());
   const hasQueriedRef = useRef(false);
   const { locations, updateLocation, setAllLocations, mergeLocations, removeLocation } = useLocations();
 
@@ -64,6 +70,11 @@ const MapView = ({ eventId, ws, isMapVisible }) => {
   const GEOLOCATION_TIMEOUT = 5000; // 5 seconds
   const STORAGE_KEY = `cv.dispatch.map.${eventId}`;
   const STALE_THRESHOLD = 5 * 60 * 1000; // 5 minutes
+
+  // Keep locationsRef in sync for live popup updates
+  useEffect(() => {
+    locationsRef.current = locations;
+  }, [locations]);
 
   useEffect(() => {
     // Guard: prevent double initialization
@@ -200,6 +211,84 @@ const MapView = ({ eventId, ws, isMapVisible }) => {
       }).addTo(map);
     }
 
+    // Marker cluster group initialization
+    const markerClusterGroup = L.markerClusterGroup({
+      // Custom cluster icon: orange circle with active (non-stale) count
+      iconCreateFunction: function(cluster) {
+        const activeCount = cluster.getAllChildMarkers().filter(m => !m.options.isStale).length;
+        return L.divIcon({
+          html: `<div class="cluster-icon">${activeCount}</div>`,
+          className: 'marker-cluster',
+          iconSize: L.point(40, 40),
+        });
+      },
+
+      // Disable clustering at zoom 16+ (show individuals when zoomed in close)
+      disableClusteringAtZoom: 16,
+
+      // Performance: chunked loading prevents UI freeze
+      chunkedLoading: true,
+      chunkInterval: 200,
+      chunkDelay: 50,
+
+      // Animated transitions (smooth fly-out from cluster per locked decision)
+      animate: true,
+      animateAddingMarkers: false, // Disable for bulk adds (better performance)
+
+      // Spiderfy disabled (click to zoom per locked decision)
+      spiderfyOnMaxZoom: false,
+      zoomToBoundsOnClick: true,
+
+      // Cluster radius
+      maxClusterRadius: 80,
+    });
+
+    map.addLayer(markerClusterGroup);
+    clusterGroupRef.current = markerClusterGroup;
+
+    // Cluster hover tooltip (username list, up to 10, stale names dimmed)
+    markerClusterGroup.on('clustermouseover', function(event) {
+      const cluster = event.layer;
+      const children = cluster.getAllChildMarkers();
+
+      const activeUsers = [];
+      const staleUsers = [];
+
+      children.forEach(marker => {
+        const name = marker.options.title || 'Unknown';
+        if (marker.options.isStale) {
+          staleUsers.push(name);
+        } else {
+          activeUsers.push(name);
+        }
+      });
+
+      const maxDisplay = 10;
+      const allNames = [...activeUsers, ...staleUsers];
+      const displayNames = allNames.slice(0, maxDisplay);
+      const remaining = allNames.length - maxDisplay;
+
+      let html = displayNames.map((name, idx) => {
+        const isStale = idx >= activeUsers.length;
+        return `<div class="${isStale ? 'cluster-tooltip__user--stale' : 'cluster-tooltip__user'}">${name}</div>`;
+      }).join('');
+
+      if (remaining > 0) {
+        html += `<div class="cluster-tooltip__more">...and ${remaining} more</div>`;
+      }
+
+      cluster.bindTooltip(html, {
+        permanent: false,
+        direction: 'top',
+        className: 'cluster-tooltip',
+        offset: [0, -20],
+      }).openTooltip();
+    });
+
+    markerClusterGroup.on('clustermouseout', function(event) {
+      event.layer.closeTooltip();
+    });
+
     // Geolocation (only if no saved state)
     if (!hasRestoredState && 'geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
@@ -274,6 +363,11 @@ const MapView = ({ eventId, ws, isMapVisible }) => {
 
     // Cleanup function — CRITICAL for React Strict Mode
     return () => {
+      if (clusterGroupRef.current) {
+        clusterGroupRef.current.clearLayers();
+        map.removeLayer(clusterGroupRef.current);
+        clusterGroupRef.current = null;
+      }
       map.off('moveend', saveMapState);
       map.off('zoomend', saveMapState);
       map.off('zoomend', handleZoomEnd);
@@ -356,14 +450,14 @@ const MapView = ({ eventId, ws, isMapVisible }) => {
     };
   }, [ws, isMapVisible, updateLocation, mergeLocations]);
 
-  // Marker rendering
+  // Marker rendering with clustering
   useEffect(() => {
-    // Guard: return early if map not initialized
-    if (!mapRef.current) {
+    // Guard: return early if map or cluster group not initialized
+    if (!mapRef.current || !clusterGroupRef.current) {
       return;
     }
 
-    const map = mapRef.current;
+    const clusterGroup = clusterGroupRef.current;
 
     // Update existing markers and create new ones
     for (const [userId, position] of locations.entries()) {
@@ -385,20 +479,64 @@ const MapView = ({ eventId, ws, isMapVisible }) => {
           existingMarker.setIcon(newIcon);
         }
 
-        // Update marker metadata for Plan 03's cluster count filtering
+        // Update marker metadata for cluster count filtering
         existingMarker.options.isStale = isStale;
         existingMarker.options.userId = userId;
         existingMarker.options.title = position.userName;
+
+        // Update tooltip content
+        existingMarker.setTooltipContent(generateTooltipContent(position));
+
+        // Update popup content if open (live updates per locked decision)
+        if (existingMarker.isPopupOpen()) {
+          existingMarker.getPopup().setContent(generatePopupContent(position));
+        }
       } else {
         // Create new marker with motion-state-aware icon
         const icon = createMarkerIcon(position, isStale);
-        const marker = L.marker([position.latitude, position.longitude], { icon }).addTo(map);
+        const marker = L.marker([position.latitude, position.longitude], {
+          icon: icon,
+          userId: userId,
+          title: position.userName,
+          isStale: isStale,
+        });
 
-        // Store metadata for Plan 03's cluster count filtering
-        marker.options.isStale = isStale;
-        marker.options.userId = userId;
-        marker.options.title = position.userName;
+        // Hover tooltip (locked decision: permanent: false = hover only)
+        marker.bindTooltip(generateTooltipContent(position), {
+          permanent: false,
+          direction: 'top',
+          offset: [0, -10],
+          className: 'marker-tooltip',
+        });
 
+        // Click popup (locked decision: autoClose: true for single popup)
+        marker.bindPopup(generatePopupContent(position), {
+          maxWidth: 300,
+          closeButton: true,
+          autoClose: true,
+          closeOnClick: true,
+        });
+
+        // Popup lifecycle handlers for live updates
+        marker.on('popupopen', function() {
+          const uid = this.options.userId;
+          this._popupUpdateInterval = setInterval(() => {
+            const latest = locationsRef.current.get(uid);
+            if (latest && this.isPopupOpen()) {
+              this.getPopup().setContent(generatePopupContent(latest));
+            }
+          }, 2000); // Update every 2 seconds while popup is open
+        });
+
+        marker.on('popupclose', function() {
+          if (this._popupUpdateInterval) {
+            clearInterval(this._popupUpdateInterval);
+            this._popupUpdateInterval = null;
+          }
+        });
+
+        // Add to cluster group (NOT directly to map)
+        clusterGroup.addLayer(marker);
         markersRef.current.set(userId, marker);
       }
     }
@@ -406,10 +544,18 @@ const MapView = ({ eventId, ws, isMapVisible }) => {
     // Remove markers that no longer exist in locations
     for (const [userId, marker] of markersRef.current.entries()) {
       if (!locations.has(userId)) {
-        map.removeLayer(marker);
+        // Clean up popup interval if active
+        if (marker._popupUpdateInterval) {
+          clearInterval(marker._popupUpdateInterval);
+          marker._popupUpdateInterval = null;
+        }
+        clusterGroup.removeLayer(marker);
         markersRef.current.delete(userId);
       }
     }
+
+    // Refresh cluster icons to reflect updated staleness counts
+    clusterGroup.refreshClusters();
   }, [locations, STALE_THRESHOLD]);
 
   // Stale marker cleanup timer (every 5 minutes, removes markers older than 1 hour)
