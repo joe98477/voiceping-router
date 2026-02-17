@@ -1706,3 +1706,80 @@ input[type="checkbox"] {
   background: #4caf50;
   animation: dispatch-pulse 1.2s ease-in-out infinite;
 }
+
+/* Mobile Tab Bar */
+.mobile-tab-bar {
+  display: none;
+}
+
+.mobile-tab-bar__tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 80px;
+  min-height: 48px;
+  padding: 8px 16px;
+  border-radius: 12px;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.mobile-tab-bar__tab--active {
+  color: var(--cv-accent, #54b5ff);
+  background: rgba(84, 181, 255, 0.15);
+}
+
+/* Desktop breakpoint - hide tab bar */
+@media (min-width: 1200px) {
+  .mobile-tab-bar {
+    display: none;
+  }
+}
+
+/* Mobile/tablet breakpoint - show tab bar and single column layout */
+@media (max-width: 1199px) {
+  .dispatch-console__main-content {
+    grid-template-columns: 1fr;
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .channels-panel {
+    width: auto !important;
+    overflow-y: auto;
+  }
+
+  .channels-panel,
+  .map-panel {
+    display: none;
+  }
+
+  .channels-panel.active,
+  .map-panel.active {
+    display: block;
+  }
+
+  .channels-panel__collapse-btn {
+    display: none;
+  }
+
+  .mobile-tab-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 8px;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    z-index: 10;
+  }
+}

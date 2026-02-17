@@ -223,3 +223,9 @@ body {
   color: var(--cv-accent);
   border: 1px solid rgba(84, 181, 255, 0.3);
 }
+
+/* Mobile Tab Bar - Dark Theme */
+.mobile-tab-bar {
+  background: linear-gradient(180deg, rgba(22, 31, 52, 0.95) 0%, rgba(12, 18, 32, 0.98) 100%);
+  border-top: 1px solid var(--cv-border);
+}

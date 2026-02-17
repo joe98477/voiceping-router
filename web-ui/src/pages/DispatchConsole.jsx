@@ -63,6 +63,7 @@ const DispatchConsole = ({ user, onLogout }) => {
   const [uptime, setUptime] = useState(0);
   const [connectionHealth, setConnectionHealth] = useState('Online');
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [activeTab, setActiveTab] = useState('channels');
 
   // Mute state: load from localStorage
   const [mutedChannels, setMutedChannels] = useState(() => {
@@ -294,7 +295,7 @@ const DispatchConsole = ({ user, onLogout }) => {
       {/* Main content: split layout with channels panel and map panel */}
       <div className="dispatch-console__main-content">
         {/* Channels panel */}
-        <div className={`channels-panel ${isCollapsed ? 'channels-panel--collapsed' : ''}`}>
+        <div className={`channels-panel ${isCollapsed ? 'channels-panel--collapsed' : ''} ${activeTab === 'channels' ? 'active' : ''}`}>
           <button
             className="channels-panel__collapse-btn"
             onClick={() => setIsCollapsed(prev => !prev)}
@@ -317,10 +318,34 @@ const DispatchConsole = ({ user, onLogout }) => {
         </div>
 
         {/* Map panel */}
-        <div className="map-panel">
+        <div className={`map-panel ${activeTab === 'map' ? 'active' : ''}`}>
           <div className="map-placeholder"></div>
           <div className="map-container"></div>
         </div>
+      </div>
+
+      {/* Mobile tab bar */}
+      <div className="mobile-tab-bar">
+        <button
+          className={`mobile-tab-bar__tab ${activeTab === 'channels' ? 'mobile-tab-bar__tab--active' : ''}`}
+          onClick={() => setActiveTab('channels')}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="2" y="3" width="20" height="18" rx="2" />
+            <line x1="8" y1="3" x2="8" y2="21" />
+            <line x1="16" y1="3" x2="16" y2="21" />
+          </svg>
+          <span>Channels</span>
+        </button>
+        <button
+          className={`mobile-tab-bar__tab ${activeTab === 'map' ? 'mobile-tab-bar__tab--active' : ''}`}
+          onClick={() => setActiveTab('map')}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polygon points="1,6 1,22 8,18 16,22 23,18 23,2 16,6 8,2" />
+          </svg>
+          <span>Map</span>
+        </button>
       </div>
 
       {/* Admin drawer */}
