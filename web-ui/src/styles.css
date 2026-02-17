@@ -1798,3 +1798,62 @@ input[type="checkbox"] {
     z-index: 10;
   }
 }
+
+/* === Map User Markers (Phase 24) === */
+
+/* Smooth marker slide animation (200ms per user decision) */
+.leaflet-marker-pane > * {
+  -webkit-transition: transform 200ms linear;
+  -moz-transition: transform 200ms linear;
+  transition: transform 200ms linear;
+}
+
+/* User marker container */
+.user-marker {
+  position: relative;
+}
+
+/* Username label (above marker, 10px font, orange text, translucent pill) */
+.user-marker__label {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.85);
+  color: #FF9800;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  margin-bottom: 2px;
+  text-shadow: 0 0 2px rgba(255, 255, 255, 0.5);
+}
+
+/* Orange pin (28-32px, teardrop shape, drop shadow, bottom-center anchor) */
+.user-marker__pin {
+  width: 30px;
+  height: 30px;
+  background: #FF9800;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.4));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Person icon inside pin (counter-rotate to stay upright) */
+.user-marker__icon {
+  transform: rotate(45deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Override Leaflet default DivIcon styles */
+.leaflet-div-icon.user-marker {
+  background: transparent;
+  border: none;
+}
