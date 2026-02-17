@@ -10,11 +10,14 @@
   },
   "dependencies": {
     "@mdi/js": "7.4.47",
+    "leaflet": "^1.9.4",
+    "leaflet-minimap": "^3.6.1",
+    "leaflet-mouse-position": "^1.0.4",
+    "mediasoup-client": "^3.18.6",
     "notepack.io": "3.0.1",
     "opus-decoder": "0.7.7",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "mediasoup-client": "^3.18.6",
     "react-router-dom": "6.26.2"
   },
   "devDependencies": {
