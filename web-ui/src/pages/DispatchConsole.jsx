@@ -3,11 +3,12 @@
  * Shows all channels grouped by team with stats bar, admin drawer, and mute persistence
  */
 
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { apiFetch, apiGet, apiPost } from '../api.js';
 import { useAuth } from '../hooks/useAuth.js';
 import { ChannelProvider, useChannels } from '../context/ChannelContext.jsx';
+import { LocationProvider } from '../context/LocationContext.jsx';
 import ChannelGrid from '../components/ChannelGrid.jsx';
 import AdminDrawer from '../components/AdminDrawer.jsx';
 import { usePermissionUpdates } from '../hooks/usePermissionUpdates.js';
@@ -65,6 +66,7 @@ const DispatchConsole = ({ user, onLogout }) => {
   const [connectionHealth, setConnectionHealth] = useState('Online');
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState('channels');
+  const locationWsRef = useRef(null);
 
   // Mute state: load from localStorage
   const [mutedChannels, setMutedChannels] = useState(() => {
@@ -102,6 +104,33 @@ const DispatchConsole = ({ user, onLogout }) => {
       window.removeEventListener('offline', updateHealth);
     };
   }, []);
+
+  // Dedicated WebSocket connection for location updates
+  useEffect(() => {
+    if (!token) return;
+
+    // Build WebSocket URL with token as sec-websocket-protocol (matching server auth pattern)
+    const ws = new WebSocket(wsUrl, token);
+    locationWsRef.current = ws;
+
+    ws.onopen = () => {
+      console.log('[LocationWS] Connected');
+    };
+
+    ws.onerror = (e) => {
+      console.error('[LocationWS] Error:', e);
+    };
+
+    ws.onclose = () => {
+      console.log('[LocationWS] Disconnected');
+      locationWsRef.current = null;
+    };
+
+    return () => {
+      ws.close();
+      locationWsRef.current = null;
+    };
+  }, [token, wsUrl]);
 
   // Format uptime as "Xh Ym"
   const uptimeFormatted = useMemo(() => {
@@ -210,6 +239,20 @@ const DispatchConsole = ({ user, onLogout }) => {
   const totalChannels = overview?.channels?.length || 0;
   const mutedCount = mutedChannels.size;
 
+  // Compute isMapVisible based on responsive breakpoint
+  // Desktop (>=1200px): map always visible
+  // Mobile (<1200px): map visible when activeTab === 'map'
+  const [isDesktop, setIsDesktop] = useState(window.matchMedia('(min-width: 1200px)').matches);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(min-width: 1200px)');
+    const handleMediaChange = (e) => setIsDesktop(e.matches);
+    mediaQuery.addEventListener('change', handleMediaChange);
+    return () => mediaQuery.removeEventListener('change', handleMediaChange);
+  }, []);
+
+  const isMapVisible = isDesktop || activeTab === 'map';
+
   if (loading) {
     return <div className="screen screen--center">Loading dispatch console...</div>;
   }
@@ -295,35 +338,37 @@ const DispatchConsole = ({ user, onLogout }) => {
 
       {/* Main content: split layout with channels panel and map panel */}
       <div className="dispatch-console__main-content">
-        {/* Channels panel */}
-        <div className={`channels-panel ${isCollapsed ? 'channels-panel--collapsed' : ''} ${activeTab === 'channels' ? 'active' : ''}`}>
-          <button
-            className="channels-panel__collapse-btn"
-            onClick={() => setIsCollapsed(prev => !prev)}
-            aria-label={isCollapsed ? 'Expand channels panel' : 'Collapse channels panel'}
-          >
-            {isCollapsed ? '\u25B6' : '\u25C0'}
-          </button>
-          <ChannelProvider user={user}>
-            <DispatchGridWithContext
-              overview={overview}
-              wsUrl={wsUrl}
-              token={token}
-              mutedChannels={mutedChannels}
-              onToggleMute={toggleMute}
-              onMuteTeam={muteTeam}
-              onUnmuteTeam={unmuteTeam}
-              isCollapsed={isCollapsed}
-            />
-          </ChannelProvider>
-        </div>
-
-        {/* Map panel */}
-        <div className={`map-panel ${activeTab === 'map' ? 'active' : ''}`}>
-          <div className="map-container">
-            <MapView eventId={eventId} />
+        <LocationProvider eventId={eventId}>
+          {/* Channels panel */}
+          <div className={`channels-panel ${isCollapsed ? 'channels-panel--collapsed' : ''} ${activeTab === 'channels' ? 'active' : ''}`}>
+            <button
+              className="channels-panel__collapse-btn"
+              onClick={() => setIsCollapsed(prev => !prev)}
+              aria-label={isCollapsed ? 'Expand channels panel' : 'Collapse channels panel'}
+            >
+              {isCollapsed ? '\u25B6' : '\u25C0'}
+            </button>
+            <ChannelProvider user={user}>
+              <DispatchGridWithContext
+                overview={overview}
+                wsUrl={wsUrl}
+                token={token}
+                mutedChannels={mutedChannels}
+                onToggleMute={toggleMute}
+                onMuteTeam={muteTeam}
+                onUnmuteTeam={unmuteTeam}
+                isCollapsed={isCollapsed}
+              />
+            </ChannelProvider>
           </div>
-        </div>
+
+          {/* Map panel */}
+          <div className={`map-panel ${activeTab === 'map' ? 'active' : ''}`}>
+            <div className="map-container">
+              <MapView eventId={eventId} ws={locationWsRef.current} isMapVisible={isMapVisible} />
+            </div>
+          </div>
+        </LocationProvider>
       </div>
 
       {/* Mobile tab bar */}

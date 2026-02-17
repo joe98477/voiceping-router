@@ -5,11 +5,15 @@ import 'leaflet-minimap/dist/Control.MiniMap.min.css';
 import 'leaflet-mouse-position/src/L.Control.MousePosition.css';
 import 'leaflet-minimap';
 import 'leaflet-mouse-position';
+import { useLocations } from '../context/LocationContext.jsx';
 
-const MapView = ({ eventId }) => {
+const MapView = ({ eventId, ws, isMapVisible }) => {
   const mapRef = useRef(null);
   const containerRef = useRef(null);
   const activeLayerRef = useRef('satellite');
+  const markersRef = useRef(new Map());
+  const hasQueriedRef = useRef(false);
+  const { locations, updateLocation, setAllLocations, mergeLocations, removeLocation } = useLocations();
 
   // Constants
   const DEFAULT_CENTER = [-33.8688, 151.2093]; // Sydney, Australia
@@ -220,6 +224,180 @@ const MapView = ({ eventId }) => {
       mapRef.current = null;
     };
   }, [eventId, STORAGE_KEY]); // eventId changes should reinitialize map with new storage key
+
+  // WebSocket LOCATION_BROADCAST listener
+  useEffect(() => {
+    // Guard: return early if WebSocket not ready
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    const handleMessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+
+        // Handle LOCATION_BROADCAST messages
+        if (message.type === 'location-broadcast' && message.data) {
+          updateLocation(message.data.userId, message.data);
+        }
+      } catch (error) {
+        console.error('[MapView] Failed to parse location message:', error);
+      }
+    };
+
+    ws.addEventListener('message', handleMessage);
+
+    return () => {
+      ws.removeEventListener('message', handleMessage);
+    };
+  }, [ws, updateLocation]);
+
+  // LOCATION_QUERY on map visibility
+  useEffect(() => {
+    // Guard: return early if already queried, map not visible, or WebSocket not ready
+    if (hasQueriedRef.current || !isMapVisible || !ws || ws.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    const queryId = 'loc-query-' + Date.now();
+
+    const handleQueryResponse = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+
+        // Match on correlation ID and check for positions data
+        if (message.id === queryId && message.data?.positions) {
+          const positions = message.data.positions;
+
+          // Use staggered batch updates for large position sets
+          if (positions.length > 5) {
+            positions.forEach((pos, index) => {
+              setTimeout(() => updateLocation(pos.userId, pos), index * 50);
+            });
+          } else {
+            // Small sets can be merged directly
+            mergeLocations(positions);
+          }
+
+          hasQueriedRef.current = true;
+          ws.removeEventListener('message', handleQueryResponse);
+        }
+      } catch (error) {
+        console.error('[MapView] Failed to parse location query response:', error);
+      }
+    };
+
+    ws.addEventListener('message', handleQueryResponse);
+
+    // Send LOCATION_QUERY with correlation ID
+    ws.send(JSON.stringify({ type: 'location-query', id: queryId }));
+
+    return () => {
+      ws.removeEventListener('message', handleQueryResponse);
+    };
+  }, [ws, isMapVisible, updateLocation, mergeLocations]);
+
+  // Marker rendering
+  useEffect(() => {
+    // Guard: return early if map not initialized
+    if (!mapRef.current) {
+      return;
+    }
+
+    const map = mapRef.current;
+
+    // Update existing markers and create new ones
+    for (const [userId, position] of locations.entries()) {
+      const existingMarker = markersRef.current.get(userId);
+
+      if (existingMarker) {
+        // Update position (CSS transition handles animation)
+        existingMarker.setLatLng([position.latitude, position.longitude]);
+
+        // Update icon HTML if userName changed
+        const currentIcon = existingMarker.getIcon();
+        const newIconHtml = `
+          <div class="user-marker__label">${position.userName}</div>
+          <div class="user-marker__pin">
+            <div class="user-marker__icon">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="white">
+                <circle cx="12" cy="8" r="3.5"/>
+                <path d="M12 14c-4.4 0-8 2-8 4.5V20h16v-1.5c0-2.5-3.6-4.5-8-4.5z"/>
+              </svg>
+            </div>
+          </div>
+        `;
+
+        if (currentIcon.options.html !== newIconHtml) {
+          existingMarker.setIcon(L.divIcon({
+            className: 'user-marker',
+            html: newIconHtml,
+            iconSize: [32, 40],
+            iconAnchor: [16, 40], // Bottom-center of pin tip
+          }));
+        }
+      } else {
+        // Create new marker
+        const icon = L.divIcon({
+          className: 'user-marker',
+          html: `
+            <div class="user-marker__label">${position.userName}</div>
+            <div class="user-marker__pin">
+              <div class="user-marker__icon">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="white">
+                  <circle cx="12" cy="8" r="3.5"/>
+                  <path d="M12 14c-4.4 0-8 2-8 4.5V20h16v-1.5c0-2.5-3.6-4.5-8-4.5z"/>
+                </svg>
+              </div>
+            </div>
+          `,
+          iconSize: [32, 40],
+          iconAnchor: [16, 40], // Bottom-center of pin tip
+        });
+
+        const marker = L.marker([position.latitude, position.longitude], { icon }).addTo(map);
+        markersRef.current.set(userId, marker);
+      }
+    }
+
+    // Remove markers that no longer exist in locations
+    for (const [userId, marker] of markersRef.current.entries()) {
+      if (!locations.has(userId)) {
+        map.removeLayer(marker);
+        markersRef.current.delete(userId);
+      }
+    }
+  }, [locations]);
+
+  // Stale marker cleanup timer (every 5 minutes, removes markers older than 1 hour)
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      const now = Date.now();
+      const oneHourThreshold = 60 * 60 * 1000;
+
+      for (const [userId, position] of locations.entries()) {
+        const age = now - new Date(position.timestamp).getTime();
+        if (age > oneHourThreshold) {
+          console.warn(`[MapView] Removing stale marker for user ${userId}, age: ${Math.floor(age / 60000)}m`);
+          removeLocation(userId);
+        }
+      }
+    }, 5 * 60 * 1000); // 5 minutes
+
+    return () => clearInterval(intervalId);
+  }, [locations, removeLocation]);
+
+  // Cleanup all markers on unmount
+  useEffect(() => {
+    return () => {
+      if (mapRef.current) {
+        for (const marker of markersRef.current.values()) {
+          mapRef.current.removeLayer(marker);
+        }
+        markersRef.current.clear();
+      }
+    };
+  }, []);
 
   return <div ref={containerRef} style={{ width: '100%', height: '100%' }} />;
 };
