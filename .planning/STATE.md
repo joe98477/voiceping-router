@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 ## Current Position
 
 Phase: 22 of 26 (Web Layout Split)
-Plan: 1 of 2 (CSS Grid split-panel layout)
-Status: Executing phase 22
-Last activity: 2026-02-17 — Completed 22-01 CSS Grid split-panel layout
+Plan: 2 of 2 (Panel collapse and responsive layout) - COMPLETE
+Status: Phase 22 complete
+Last activity: 2026-02-17 — Completed 22-02 Panel collapse and responsive layout
 
-Progress: [█████████████████████████████████████████████████████████████████████████░░░] 75/85 plans (88.2%)
+Progress: [█████████████████████████████████████████████████████████████████████████░░░] 76/85 plans (89.4%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 75 (v1.0: 24, v2.0: 26, v3.0: 10, v4.0: 13, v5.0: 2)
-- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~4.0 min, v4.0 ~6.2 min, v5.0 ~2.5 min
-- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.67 hours, v4.0 ~1.28 hours, v5.0 ~0.09 hours
+- Total plans completed: 76 (v1.0: 24, v2.0: 26, v3.0: 10, v4.0: 13, v5.0: 3)
+- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~4.0 min, v4.0 ~6.2 min, v5.0 ~3.0 min
+- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.67 hours, v4.0 ~1.28 hours, v5.0 ~0.15 hours
 
 **By Milestone:**
 
@@ -31,14 +31,14 @@ Progress: [███████████████████████
 | v2.0 Android Client | 6 | 26/26 | Complete (2026-02-13) |
 | v3.0 mediasoup Integration | 5 | 10/10 | Complete (2026-02-15) |
 | v4.0 Production Hardening | 5 | 13/13 | Complete (2026-02-16) |
-| v5.0 Dispatch Map View | 6 | 2/12 | In progress |
+| v5.0 Dispatch Map View | 6 | 3/12 | In progress |
 
 **Recent Plan:**
 | Phase | Plan | Duration | Tasks | Files |
 |-------|------|----------|-------|-------|
-| Phase 21 P02 | 3 min | 2 tasks | 2 files | Android telemetry collection |
-| Phase 21 P01 | 4 | 2 tasks | 5 files |
-| Phase 22 P01 | 146 | 2 tasks | 3 files |
+| Phase 21 P01 | 4 min | 2 tasks | 5 files | Location telemetry integration |
+| Phase 22 P01 | 146 sec | 2 tasks | 3 files | CSS Grid split-panel layout |
+| Phase 22 P02 | 210 sec | 2 tasks | 4 files | Panel collapse and responsive layout |
 
 ## Accumulated Context
 
@@ -57,6 +57,11 @@ Recent decisions affecting v5.0:
 - Phase 22-01 (v5.0): Sharp edges on map-container (no border-radius) — allows edge-to-edge Leaflet rendering
 - Phase 22-01 (v5.0): Stats bar space-around — items spread evenly across full page width
 - Phase 22-01 (v5.0): Channel cards 180px minmax — ensures 2-column fit in 500px channels panel
+- Phase 22-02 (v5.0): No collapse state persistence — plain useState without localStorage (deferred)
+- Phase 22-02 (v5.0): Default mobile tab is Channels — dispatch operators see channels first on mobile
+- Phase 22-02 (v5.0): 40px collapsed strip width — maximizes map space while showing team indicators
+- Phase 22-02 (v5.0): 1200px responsive breakpoint — clean split between desktop/mobile modes
+- Phase 22-02 (v5.0): CSS-only visibility control — both panels stay mounted for continuous audio monitoring
 
 ### Pending Todos
 
@@ -79,10 +84,10 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-17
-Stopped at: Completed 22-01-PLAN.md
-Resume file: .planning/phases/22-web-layout-split/22-01-SUMMARY.md
+Stopped at: Completed 22-02-PLAN.md (Phase 22 complete)
+Resume file: .planning/phases/22-web-layout-split/22-02-SUMMARY.md
 
-**Next action:** Execute Phase 22 Plan 02 (Panel collapse and responsive layout)
+**Next action:** Execute Phase 23 Plan 01 (Leaflet integration and location markers)
 
 **All Milestones:**
 - v1.0 WebRTC Audio Rebuild + Web UI — SHIPPED 2026-02-07
@@ -92,4 +97,4 @@ Resume file: .planning/phases/22-web-layout-split/22-01-SUMMARY.md
 - v5.0 Dispatch Map View — IN PROGRESS (Phase 21-26)
 
 ---
-*Last updated: 2026-02-17 after completing 22-01-PLAN.md*
+*Last updated: 2026-02-17 after completing 22-02-PLAN.md (Phase 22 complete)*
