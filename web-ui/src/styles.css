@@ -1899,3 +1899,144 @@ input[type="checkbox"] {
 .show-marker-labels .user-marker__label {
   display: block;
 }
+
+/* === Map Popup Card (Phase 25) === */
+
+.marker-popup {
+  font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
+  font-size: 12px;
+  min-width: 200px;
+  color: #111418;
+}
+
+.marker-popup__section {
+  padding: 6px 0;
+}
+
+.marker-popup__section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #5f6b7a;
+  margin-bottom: 4px;
+}
+
+.marker-popup__row {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+  gap: 12px;
+}
+
+.marker-popup__label {
+  color: #5f6b7a;
+  flex-shrink: 0;
+}
+
+.marker-popup__divider {
+  height: 1px;
+  background: rgba(17, 20, 24, 0.08);
+  margin: 2px 0;
+}
+
+.marker-popup__ptt-btn {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 6px 12px;
+  background: #e0e0e0;
+  border: 1px solid rgba(17, 20, 24, 0.12);
+  border-radius: 6px;
+  font-size: 11px;
+  color: #999;
+  cursor: not-allowed;
+  text-align: center;
+}
+
+/* Marker hover tooltip */
+.marker-tooltip {
+  font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
+  font-size: 11px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(17, 20, 24, 0.12);
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* === Map Clustering (Phase 25) === */
+
+/* Override default markercluster styles */
+.marker-cluster {
+  background: transparent !important;
+}
+
+.cluster-icon {
+  width: 40px;
+  height: 40px;
+  line-height: 40px;
+  text-align: center;
+  border-radius: 50%;
+  background: #FF9800;
+  color: white;
+  font-weight: 700;
+  font-size: 14px;
+  font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* Override default cluster size variations (all same size/color per locked decision) */
+.marker-cluster-small,
+.marker-cluster-medium,
+.marker-cluster-large {
+  background: transparent !important;
+}
+
+.marker-cluster-small div,
+.marker-cluster-medium div,
+.marker-cluster-large div {
+  background: transparent !important;
+}
+
+/* Cluster hover tooltip */
+.cluster-tooltip {
+  font-family: 'Space Grotesk', 'Segoe UI', sans-serif;
+  font-size: 11px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(17, 20, 24, 0.12);
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  max-width: 200px;
+}
+
+.cluster-tooltip__user {
+  padding: 1px 0;
+  color: #111418;
+}
+
+.cluster-tooltip__user--stale {
+  padding: 1px 0;
+  color: #999;
+  font-style: italic;
+}
+
+.cluster-tooltip__more {
+  padding: 2px 0;
+  color: #5f6b7a;
+  font-style: italic;
+  border-top: 1px solid rgba(17, 20, 24, 0.08);
+  margin-top: 2px;
+}
+
+/* Leaflet popup overrides for marker card */
+.leaflet-popup-content-wrapper {
+  border-radius: 8px;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.2);
+}
+
+.leaflet-popup-content {
+  margin: 8px 12px;
+  line-height: 1.4;
+}
