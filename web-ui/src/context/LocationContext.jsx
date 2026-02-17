@@ -4,7 +4,7 @@
  * Separate from ChannelContext to prevent high-frequency location updates from re-rendering channel components
  */
 
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 
 const LocationContext = createContext(null);
 
@@ -14,14 +14,54 @@ const LocationContext = createContext(null);
  *
  * @param {object} props
  * @param {string} props.eventId - Current event ID (triggers clear on event switch)
+ * @param {object} props.overview - Event overview data containing teams and channels
  * @param {React.ReactNode} props.children - Child components
  */
-export const LocationProvider = ({ eventId, children }) => {
+export const LocationProvider = ({ eventId, overview, children }) => {
   // Location state: Map<userId, LocationPosition>
   // LocationPosition = { userId, userName, latitude, longitude, accuracy, speed, heading,
   //                      motionState, timestamp, batteryPercentage, powerSaveMode, networkType,
-  //                      lowBattery, isStale, isConnected }
+  //                      lowBattery, isStale, isConnected, teamName, channelNames }
   const [locations, setLocations] = useState(new Map());
+
+  // Build user lookup from overview data
+  // Maps userId -> { teamName, channelNames[] }
+  const userLookup = useMemo(() => {
+    if (!overview) return new Map();
+    const lookup = new Map();
+    const teamMap = new Map();
+
+    // Build team name lookup
+    if (overview.teams) {
+      for (const team of overview.teams) {
+        teamMap.set(team.id, team.name);
+      }
+    }
+
+    // Build user -> { teamName, channelNames } mapping from channels
+    if (overview.channels) {
+      for (const channel of overview.channels) {
+        const teamName = teamMap.get(channel.teamId) || 'Unknown';
+        if (channel.members && Array.isArray(channel.members)) {
+          for (const member of channel.members) {
+            // member can be userId string or object with .userId or .id
+            const userId = typeof member === 'string' ? member : member.userId || member.id;
+            if (!userId) continue;
+
+            if (!lookup.has(userId)) {
+              lookup.set(userId, { teamName, channelNames: [] });
+            }
+            const entry = lookup.get(userId);
+            // Use team from first channel found (consistent)
+            if (!entry.channelNames.includes(channel.name)) {
+              entry.channelNames.push(channel.name);
+            }
+          }
+        }
+      }
+    }
+    return lookup;
+  }, [overview]);
 
   /**
    * Update single location from LOCATION_BROADCAST
@@ -30,7 +70,16 @@ export const LocationProvider = ({ eventId, children }) => {
   const updateLocation = useCallback((userId, position) => {
     setLocations((prev) => {
       const newMap = new Map(prev);
-      newMap.set(userId, position);
+
+      // Enrich with team/channel data from overview
+      const userInfo = userLookup.get(userId);
+      const enrichedPosition = {
+        ...position,
+        teamName: userInfo?.teamName || 'Unknown',
+        channelNames: userInfo?.channelNames || [],
+      };
+
+      newMap.set(userId, enrichedPosition);
 
       // Eager stale cleanup: remove entries older than 1 hour
       const now = Date.now();
@@ -45,7 +94,7 @@ export const LocationProvider = ({ eventId, children }) => {
 
       return newMap;
     });
-  }, []);
+  }, [userLookup]);
 
   /**
    * Bulk set from LOCATION_QUERY response
@@ -60,11 +109,18 @@ export const LocationProvider = ({ eventId, children }) => {
     const newMap = new Map();
     for (const position of positions) {
       if (position.userId) {
-        newMap.set(position.userId, position);
+        // Enrich with team/channel data from overview
+        const userInfo = userLookup.get(position.userId);
+        const enrichedPosition = {
+          ...position,
+          teamName: userInfo?.teamName || 'Unknown',
+          channelNames: userInfo?.channelNames || [],
+        };
+        newMap.set(position.userId, enrichedPosition);
       }
     }
     setLocations(newMap);
-  }, []);
+  }, [userLookup]);
 
   /**
    * Merge positions into existing Map
@@ -80,12 +136,19 @@ export const LocationProvider = ({ eventId, children }) => {
       const newMap = new Map(prev);
       for (const position of positions) {
         if (position.userId) {
-          newMap.set(position.userId, position);
+          // Enrich with team/channel data from overview
+          const userInfo = userLookup.get(position.userId);
+          const enrichedPosition = {
+            ...position,
+            teamName: userInfo?.teamName || 'Unknown',
+            channelNames: userInfo?.channelNames || [],
+          };
+          newMap.set(position.userId, enrichedPosition);
         }
       }
       return newMap;
     });
-  }, []);
+  }, [userLookup]);
 
   /**
    * Remove single location entry
