@@ -10,6 +10,7 @@ import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import { useLocations } from '../context/LocationContext.jsx';
 import { generatePopupContent, generateTooltipContent } from '../context/LocationContext.jsx';
+import MapToolbar from './MapToolbar.jsx';
 
 /**
  * Create motion-state-aware marker icon with staleness treatment
@@ -62,6 +63,7 @@ const MapView = ({ eventId, ws, isMapVisible }) => {
   const clusterGroupRef = useRef(null);
   const locationsRef = useRef(new Map());
   const hasQueriedRef = useRef(false);
+  const initialFitDoneRef = useRef(false);
   const { locations, updateLocation, setAllLocations, mergeLocations, removeLocation } = useLocations();
 
   // Constants
@@ -556,6 +558,25 @@ const MapView = ({ eventId, ws, isMapVisible }) => {
 
     // Refresh cluster icons to reflect updated staleness counts
     clusterGroup.refreshClusters();
+
+    // Auto-fit on initial marker load (once, after first markers appear)
+    if (!initialFitDoneRef.current && clusterGroup.getLayers().length > 0) {
+      setTimeout(() => {
+        const bounds = clusterGroup.getBounds();
+        const layerCount = clusterGroup.getLayers().length;
+        const maxZoom = layerCount === 1 ? 14 : 18;
+
+        mapRef.current.flyToBounds(bounds, {
+          paddingTopLeft: [50, 80],
+          paddingBottomRight: [50, 50],
+          maxZoom: maxZoom,
+          animate: true,
+          duration: 1.0,
+        });
+      }, 300); // Small delay to let markers render
+
+      initialFitDoneRef.current = true;
+    }
   }, [locations, STALE_THRESHOLD]);
 
   // Stale marker cleanup timer (every 5 minutes, removes markers older than 1 hour)
@@ -588,7 +609,17 @@ const MapView = ({ eventId, ws, isMapVisible }) => {
     };
   }, []);
 
-  return <div ref={containerRef} style={{ width: '100%', height: '100%' }} />;
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+      <MapToolbar
+        map={mapRef.current}
+        clusterGroup={clusterGroupRef.current}
+        locations={locations}
+        onSettingsOpen={() => {}} // Wired in Plan 03
+      />
+    </div>
+  );
 };
 
 export default MapView;
