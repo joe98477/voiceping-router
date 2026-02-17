@@ -9,19 +9,19 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 
 ## Current Position
 
-Phase: 25 of 26 (Interactive Markers and Motion State)
-Plan: 3 of 3 (ALL PLANS COMPLETE)
-Status: Phase 25 COMPLETE
-Last activity: 2026-02-17 — Completed 25-03 marker clustering with interactive tooltips and popups
+Phase: 26 of 26 (Map Controls and Polish)
+Plan: 1 of 3 (PLAN 01 COMPLETE)
+Status: Phase 26 in progress
+Last activity: 2026-02-17 — Completed 26-01 toolbar and auto-fit bounds
 
-Progress: [█████████████████████████████████████████████████████████████████████████████] 83/85 plans (97.6%)
+Progress: [██████████████████████████████████████████████████████████████████████████████] 84/85 plans (98.8%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 83 (v1.0: 24, v2.0: 26, v3.0: 10, v4.0: 13, v5.0: 10)
-- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~4.0 min, v4.0 ~6.2 min, v5.0 ~3.3 min
-- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.67 hours, v4.0 ~1.28 hours, v5.0 ~0.55 hours
+- Total plans completed: 84 (v1.0: 24, v2.0: 26, v3.0: 10, v4.0: 13, v5.0: 11)
+- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~4.0 min, v4.0 ~6.2 min, v5.0 ~3.2 min
+- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.67 hours, v4.0 ~1.28 hours, v5.0 ~0.58 hours
 
 **By Milestone:**
 
@@ -31,7 +31,7 @@ Progress: [███████████████████████
 | v2.0 Android Client | 6 | 26/26 | Complete (2026-02-13) |
 | v3.0 mediasoup Integration | 5 | 10/10 | Complete (2026-02-15) |
 | v4.0 Production Hardening | 5 | 13/13 | Complete (2026-02-16) |
-| v5.0 Dispatch Map View | 6 | 10/12 | In progress |
+| v5.0 Dispatch Map View | 6 | 11/12 | In progress |
 
 **Recent Plan:**
 | Phase | Plan | Duration | Tasks | Files |
@@ -45,6 +45,7 @@ Progress: [███████████████████████
 | Phase 25 P02 | 178 sec | 2 tasks | 2 files | Location enrichment and popup content |
 | Phase 25 P01 | 269 sec | 2 tasks | 2 files | Motion state icons and staleness |
 | Phase 25 P03 | 198 sec | 2 tasks | 4 files | Marker clustering with tooltips and popups |
+| Phase 26 P01 | 155 sec | 2 tasks | 4 files | Toolbar, auto-fit, toast, useLocalStorage |
 
 ## Accumulated Context
 
@@ -94,6 +95,12 @@ Recent decisions affecting v5.0:
 - [Phase 25-01]: Same orange color for all motion states — icon shape alone conveys state
 - [Phase 25-01]: 5-minute threshold for stale status with instant recovery (no transition)
 - [Phase 25-01]: Zoom level >= 15 shows username labels for detail when zoomed in
+- Phase 26-01 (v5.0): useLocalStorage hook exports [value, setValue, reset] tuple — ergonomic state management
+- Phase 26-01 (v5.0): Toast notification as module-level function (not React component) — simplicity for temporary DOM elements
+- Phase 26-01 (v5.0): Auto-fit fires once on initial load with 300ms delay — prevents race condition with cluster group init
+- Phase 26-01 (v5.0): Single marker zoom cap at 14 (not 18) — prevents excessive zoom-in for isolated positions
+- Phase 26-01 (v5.0): Glassmorphic toolbar with backdrop-filter and @supports fallback — graceful degradation for older browsers
+- Phase 26-01 (v5.0): Asymmetric padding [50, 80] for flyToBounds — 80px top clearance for toolbar visibility
 
 ### Pending Todos
 
@@ -115,10 +122,10 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-17
-Stopped at: Phase 26 context gathered
-Resume file: .planning/phases/26-map-controls-and-polish/26-CONTEXT.md
+Stopped at: Completed 26-01-PLAN.md
+Resume file: .planning/phases/26-map-controls-and-polish/26-01-SUMMARY.md
 
-**Next action:** Plan Phase 26 (final phase of v5.0 Dispatch Map View)
+**Next action:** Execute Plan 02 of Phase 26 (MapSearch component)
 
 **All Milestones:**
 - v1.0 WebRTC Audio Rebuild + Web UI — SHIPPED 2026-02-07
