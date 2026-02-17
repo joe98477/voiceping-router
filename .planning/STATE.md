@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-16)
 ## Current Position
 
 Phase: 26 of 26 (Map Controls and Polish)
-Plan: 2 of 3 (PLAN 02 COMPLETE)
-Status: Phase 26 in progress
-Last activity: 2026-02-17 — Completed 26-02 map search autocomplete
+Plan: 3 of 3 (PLAN 03 COMPLETE - PHASE COMPLETE)
+Status: Phase 26 COMPLETE - v5.0 Milestone COMPLETE
+Last activity: 2026-02-17 — Completed 26-03 popup settings panel
 
-Progress: [███████████████████████████████████████████████████████████████████████████████] 85/85 plans (100.0%)
+Progress: [███████████████████████████████████████████████████████████████████████████████] 86/86 plans (100.0%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 85 (v1.0: 24, v2.0: 26, v3.0: 10, v4.0: 13, v5.0: 12)
-- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~4.0 min, v4.0 ~6.2 min, v5.0 ~3.2 min
-- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.67 hours, v4.0 ~1.28 hours, v5.0 ~0.58 hours
+- Total plans completed: 86 (v1.0: 24, v2.0: 26, v3.0: 10, v4.0: 13, v5.0: 13)
+- Average duration: v1.0 ~10.5 min, v2.0 ~8.2 min, v3.0 ~4.0 min, v4.0 ~6.2 min, v5.0 ~3.3 min
+- Total execution time: v1.0 ~4.2 hours, v2.0 ~3.5 hours, v3.0 ~0.67 hours, v4.0 ~1.28 hours, v5.0 ~0.72 hours
 
 **By Milestone:**
 
@@ -31,7 +31,7 @@ Progress: [███████████████████████
 | v2.0 Android Client | 6 | 26/26 | Complete (2026-02-13) |
 | v3.0 mediasoup Integration | 5 | 10/10 | Complete (2026-02-15) |
 | v4.0 Production Hardening | 5 | 13/13 | Complete (2026-02-16) |
-| v5.0 Dispatch Map View | 6 | 12/12 | In progress |
+| v5.0 Dispatch Map View | 6 | 13/13 | Complete (2026-02-17) |
 
 **Recent Plan:**
 | Phase | Plan | Duration | Tasks | Files |
@@ -47,6 +47,7 @@ Progress: [███████████████████████
 | Phase 25 P03 | 198 sec | 2 tasks | 4 files | Marker clustering with tooltips and popups |
 | Phase 26 P01 | 155 sec | 2 tasks | 4 files | Toolbar, auto-fit, toast, useLocalStorage |
 | Phase 26 P02 | 209 sec | 2 tasks | 5 files | MapSearch autocomplete with keyboard nav |
+| Phase 26 P03 | 257 sec | 2 tasks | 4 files | PopupSettingsPanel with live preview |
 
 ## Accumulated Context
 
@@ -106,6 +107,12 @@ Recent decisions affecting v5.0:
 - [Phase 26-02]: Search term persists after selection for sequential searches
 - [Phase 26-02]: Zoom level 16 for fly-to (detail without excessive zoom)
 - [Phase 26-02]: No debounce on search input (direct filtering performs fine at dispatch scale)
+- [Phase 26-03]: Settings panel slides from right edge (not overlay from top) — natural position near icon, doesn't obscure map center
+- [Phase 26-03]: All popup fields default to ON — conservative default shows full data, users can hide unwanted fields
+- [Phase 26-03]: Settings persist in cv.dispatch.popup.settings (not per-event) — popup preferences are user-specific across events
+- [Phase 26-03]: Use !== false check (not === true) — missing fields default to ON, graceful handling of corrupted localStorage
+- [Phase 26-03]: userName and Updated always shown (not toggleable) — core identity and recency critical for dispatch safety
+- [Phase 26-03]: Live preview (no save button) — toggle changes instantly update popups via settings in useEffect dependencies
 
 ### Pending Todos
 
@@ -127,10 +134,10 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-17
-Stopped at: Completed 26-02-PLAN.md
-Resume file: .planning/phases/26-map-controls-and-polish/26-02-SUMMARY.md
+Stopped at: Completed 26-03-PLAN.md - Phase 26 COMPLETE - v5.0 Milestone COMPLETE
+Resume file: .planning/phases/26-map-controls-and-polish/26-03-SUMMARY.md
 
-**Next action:** Execute Plan 03 of Phase 26 (MapSettings modal - final plan)
+**Next action:** v5.0 Dispatch Map View milestone COMPLETE! All 86 plans across 5 milestones shipped.
 
 **All Milestones:**
 - v1.0 WebRTC Audio Rebuild + Web UI — SHIPPED 2026-02-07
