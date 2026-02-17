@@ -73,11 +73,11 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-16
-Stopped at: Completed 21-01-PLAN.md (Backend telemetry extension)
-Resume file: .planning/phases/21-backend-protocol-extension/21-01-SUMMARY.md
+Last session: 2026-02-17
+Stopped at: Phase 22 context gathered
+Resume file: .planning/phases/22-web-layout-split/22-CONTEXT.md
 
-**Next action:** Execute 21-02-PLAN.md (Android telemetry collection)
+**Next action:** Plan Phase 22 (Web Layout Split)
 
 **All Milestones:**
 - v1.0 WebRTC Audio Rebuild + Web UI — SHIPPED 2026-02-07
@@ -87,4 +87,4 @@ Resume file: .planning/phases/21-backend-protocol-extension/21-01-SUMMARY.md
 - v5.0 Dispatch Map View — IN PROGRESS (Phase 21-26)
 
 ---
-*Last updated: 2026-02-16 after completing plan 21-01*
+*Last updated: 2026-02-17 after phase 22 context gathering*
