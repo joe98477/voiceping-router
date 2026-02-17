@@ -172,10 +172,11 @@ Plans:
   2. Layout optimized for desktop (1200px+ widescreen), channels panel fixed-width, map panel fills remaining space
   3. Existing channel monitoring functionality works unchanged in new layout
   4. Map panel div exists and is sized correctly for Leaflet integration
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 22-01: TBD
+- [ ] 22-01-PLAN.md — CSS Grid split layout with channels panel, map panel placeholder, card sizing
+- [ ] 22-02-PLAN.md — Collapsible channels panel and responsive tab mode for mobile
 
 ### Phase 23: Map Foundation
 **Goal**: Integrate Leaflet map library with proper cleanup pattern to prevent memory leaks
@@ -269,7 +270,7 @@ Phases execute in numeric order: 21 → 22 → 23 → 24 → 25 → 26
 | 19. Security Hardening & Code Quality | v4.0 | 3/3 | Complete | 2026-02-15 |
 | 20. Power Optimization & Validation | v4.0 | 2/2 | Complete | 2026-02-16 |
 | 21. Backend Protocol Extension | v5.0 | Complete    | 2026-02-16 | - |
-| 22. Web Layout Split | v5.0 | 0/1 | Not started | - |
+| 22. Web Layout Split | v5.0 | 0/2 | Not started | - |
 | 23. Map Foundation | v5.0 | 0/2 | Not started | - |
 | 24. Location State and Real-Time Markers | v5.0 | 0/2 | Not started | - |
 | 25. Interactive Markers and Motion State | v5.0 | 0/3 | Not started | - |
