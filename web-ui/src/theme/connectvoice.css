@@ -196,3 +196,12 @@ body {
   background: rgba(12, 18, 32, 0.98);
   border: 1px solid rgba(84, 181, 255, 0.25);
 }
+
+/* Map Panel - Dark Background Shades */
+.map-panel {
+  background: rgba(16, 24, 40, 0.4);
+}
+
+.map-container {
+  background: rgba(16, 24, 40, 0.85);
+}
