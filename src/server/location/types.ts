@@ -4,6 +4,7 @@
 
 export interface LocationData {
   userId: string;
+  userName: string;
   latitude: number;
   longitude: number;
   accuracy: number;

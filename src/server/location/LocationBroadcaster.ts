@@ -49,6 +49,7 @@ export class LocationBroadcaster {
       type: 'location-broadcast',
       data: {
         userId,
+        userName: location.userName,
         latitude: location.latitude,
         longitude: location.longitude,
         accuracy: location.accuracy,
@@ -94,7 +95,7 @@ export class LocationBroadcaster {
         data: {
           userId,
           batteryPercentage,
-          userName: location.userId, // Note: userName should come from user context, using userId for now
+          userName: location.userName,
         },
       });
 
@@ -111,15 +112,23 @@ export class LocationBroadcaster {
   /**
    * Get all latest positions with stale indicator
    * Position is stale if timestamp > 5 minutes old
+   * Only returns positions within the last 1 hour (dispatch map view requirement)
    */
   getAllLatestPositions(): LocationPosition[] {
     const now = Date.now();
     const staleThreshold = 5 * 60 * 1000; // 5 minutes
+    const oneHourThreshold = 60 * 60 * 1000; // 1 hour
 
     const positions: LocationPosition[] = [];
 
     for (const [_userId, position] of this.latestPositions.entries()) {
       const age = now - new Date(position.timestamp).getTime();
+
+      // Skip positions older than 1 hour
+      if (age > oneHourThreshold) {
+        continue;
+      }
+
       const isStale = age > staleThreshold;
 
       // Compute lowBattery flag server-side
