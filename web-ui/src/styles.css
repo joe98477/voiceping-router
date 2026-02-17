@@ -1462,7 +1462,7 @@ input[type="checkbox"] {
 
 .channel-grid__cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 10px;
   padding: 10px;
 }
@@ -1522,7 +1522,7 @@ input[type="checkbox"] {
 .dispatch-stats {
   display: flex;
   align-items: center;
-  gap: 16px;
+  justify-content: space-around;
   padding: 10px 16px;
   background: var(--surface);
   border-radius: 12px;
@@ -1602,4 +1602,33 @@ input[type="checkbox"] {
   display: flex;
   gap: 10px;
   align-items: center;
+}
+
+/* Dispatch Console - Split Panel Layout */
+.dispatch-console__main-content {
+  display: grid;
+  grid-template-columns: 500px 1fr;
+  gap: 0;
+  min-height: 0;
+}
+
+.channels-panel {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.map-panel {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  min-height: 0;
+}
+
+.map-placeholder {
+  min-height: 80px;
+}
+
+.map-container {
+  aspect-ratio: 4 / 3;
+  width: 100%;
+  transition: opacity 300ms ease;
 }
