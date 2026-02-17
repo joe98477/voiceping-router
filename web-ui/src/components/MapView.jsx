@@ -202,11 +202,20 @@ const MapView = ({ eventId }) => {
     map.on('zoomend', saveMapState);
     map.on('baselayerchange', handleBaseLayerChange);
 
+    // ResizeObserver — handle panel collapse/expand
+    const resizeObserver = new ResizeObserver(() => {
+      if (mapRef.current) {
+        mapRef.current.invalidateSize();
+      }
+    });
+    resizeObserver.observe(containerRef.current);
+
     // Cleanup function — CRITICAL for React Strict Mode
     return () => {
       map.off('moveend', saveMapState);
       map.off('zoomend', saveMapState);
       map.off('baselayerchange', handleBaseLayerChange);
+      resizeObserver.disconnect();
       map.remove();
       mapRef.current = null;
     };

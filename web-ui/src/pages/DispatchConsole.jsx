@@ -11,6 +11,7 @@ import { ChannelProvider, useChannels } from '../context/ChannelContext.jsx';
 import ChannelGrid from '../components/ChannelGrid.jsx';
 import AdminDrawer from '../components/AdminDrawer.jsx';
 import { usePermissionUpdates } from '../hooks/usePermissionUpdates.js';
+import MapView from '../components/MapView.jsx';
 
 /**
  * Get WebSocket URL for router signaling
@@ -319,8 +320,9 @@ const DispatchConsole = ({ user, onLogout }) => {
 
         {/* Map panel */}
         <div className={`map-panel ${activeTab === 'map' ? 'active' : ''}`}>
-          <div className="map-placeholder"></div>
-          <div className="map-container"></div>
+          <div className="map-container">
+            <MapView eventId={eventId} />
+          </div>
         </div>
       </div>
 
