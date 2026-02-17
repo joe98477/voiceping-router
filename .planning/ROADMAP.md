@@ -141,7 +141,7 @@ See: `.planning/milestones/v4.0-ROADMAP.md` for full details.
 - [x] **Phase 21: Backend Protocol Extension** - Add battery telemetry to server and Android with backward-compatible protocol (completed 2026-02-16)
 - [x] **Phase 22: Web Layout Split** - Create CSS Grid split layout for channels and map panels (completed 2026-02-17)
 - [x] **Phase 23: Map Foundation** - Integrate Leaflet with proper cleanup pattern and tile layers (completed 2026-02-17)
-- [ ] **Phase 24: Location State and Real-Time Markers** - Connect WebSocket location broadcasts to map markers
+- [x] **Phase 24: Location State and Real-Time Markers** - Connect WebSocket location broadcasts to map markers (completed 2026-02-17)
 - [ ] **Phase 25: Interactive Markers and Motion State** - Add status popups, motion indicators, and clustering
 - [ ] **Phase 26: Map Controls and Polish** - Add layer switching, auto-fit, search, and settings persistence
 
@@ -272,7 +272,7 @@ Phases execute in numeric order: 21 → 22 → 23 → 24 → 25 → 26
 | 21. Backend Protocol Extension | v5.0 | Complete    | 2026-02-16 | - |
 | 22. Web Layout Split | v5.0 | Complete    | 2026-02-17 | - |
 | 23. Map Foundation | v5.0 | Complete    | 2026-02-17 | - |
-| 24. Location State and Real-Time Markers | v5.0 | 0/2 | Not started | - |
+| 24. Location State and Real-Time Markers | v5.0 | Complete    | 2026-02-17 | - |
 | 25. Interactive Markers and Motion State | v5.0 | 0/3 | Not started | - |
 | 26. Map Controls and Polish | v5.0 | 0/2 | Not started | - |
 
