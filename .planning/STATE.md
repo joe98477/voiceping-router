@@ -115,10 +115,10 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-17
-Stopped at: Completed 25-03-PLAN.md (Marker clustering with interactive tooltips and popups)
-Resume file: .planning/phases/25-interactive-markers-and-motion-state/25-03-SUMMARY.md
+Stopped at: Phase 26 context gathered
+Resume file: .planning/phases/26-map-controls-and-polish/26-CONTEXT.md
 
-**Next action:** Continue Phase 26 (final phase of v5.0 Dispatch Map View)
+**Next action:** Plan Phase 26 (final phase of v5.0 Dispatch Map View)
 
 **All Milestones:**
 - v1.0 WebRTC Audio Rebuild + Web UI — SHIPPED 2026-02-07
@@ -128,4 +128,4 @@ Resume file: .planning/phases/25-interactive-markers-and-motion-state/25-03-SUMM
 - v5.0 Dispatch Map View — IN PROGRESS (Phase 21-26)
 
 ---
-*Last updated: 2026-02-17 after completing 25-03-PLAN.md (Marker clustering with interactive tooltips and popups)*
+*Last updated: 2026-02-17 after gathering Phase 26 context*
