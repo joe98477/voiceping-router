@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-minimap/dist/Control.MiniMap.min.css';
@@ -55,7 +55,7 @@ function createMarkerIcon(position, isStale) {
   });
 }
 
-const MapView = ({ eventId, ws, isMapVisible }) => {
+const MapView = ({ eventId, ws, isMapVisible, channels }) => {
   const mapRef = useRef(null);
   const containerRef = useRef(null);
   const activeLayerRef = useRef('satellite');
@@ -609,6 +609,17 @@ const MapView = ({ eventId, ws, isMapVisible }) => {
     };
   }, []);
 
+  // Handle user selection from MapSearch
+  const handleSelectUser = useCallback((userId) => {
+    const position = locations.get(userId);
+    if (position && position.latitude && position.longitude && mapRef.current) {
+      mapRef.current.flyTo([position.latitude, position.longitude], 16, {
+        animate: true,
+        duration: 0.8,
+      });
+    }
+  }, [locations]);
+
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
@@ -616,6 +627,8 @@ const MapView = ({ eventId, ws, isMapVisible }) => {
         map={mapRef.current}
         clusterGroup={clusterGroupRef.current}
         locations={locations}
+        channels={channels || []}
+        onSelectUser={handleSelectUser}
         onSettingsOpen={() => {}} // Wired in Plan 03
       />
     </div>
