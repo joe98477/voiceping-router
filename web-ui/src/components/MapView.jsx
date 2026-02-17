@@ -7,6 +7,49 @@ import 'leaflet-minimap';
 import 'leaflet-mouse-position';
 import { useLocations } from '../context/LocationContext.jsx';
 
+/**
+ * Create motion-state-aware marker icon with staleness treatment
+ * @param {object} position - Location position data
+ * @param {boolean} isStale - Whether marker is stale (5+ min no update)
+ * @returns {L.DivIcon} - Leaflet DivIcon instance
+ */
+function createMarkerIcon(position, isStale) {
+  const motionState = (position.motionState || 'still').toLowerCase();
+  const staleClass = isStale ? ' user-marker--stale' : '';
+  const className = `user-marker user-marker--${motionState}${staleClass}`;
+
+  // Three distinct SVG pictograms per locked decision
+  const svgIcons = {
+    still: `<svg viewBox="0 0 24 24" width="14" height="14" fill="white">
+      <circle cx="12" cy="8" r="3.5"/>
+      <path d="M12 14c-4.4 0-8 2-8 4.5V20h16v-1.5c0-2.5-3.6-4.5-8-4.5z"/>
+    </svg>`,
+    walking: `<svg viewBox="0 0 24 24" width="14" height="14" fill="white">
+      <circle cx="13" cy="5" r="2.5"/>
+      <path d="M14.5 10.5l-2 4.5 2.5 5h-2l-2-4.5-2 3v3H7v-4l3.5-4.5-1.5-3c-1.5.5-3 1.5-3 1.5l-1-1.5s2-1.5 4-2.5c1-.5 2-.5 2.5.5l.5 1c.5.5 1.5 1 2.5 1v2c-1 0-2-.5-2.5-1z"/>
+    </svg>`,
+    driving: `<svg viewBox="0 0 24 24" width="14" height="14" fill="white">
+      <path d="M5 11l1.5-4.5C7 5.5 8 5 9 5h6c1 0 2 .5 2.5 1.5L19 11h1c1 0 1 1 1 2v3c0 1-1 2-2 2h-1c0 1.1-.9 2-2 2s-2-.9-2-2h-4c0 1.1-.9 2-2 2s-2-.9-2-2H5c-1 0-2-1-2-2v-3c0-1 0-2 1-2h1z"/>
+      <circle cx="7.5" cy="15.5" r="1.5" fill="#FF9800"/>
+      <circle cx="16.5" cy="15.5" r="1.5" fill="#FF9800"/>
+    </svg>`
+  };
+
+  const svg = svgIcons[motionState] || svgIcons.still;
+
+  return L.divIcon({
+    className: className,
+    html: `
+      <div class="user-marker__label">${position.userName}</div>
+      <div class="user-marker__pin">
+        <div class="user-marker__icon">${svg}</div>
+      </div>
+    `,
+    iconSize: [32, 40],
+    iconAnchor: [16, 40],
+  });
+}
+
 const MapView = ({ eventId, ws, isMapVisible }) => {
   const mapRef = useRef(null);
   const containerRef = useRef(null);
@@ -20,6 +63,7 @@ const MapView = ({ eventId, ws, isMapVisible }) => {
   const DEFAULT_ZOOM = 12;
   const GEOLOCATION_TIMEOUT = 5000; // 5 seconds
   const STORAGE_KEY = `cv.dispatch.map.${eventId}`;
+  const STALE_THRESHOLD = 5 * 60 * 1000; // 5 minutes
 
   useEffect(() => {
     // Guard: prevent double initialization
@@ -206,6 +250,20 @@ const MapView = ({ eventId, ws, isMapVisible }) => {
     map.on('zoomend', saveMapState);
     map.on('baselayerchange', handleBaseLayerChange);
 
+    // Zoom-dependent label visibility (zoom >= 15 shows labels)
+    const handleZoomEnd = () => {
+      const zoom = map.getZoom();
+      const container = map.getContainer();
+      if (zoom >= 15) {
+        container.classList.add('show-marker-labels');
+      } else {
+        container.classList.remove('show-marker-labels');
+      }
+    };
+    map.on('zoomend', handleZoomEnd);
+    // Also trigger once on init
+    handleZoomEnd();
+
     // ResizeObserver — handle panel collapse/expand
     const resizeObserver = new ResizeObserver(() => {
       if (mapRef.current) {
@@ -218,6 +276,7 @@ const MapView = ({ eventId, ws, isMapVisible }) => {
     return () => {
       map.off('moveend', saveMapState);
       map.off('zoomend', saveMapState);
+      map.off('zoomend', handleZoomEnd);
       map.off('baselayerchange', handleBaseLayerChange);
       resizeObserver.disconnect();
       map.remove();
@@ -310,52 +369,36 @@ const MapView = ({ eventId, ws, isMapVisible }) => {
     for (const [userId, position] of locations.entries()) {
       const existingMarker = markersRef.current.get(userId);
 
+      // Compute staleness (5-minute threshold)
+      const isStale = (Date.now() - new Date(position.timestamp).getTime()) > STALE_THRESHOLD;
+
       if (existingMarker) {
         // Update position (CSS transition handles animation)
         existingMarker.setLatLng([position.latitude, position.longitude]);
 
-        // Update icon HTML if userName changed
+        // Generate new icon
+        const newIcon = createMarkerIcon(position, isStale);
+
+        // Update icon if className changed (motion state or staleness changed)
         const currentIcon = existingMarker.getIcon();
-        const newIconHtml = `
-          <div class="user-marker__label">${position.userName}</div>
-          <div class="user-marker__pin">
-            <div class="user-marker__icon">
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="white">
-                <circle cx="12" cy="8" r="3.5"/>
-                <path d="M12 14c-4.4 0-8 2-8 4.5V20h16v-1.5c0-2.5-3.6-4.5-8-4.5z"/>
-              </svg>
-            </div>
-          </div>
-        `;
-
-        if (currentIcon.options.html !== newIconHtml) {
-          existingMarker.setIcon(L.divIcon({
-            className: 'user-marker',
-            html: newIconHtml,
-            iconSize: [32, 40],
-            iconAnchor: [16, 40], // Bottom-center of pin tip
-          }));
+        if (currentIcon.options.className !== newIcon.options.className) {
+          existingMarker.setIcon(newIcon);
         }
-      } else {
-        // Create new marker
-        const icon = L.divIcon({
-          className: 'user-marker',
-          html: `
-            <div class="user-marker__label">${position.userName}</div>
-            <div class="user-marker__pin">
-              <div class="user-marker__icon">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="white">
-                  <circle cx="12" cy="8" r="3.5"/>
-                  <path d="M12 14c-4.4 0-8 2-8 4.5V20h16v-1.5c0-2.5-3.6-4.5-8-4.5z"/>
-                </svg>
-              </div>
-            </div>
-          `,
-          iconSize: [32, 40],
-          iconAnchor: [16, 40], // Bottom-center of pin tip
-        });
 
+        // Update marker metadata for Plan 03's cluster count filtering
+        existingMarker.options.isStale = isStale;
+        existingMarker.options.userId = userId;
+        existingMarker.options.title = position.userName;
+      } else {
+        // Create new marker with motion-state-aware icon
+        const icon = createMarkerIcon(position, isStale);
         const marker = L.marker([position.latitude, position.longitude], { icon }).addTo(map);
+
+        // Store metadata for Plan 03's cluster count filtering
+        marker.options.isStale = isStale;
+        marker.options.userId = userId;
+        marker.options.title = position.userName;
+
         markersRef.current.set(userId, marker);
       }
     }
@@ -367,7 +410,7 @@ const MapView = ({ eventId, ws, isMapVisible }) => {
         markersRef.current.delete(userId);
       }
     }
-  }, [locations]);
+  }, [locations, STALE_THRESHOLD]);
 
   // Stale marker cleanup timer (every 5 minutes, removes markers older than 1 hour)
   useEffect(() => {
