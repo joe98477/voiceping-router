@@ -219,12 +219,12 @@ Plans:
   3. Markers for users with no update in 5+ minutes appear visually faded (stale indicator)
   4. Nearby markers cluster when zoomed out and expand when zoomed in (handles 200+ markers without performance collapse)
   5. Dispatch user can zoom and pan the map interactively without lag
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 25-01: TBD
-- [ ] 25-02: TBD
-- [ ] 25-03: TBD
+- [ ] 25-01-PLAN.md -- Motion state icons (STILL/WALKING/DRIVING), staleness grayscale, zoom-dependent labels
+- [ ] 25-02-PLAN.md -- LocationContext enrichment with team/channel data, popup content generation utilities
+- [ ] 25-03-PLAN.md -- Marker clustering with leaflet.markercluster, two-tier interaction (tooltip + popup), live updates
 
 ### Phase 26: Map Controls and Polish
 **Goal**: Add auto-fit bounds, user search, configurable popup settings, and UX polish
