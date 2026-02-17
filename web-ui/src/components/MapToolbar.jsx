@@ -1,4 +1,5 @@
 import React from 'react';
+import MapSearch from './MapSearch.jsx';
 
 /**
  * Toast notification utility (module-level)
@@ -76,15 +77,17 @@ function fitAllMarkers(map, clusterGroup) {
 /**
  * MapToolbar component
  * Glassmorphic floating toolbar at top center of map
- * Contains: Fit All button, search slot placeholder, settings icon
+ * Contains: Fit All button, search component, settings icon
  *
  * @param {object} props
  * @param {L.Map} props.map - Leaflet map instance
  * @param {L.MarkerClusterGroup} props.clusterGroup - Cluster group containing markers
  * @param {Map} props.locations - Location data map
+ * @param {Array} props.channels - Channels array from overview
+ * @param {function} props.onSelectUser - Callback when user selected from search
  * @param {function} props.onSettingsOpen - Callback when settings icon clicked (wired in Plan 03)
  */
-const MapToolbar = ({ map, clusterGroup, locations, onSettingsOpen }) => {
+const MapToolbar = ({ map, clusterGroup, locations, channels, onSelectUser, onSettingsOpen }) => {
   const handleFitAll = () => {
     fitAllMarkers(map, clusterGroup);
   };
@@ -99,8 +102,7 @@ const MapToolbar = ({ map, clusterGroup, locations, onSettingsOpen }) => {
         Fit All
       </button>
 
-      {/* Placeholder for MapSearch component (Plan 02) */}
-      <div className="map-toolbar__search-slot"></div>
+      <MapSearch locations={locations} channels={channels} onSelectUser={onSelectUser} />
 
       {/* Settings icon button (wired in Plan 03) */}
       <button

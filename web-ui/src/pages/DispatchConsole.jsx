@@ -365,7 +365,7 @@ const DispatchConsole = ({ user, onLogout }) => {
           {/* Map panel */}
           <div className={`map-panel ${activeTab === 'map' ? 'active' : ''}`}>
             <div className="map-container">
-              <MapView eventId={eventId} ws={locationWsRef.current} isMapVisible={isMapVisible} />
+              <MapView eventId={eventId} ws={locationWsRef.current} isMapVisible={isMapVisible} channels={overview?.channels || []} />
             </div>
           </div>
         </LocationProvider>

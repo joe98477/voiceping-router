@@ -2102,9 +2102,145 @@ input[type="checkbox"] {
   background: rgba(255, 255, 255, 0.5);
 }
 
-.map-toolbar__search-slot {
+/* ===== MapSearch Component (Phase 26-02) ===== */
+.map-search {
+  position: relative;
   flex: 1;
   min-width: 200px;
+  max-width: 300px;
+}
+
+.map-search__input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  font-size: 14px;
+  font-family: 'Space Grotesk', sans-serif;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.map-search__input::placeholder {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.map-search__input:focus {
+  border-color: rgba(255, 152, 0, 0.6);
+}
+
+.map-search__dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  max-height: 320px; /* ~8 items * 40px */
+  overflow-y: auto;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 1001;
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+.map-search__header {
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #666;
+  background: rgba(0, 0, 0, 0.05);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.map-search__result {
+  padding: 10px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #333;
+  font-size: 14px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.map-search__result:last-child {
+  border-bottom: none;
+}
+
+.map-search__result.focused {
+  background: rgba(255, 152, 0, 0.15);
+}
+
+.map-search__result.disabled {
+  color: #aaa;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.map-search__result--channel {
+  font-weight: 500;
+}
+
+.map-search__result--member {
+  padding-left: 24px;
+  font-size: 13px;
+}
+
+.map-search__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-search__name strong {
+  font-weight: 700;
+}
+
+.map-search__status {
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.map-search__status--online {
+  color: #4CAF50;
+}
+
+.map-search__status--offline {
+  color: #999;
+}
+
+.map-search__no-location {
+  margin-left: auto;
+  font-size: 11px;
+  color: #999;
+  flex-shrink: 0;
+}
+
+.map-search__member-count {
+  font-size: 12px;
+  color: #888;
+  background: rgba(0, 0, 0, 0.06);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.map-search__chevron {
+  font-size: 10px;
+  color: #888;
+  transition: transform 0.2s;
+  flex-shrink: 0;
+}
+
+.map-search__chevron--expanded {
+  transform: rotate(90deg);
 }
 
 /* ===== Toast Notification (Phase 26-01) ===== */
