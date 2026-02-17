@@ -203,11 +203,11 @@ Plans:
   3. Markers update in real-time as LOCATION_BROADCAST messages arrive via WebSocket
   4. Map loads all known user positions on initial connection via LOCATION_QUERY
   5. LocationContext is separate from ChannelContext (high-frequency location updates don't re-render channels)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 24-01: TBD
-- [ ] 24-02: TBD
+- [ ] 24-01-PLAN.md -- Server userName in location protocol + LocationContext creation
+- [ ] 24-02-PLAN.md -- WebSocket integration, DivIcon markers, CSS styling, stale cleanup
 
 ### Phase 25: Interactive Markers and Motion State
 **Goal**: Add status popups, motion indicators, staleness treatment, and clustering for production scale
