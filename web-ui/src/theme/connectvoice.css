@@ -202,8 +202,14 @@ body {
   background: rgba(16, 24, 40, 0.4);
 }
 
-.map-container {
-  background: rgba(16, 24, 40, 0.85);
+/* Leaflet attribution control styling */
+.leaflet-control-attribution {
+  font-size: 10px;
+  opacity: 0.6;
+}
+
+.leaflet-control-attribution:hover {
+  opacity: 1;
 }
 
 /* Channels Panel Collapse Button - Dark Theme */
