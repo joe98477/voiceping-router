@@ -19,10 +19,10 @@ services:
       - MEDIASOUP_MIN_PORT=${MEDIASOUP_MIN_PORT:-40000}
       - MEDIASOUP_MAX_PORT=${MEDIASOUP_MAX_PORT:-40099}
       - MEDIASOUP_LOG_LEVEL=${MEDIASOUP_LOG_LEVEL:-warn}
-      - STUN_SERVER=${STUN_SERVER}
-      - TURN_SERVER=${TURN_SERVER}
-      - TURN_USERNAME=${TURN_USERNAME}
-      - TURN_PASSWORD=${TURN_PASSWORD}
+      - STUN_SERVER=stun:${MEDIASOUP_ANNOUNCED_IP:-127.0.0.1}:3478
+      - TURN_SERVER=turn:${MEDIASOUP_ANNOUNCED_IP:-127.0.0.1}:3478
+      - TURN_USERNAME=${TURN_USERNAME:-turnuser}
+      - TURN_PASSWORD=${TURN_PASSWORD:-turnpass}
       - NODE_ENV=${NODE_ENV:-development}
       - DEBUG=${DEBUG}
     expose:
@@ -37,6 +37,7 @@ services:
     depends_on:
       - redis
       - postgres
+      - coturn
     networks:
       - voiceping
     logging:
@@ -118,6 +119,39 @@ services:
       options:
         max-file: "2"
         max-size: "100m"
+    restart: unless-stopped
+
+  # coturn TURN server — STUN/TURN relay for WebRTC NAT traversal
+  # Required for cellular networks (CGNAT blocks non-standard UDP ports)
+  coturn:
+    image: coturn/coturn:4.6
+    command:
+      - --listening-port=3478
+      - --listening-ip=0.0.0.0
+      - --external-ip=${MEDIASOUP_ANNOUNCED_IP:-127.0.0.1}
+      - --fingerprint
+      - --lt-cred-mech
+      - --realm=${TURN_REALM:-voiceping.local}
+      - --user=${TURN_USERNAME:-turnuser}:${TURN_PASSWORD:-turnpass}
+      - --min-port=49152
+      - --max-port=49252
+      - --log-file=stdout
+      - --no-multicast-peers
+      - --no-cli
+      - --no-tlsv1
+      - --no-tlsv1_1
+    ports:
+      - 3478:3478/udp
+      - 3478:3478/tcp
+      # TURN relay port range (101 ports)
+      - 49152-49252:49152-49252/udp
+    networks:
+      - voiceping
+    logging:
+      driver: "json-file"
+      options:
+        max-file: "2"
+        max-size: "50m"
     restart: unless-stopped
 
   # Redis - State management and pub/sub
