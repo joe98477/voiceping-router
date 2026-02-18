@@ -575,8 +575,9 @@ class MediasoupClient @Inject constructor(
         consumers[consumerId]?.let { consumer ->
             val audioTrack = consumer.track as? AudioTrack
             if (audioTrack != null) {
-                // Convert 0.0-1.0 app range to 0.0-10.0 WebRTC range
-                val webRtcVolume = (volume.coerceIn(0f, 1f) * 10.0)
+                // WebRTC AudioTrack volume: 0.0=silence, 1.0=unity gain, 10.0=max amplification
+                // App range is 0.0-1.0 where 1.0 = normal volume, so pass through directly
+                val webRtcVolume = volume.coerceIn(0f, 1f).toDouble()
                 audioTrack.setVolume(webRtcVolume)
                 Log.d(TAG, "Consumer volume set: $consumerId -> $volume (WebRTC: $webRtcVolume)")
             } else {
