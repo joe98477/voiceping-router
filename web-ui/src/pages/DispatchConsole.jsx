@@ -114,7 +114,7 @@ const DispatchConsole = ({ user, onLogout }) => {
     let intentionalClose = false;
 
     const connect = () => {
-      const ws = new WebSocket(wsUrl, token);
+      const ws = new WebSocket(wsUrl, ['voiceping', token]);
       locationWsRef.current = ws;
 
       ws.onopen = () => {

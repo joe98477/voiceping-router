@@ -37,12 +37,14 @@ export class RateLimiter {
       duration: 60, // per minute
     });
 
-    // Auth limiter: 40 auth attempts per IP per 15 minutes
-    // Each channel reconnection consumes an auth point
+    // Auth limiter: 200 auth attempts per IP per 15 minutes
+    // In Docker, all traffic routes through nginx on a single internal IP,
+    // so this limit applies to ALL users combined. Dispatch console creates
+    // multiple WebSocket connections (per-channel + location + permissions).
     this.authLimiter = new RateLimiterRedis({
       storeClient: redisClient,
       keyPrefix: 'rl:auth',
-      points: 40, // 40 attempts
+      points: 200, // 200 attempts (accommodates multi-user Docker setups)
       duration: 900, // 15 minutes
     });
 
