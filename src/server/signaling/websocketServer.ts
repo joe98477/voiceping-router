@@ -548,7 +548,7 @@ export class SignalingServer {
     let sentCount = 0;
 
     for (const ctx of this.clients.values()) {
-      if (ctx.role === UserRole.DISPATCH && ctx.ws.readyState === 1) {
+      if ((ctx.role === UserRole.DISPATCH || ctx.role === UserRole.ADMIN) && ctx.ws.readyState === 1) {
         ctx.ws.send(message);
         sentCount++;
       }
