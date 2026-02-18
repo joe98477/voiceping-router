@@ -40,15 +40,16 @@ export class TransportClient {
       throw new Error('Server did not return transport options');
     }
 
-    const { id, iceParameters, iceCandidates, dtlsParameters } = response.data as any;
+    const { id, iceParameters, iceCandidates, dtlsParameters, iceServers } = response.data as any;
 
-    // Create send transport on device
+    // Create send transport on device (include iceServers for STUN/TURN if provided)
     const device = this.device.getDevice();
     this.sendTransport = device.createSendTransport({
       id,
       iceParameters,
       iceCandidates,
       dtlsParameters,
+      ...(iceServers && { iceServers }),
     });
 
     // Wire transport events
@@ -100,15 +101,16 @@ export class TransportClient {
       throw new Error('Server did not return transport options');
     }
 
-    const { id, iceParameters, iceCandidates, dtlsParameters } = response.data as any;
+    const { id, iceParameters, iceCandidates, dtlsParameters, iceServers } = response.data as any;
 
-    // Create receive transport on device
+    // Create receive transport on device (include iceServers for STUN/TURN if provided)
     const device = this.device.getDevice();
     this.recvTransport = device.createRecvTransport({
       id,
       iceParameters,
       iceCandidates,
       dtlsParameters,
+      ...(iceServers && { iceServers }),
     });
 
     // Wire transport events

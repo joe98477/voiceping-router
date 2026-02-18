@@ -5,7 +5,7 @@
 
 import { types as mediasoupTypes } from 'mediasoup';
 import { RouterManager } from './routerManager';
-import { TransportOptions } from '../../shared/types';
+import { TransportOptions, IceServer } from '../../shared/types';
 import { config } from '../config';
 import { createLogger } from '../logger';
 
@@ -67,11 +67,26 @@ export class TransportManager {
       `Created ${direction} transport ${transport.id} for user ${userId} in channel ${channelId} with DTLS state: ${transport.dtlsState}`,
     );
 
+    // Build iceServers array from STUN/TURN config for client-side ICE negotiation
+    const iceServers: IceServer[] = [];
+    if (config.stun) {
+      iceServers.push({ urls: `stun:${config.stun.host}:${config.stun.port}` });
+    }
+    if (config.turn) {
+      const turnUrl = `${config.turn.protocol}:${config.turn.host}:${config.turn.port}`;
+      iceServers.push({
+        urls: turnUrl,
+        username: config.turn.username,
+        credential: config.turn.password,
+      });
+    }
+
     return {
       id: transport.id,
       iceParameters: transport.iceParameters,
       iceCandidates: transport.iceCandidates,
       dtlsParameters: transport.dtlsParameters,
+      ...(iceServers.length > 0 && { iceServers }),
     };
   }
 

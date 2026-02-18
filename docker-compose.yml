@@ -28,10 +28,12 @@ services:
     expose:
       - 3000
     ports:
-      # mediasoup RTC port range (UDP) — keep small to avoid Docker iptables overload
+      # mediasoup RTC port range — keep small to avoid Docker iptables overload
       # 100 ports supports ~50 concurrent users (2 ports per user: send + recv)
       # Increase MEDIASOUP_MAX_PORT in .env for production scale
+      # UDP (preferred) + TCP fallback for restrictive networks (cellular CGNAT)
       - ${MEDIASOUP_MIN_PORT:-40000}-${MEDIASOUP_MAX_PORT:-40099}:${MEDIASOUP_MIN_PORT:-40000}-${MEDIASOUP_MAX_PORT:-40099}/udp
+      - ${MEDIASOUP_MIN_PORT:-40000}-${MEDIASOUP_MAX_PORT:-40099}:${MEDIASOUP_MIN_PORT:-40000}-${MEDIASOUP_MAX_PORT:-40099}/tcp
     depends_on:
       - redis
       - postgres

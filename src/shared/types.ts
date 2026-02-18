@@ -25,6 +25,15 @@ export interface UserSession {
 }
 
 /**
+ * ICE server configuration for STUN/TURN
+ */
+export interface IceServer {
+  urls: string | string[];
+  username?: string;
+  credential?: string;
+}
+
+/**
  * WebRTC transport configuration options
  */
 export interface TransportOptions {
@@ -32,6 +41,7 @@ export interface TransportOptions {
   iceParameters: object;
   iceCandidates: object[];
   dtlsParameters: object;
+  iceServers?: IceServer[];
 }
 
 /**

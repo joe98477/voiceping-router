@@ -113,6 +113,33 @@ class MediasoupClient @Inject constructor(
     }
 
     /**
+     * Build RTCConfiguration from server-provided iceServers array.
+     * Enables STUN/TURN for NAT traversal on cellular networks (CGNAT).
+     */
+    private fun buildRtcConfig(transportData: com.google.gson.JsonObject): PeerConnection.RTCConfiguration? {
+        val iceServersJson = transportData.getAsJsonArray("iceServers") ?: return null
+        if (iceServersJson.size() == 0) return null
+
+        val iceServers = iceServersJson.mapNotNull { element ->
+            val obj = element.asJsonObject
+            val urls = obj.get("urls")?.let { urlsEl ->
+                if (urlsEl.isJsonArray) urlsEl.asJsonArray.map { it.asString }
+                else listOf(urlsEl.asString)
+            } ?: return@mapNotNull null
+
+            val builder = PeerConnection.IceServer.builder(urls)
+            obj.get("username")?.asStringOrNull()?.let { builder.setUsername(it) }
+            obj.get("credential")?.asStringOrNull()?.let { builder.setPassword(it) }
+            builder.createIceServer()
+        }
+
+        if (iceServers.isEmpty()) return null
+
+        Log.d(TAG, "ICE servers configured: ${iceServers.size} (STUN/TURN)")
+        return PeerConnection.RTCConfiguration(iceServers)
+    }
+
+    /**
      * Safely read transport connection state, handling enum mapping mismatches.
      *
      * The crow-misia library's Transport.connectionState internally calls
@@ -371,9 +398,11 @@ class MediasoupClient @Inject constructor(
 
                 Log.d(TAG, "Transport parameters received: id=$transportId")
 
+                // Build RTCConfiguration from server-provided ICE servers (STUN/TURN)
+                val rtcConfig = buildRtcConfig(transportData)
+
                 // Step 2 & 3: Create RecvTransport with listener
-                val transport = device.createRecvTransport(
-                    listener = object : RecvTransport.Listener {
+                val recvListener = object : RecvTransport.Listener {
                         override fun onConnect(transport: Transport, dtlsParameters: String) {
                             Log.d(TAG, "RecvTransport onConnect: $transportId")
                             // Use CompletableDeferred to avoid blocking the native C++ thread
@@ -451,12 +480,26 @@ class MediasoupClient @Inject constructor(
                                 }
                             }
                         }
-                    },
-                    id = transportId,
-                    iceParameters = iceParameters,
-                    iceCandidates = iceCandidates,
-                    dtlsParameters = dtlsParameters
-                )
+                    }
+                val transport = if (rtcConfig != null) {
+                    device.createRecvTransport(
+                        listener = recvListener,
+                        id = transportId,
+                        iceParameters = iceParameters,
+                        iceCandidates = iceCandidates,
+                        dtlsParameters = dtlsParameters,
+                        sctpParameters = null,
+                        rtcConfig = rtcConfig
+                    )
+                } else {
+                    device.createRecvTransport(
+                        listener = recvListener,
+                        id = transportId,
+                        iceParameters = iceParameters,
+                        iceCandidates = iceCandidates,
+                        dtlsParameters = dtlsParameters
+                    )
+                }
                 recvTransports[channelId] = transport
 
                 Log.d(TAG, "Receive transport created successfully")
@@ -686,9 +729,11 @@ class MediasoupClient @Inject constructor(
 
                 Log.d(TAG, "Send transport parameters received: id=$transportId")
 
+                // Build RTCConfiguration from server-provided ICE servers (STUN/TURN)
+                val rtcConfig = buildRtcConfig(transportData)
+
                 // Step 2 & 3: Create SendTransport with listener
-                sendTransport = device.createSendTransport(
-                    listener = object : SendTransport.Listener {
+                val sendListener = object : SendTransport.Listener {
                         override fun onConnect(transport: Transport, dtlsParameters: String) {
                             Log.d(TAG, "SendTransport onConnect: $transportId")
                             // Use CompletableDeferred to avoid blocking the native C++ thread
@@ -861,12 +906,26 @@ class MediasoupClient @Inject constructor(
                                 }
                             }
                         }
-                    },
-                    id = transportId,
-                    iceParameters = iceParameters,
-                    iceCandidates = iceCandidates,
-                    dtlsParameters = dtlsParameters
-                )
+                }
+                sendTransport = if (rtcConfig != null) {
+                    device.createSendTransport(
+                        listener = sendListener,
+                        id = transportId,
+                        iceParameters = iceParameters,
+                        iceCandidates = iceCandidates,
+                        dtlsParameters = dtlsParameters,
+                        sctpParameters = null,
+                        rtcConfig = rtcConfig
+                    )
+                } else {
+                    device.createSendTransport(
+                        listener = sendListener,
+                        id = transportId,
+                        iceParameters = iceParameters,
+                        iceCandidates = iceCandidates,
+                        dtlsParameters = dtlsParameters
+                    )
+                }
 
                 Log.d(TAG, "Send transport created successfully")
 
