@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-02-18)
 Phase: 26 of 26 (all phases complete)
 Plan: All complete
 Status: v5.0 Dispatch Map View SHIPPED
-Last activity: 2026-02-18 — Milestone v5.0 archived
+Last activity: 2026-02-18 - Completed quick task 9: Fix audio PTT not working and location not showing on dispatch map
 
 Progress: [████████████████████████████████████████████████████████████████████████████████] 87/87 plans (100.0%)
 
@@ -52,6 +52,12 @@ None.
 - PWR-04 battery profiling not validated — implementation complete, profiling deferred
 - Hardcoded JWT secret default — production MUST override via ROUTER_JWT_SECRET
 - LOW_BATTERY_ALERT server-side only — no web dispatcher toast (intentional deferral)
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 9 | Fix audio PTT not working and location not showing on dispatch map | 2026-02-18 | 880da38 | [9-fix-audio-ptt-not-working-and-location-n](./quick/9-fix-audio-ptt-not-working-and-location-n/) |
 
 ## Session Continuity
 
