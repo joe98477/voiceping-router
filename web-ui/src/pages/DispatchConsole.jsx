@@ -105,30 +105,49 @@ const DispatchConsole = ({ user, onLogout }) => {
     };
   }, []);
 
-  // Dedicated WebSocket connection for location updates
+  // Dedicated WebSocket connection for location updates (with reconnection)
+  const [locationWs, setLocationWs] = useState(null);
   useEffect(() => {
     if (!token) return;
 
-    // Build WebSocket URL with token as sec-websocket-protocol (matching server auth pattern)
-    const ws = new WebSocket(wsUrl, token);
-    locationWsRef.current = ws;
+    let reconnectTimer = null;
+    let intentionalClose = false;
 
-    ws.onopen = () => {
-      console.log('[LocationWS] Connected');
+    const connect = () => {
+      const ws = new WebSocket(wsUrl, token);
+      locationWsRef.current = ws;
+
+      ws.onopen = () => {
+        console.log('[LocationWS] Connected');
+        setLocationWs(ws);
+      };
+
+      ws.onerror = (e) => {
+        console.error('[LocationWS] Error:', e);
+      };
+
+      ws.onclose = () => {
+        console.log('[LocationWS] Disconnected');
+        locationWsRef.current = null;
+        setLocationWs(null);
+        if (!intentionalClose) {
+          reconnectTimer = setTimeout(connect, 3000);
+        }
+      };
     };
 
-    ws.onerror = (e) => {
-      console.error('[LocationWS] Error:', e);
-    };
-
-    ws.onclose = () => {
-      console.log('[LocationWS] Disconnected');
-      locationWsRef.current = null;
-    };
+    // Delay initial connection to avoid competing with channel WebSockets
+    const initialTimer = setTimeout(connect, 2000);
 
     return () => {
-      ws.close();
-      locationWsRef.current = null;
+      intentionalClose = true;
+      clearTimeout(initialTimer);
+      clearTimeout(reconnectTimer);
+      if (locationWsRef.current) {
+        locationWsRef.current.close();
+        locationWsRef.current = null;
+      }
+      setLocationWs(null);
     };
   }, [token, wsUrl]);
 
@@ -365,7 +384,7 @@ const DispatchConsole = ({ user, onLogout }) => {
           {/* Map panel */}
           <div className={`map-panel ${activeTab === 'map' ? 'active' : ''}`}>
             <div className="map-container">
-              <MapView eventId={eventId} ws={locationWsRef.current} isMapVisible={isMapVisible} channels={overview?.channels || []} />
+              <MapView eventId={eventId} ws={locationWs} isMapVisible={isMapVisible} channels={overview?.channels || []} />
             </div>
           </div>
         </LocationProvider>

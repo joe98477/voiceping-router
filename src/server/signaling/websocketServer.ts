@@ -555,7 +555,9 @@ export class SignalingServer {
     }
 
     if (sentCount > 0) {
-      logger.debug(`Sent location broadcast to ${sentCount} dispatch users`);
+      logger.info(`Sent location broadcast to ${sentCount} dispatch/admin users`);
+    } else {
+      logger.info('Location broadcast: no dispatch/admin users connected');
     }
   }
 

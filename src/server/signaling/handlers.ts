@@ -681,6 +681,10 @@ export class SignalingHandlers {
 
       if (producerId) {
         await this.producerConsumerManager.pauseProducer(producerId);
+        // Clear cached producerId to prevent stale reference on next PTT press.
+        // Android creates a new producer per PTT press, so the old producerId
+        // would cause "Producer not found" errors if sent in handlePttStart.
+        this.userProducers.delete(producerKey);
       }
 
       // Release speaker lock
