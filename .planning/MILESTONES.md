@@ -97,3 +97,29 @@
 
 ---
 
+
+## v5.0 Dispatch Map View (Shipped: 2026-02-17)
+
+**Delivered:** Real-time interactive satellite map in dispatch console showing field worker locations with battery telemetry, motion state indicators, marker clustering, and configurable status popups.
+
+**Stats:** 6 phases (21-26), 14 plans, 65 commits, 63 files, +16,574/-83 LOC
+**Timeline:** 1 day (2026-02-17)
+**Git range:** `feat(21-01)` → `docs(phase-26)`
+**Requirements:** 24/24 satisfied (100%)
+**Web UI total:** ~9,897 LOC JSX/CSS/JS
+
+**Key accomplishments:**
+- Battery telemetry pipeline (Android → Server → Web) with backward-compatible protocol extension and server-side low-battery alerting with hysteresis
+- Split dispatch layout with CSS Grid (channels left, map right), collapsible panel, responsive mobile tabs with CSS-only visibility control
+- Leaflet map with Esri World Imagery satellite tiles, OSM street layer, proper React cleanup (no memory leaks in Strict Mode), and localStorage persistence
+- Real-time location markers via WebSocket LOCATION_BROADCAST with DivIcon radio icons, username labels, and initial position loading via LOCATION_QUERY
+- Interactive status popups with motion state icons (STILL/WALKING/DRIVING), staleness treatment (>5 min), marker clustering via leaflet.markercluster for 200+ markers
+- Map controls: glassmorphic toolbar, auto-fit bounds, user/channel search with keyboard navigation, configurable popup field settings with localStorage persistence
+
+**Tech debt:**
+- LOW_BATTERY_ALERT implemented server-side but no web client listener (intentional deferral)
+- PTT placeholder button in popup ("Coming soon" — reserved for future direct-to-user PTT)
+- Human verification items flagged but not all formally executed (visual/animation testing)
+
+---
+
