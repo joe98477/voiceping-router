@@ -126,7 +126,7 @@ fun PttButton(
     }
 
     // Determine if button is clickable
-    val isClickable = micPermissionGranted && (!isBusy || isTransmitting)
+    val isClickable = !isBusy || isTransmitting
 
     // Button content
     val buttonModifier = modifier
