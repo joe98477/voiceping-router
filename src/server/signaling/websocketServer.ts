@@ -243,7 +243,8 @@ export class SignalingServer {
   /**
    * Handle new WebSocket connection
    */
-  private handleConnection(socket: ws.WebSocket, req: http.IncomingMessage): void {
+  private async handleConnection(socket: ws.WebSocket, req: http.IncomingMessage): Promise<void> {
+    try {
     const userId = (req as any).userId;
     const userName = (req as any).userName;
     const eventId = (req as any).eventId;
@@ -251,6 +252,17 @@ export class SignalingServer {
     const channelIds = (req as any).channelIds as string[];
     const globalRole = (req as any).globalRole;
     const connectionId = `${userId}:${Date.now()}`;
+
+    // Evict existing connections for the same userId (prevent duplicates after reconnect)
+    for (const [existingConnId, existingCtx] of this.clients.entries()) {
+      if (existingCtx.userId === userId) {
+        logger.warn(`Evicting stale connection ${existingConnId} for user ${userId} (new connection: ${connectionId})`);
+        // Clean up the old connection's channels/transports via disconnect handler
+        await this.handlers.handleDisconnect(existingCtx);
+        existingCtx.ws.close(4001, 'Replaced by new connection');
+        this.clients.delete(existingConnId);
+      }
+    }
 
     const clientContext: ClientContext = {
       ws: socket,
@@ -312,6 +324,10 @@ export class SignalingServer {
       logger.error(`WebSocket error for ${userId}: ${error.message}`);
       socket.close();
     });
+    } catch (err) {
+      logger.error(`Error in handleConnection: ${err instanceof Error ? err.message : String(err)}`);
+      socket.close(1011, 'Internal error');
+    }
   }
 
   /**

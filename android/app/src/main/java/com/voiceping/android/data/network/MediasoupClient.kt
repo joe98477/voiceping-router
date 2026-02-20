@@ -740,6 +740,11 @@ class MediasoupClient @Inject constructor(
                 // Step 2 & 3: Create SendTransport with listener
                 val sendListener = object : SendTransport.Listener {
                         override fun onConnect(transport: Transport, dtlsParameters: String) {
+                            // Guard: verify this callback's transport matches current sendTransport
+                            if (sendTransport == null || sendTransport?.id != transportId) {
+                                Log.w(TAG, "SendTransport onConnect for stale transport $transportId (current: ${sendTransport?.id}), ignoring")
+                                return
+                            }
                             Log.d(TAG, "SendTransport onConnect: $transportId")
                             // Use CompletableDeferred to avoid blocking the native C++ thread
                             // with runBlocking (which can deadlock if the network is slow after idle)
@@ -776,6 +781,11 @@ class MediasoupClient @Inject constructor(
                             rtpParameters: String,
                             appData: String?
                         ): String {
+                            // Guard: verify this callback's transport matches current sendTransport
+                            if (sendTransport == null || sendTransport?.id != transportId) {
+                                Log.w(TAG, "SendTransport onProduce for stale transport $transportId (current: ${sendTransport?.id}), ignoring")
+                                throw IllegalStateException("Stale transport $transportId, current: ${sendTransport?.id}")
+                            }
                             Log.d(TAG, "SendTransport onProduce: kind=$kind, transport=$transportId, channel=$sendTransportChannelId")
                             // Use CompletableDeferred to move network I/O off native C++ thread
                             val result = CompletableDeferred<String>()
