@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-02-18)
 Phase: 26 of 26 (all phases complete)
 Plan: All complete
 Status: v5.0 Dispatch Map View SHIPPED
-Last activity: 2026-02-20 - Completed quick task 10: Fix unreliable Android audio (NAT keepalive, reconnect dedup, stale transport guard)
+Last activity: 2026-02-20 - Completed quick task 11: Fix web session recovery track-ended loop and SPEAKER_CHANGED duplication
 
 Progress: [████████████████████████████████████████████████████████████████████████████████] 87/87 plans (100.0%)
 
@@ -59,11 +59,12 @@ None.
 |---|-------------|------|--------|-----------|
 | 9 | Fix audio PTT not working and location not showing on dispatch map | 2026-02-18 | 880da38 | [9-fix-audio-ptt-not-working-and-location-n](./quick/9-fix-audio-ptt-not-working-and-location-n/) |
 | 10 | Fix unreliable Android audio (NAT keepalive, reconnect dedup, stale transport guard) | 2026-02-20 | b653c9c | [10-fix-unreliable-android-audio-diagnose-fr](./quick/10-fix-unreliable-android-audio-diagnose-fr/) |
+| 11 | Fix web session recovery track-ended loop and SPEAKER_CHANGED double-broadcast | 2026-02-20 | 8e56f91 | [11-fix-android-ptt-audio-microphone-not-act](./quick/11-fix-android-ptt-audio-microphone-not-act/) |
 
 ## Session Continuity
 
 Last session: 2026-02-20
-Stopped at: Completed quick-10 (fix unreliable Android audio)
+Stopped at: Completed quick-11 (fix web session recovery and SPEAKER_CHANGED duplication)
 
 **Next action:** Use `/gsd:new-milestone` to start next milestone (questioning → research → requirements → roadmap)
 
@@ -75,4 +76,4 @@ Stopped at: Completed quick-10 (fix unreliable Android audio)
 - v5.0 Dispatch Map View — SHIPPED 2026-02-17
 
 ---
-*Last updated: 2026-02-20 after quick task 10 completion*
+*Last updated: 2026-02-20 after quick task 11 completion*
