@@ -27,8 +27,8 @@ data class LocationUpdate(
      */
     fun toJsonObject(): JsonObject {
         return JsonObject().apply {
-            addProperty("lat", latitude)
-            addProperty("lng", longitude)
+            addProperty("latitude", latitude)
+            addProperty("longitude", longitude)
             addProperty("accuracy", accuracy)
             if (speed != null) {
                 addProperty("speed", speed)

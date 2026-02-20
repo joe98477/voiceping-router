@@ -128,6 +128,7 @@ services:
     command:
       - --listening-port=3478
       - --listening-ip=0.0.0.0
+      - --relay-ip=0.0.0.0
       - --external-ip=${MEDIASOUP_ANNOUNCED_IP:-127.0.0.1}
       - --fingerprint
       - --lt-cred-mech
@@ -145,6 +146,7 @@ services:
       - 3478:3478/tcp
       # TURN relay port range (101 ports)
       - 49152-49252:49152-49252/udp
+      - 49152-49252:49152-49252/tcp
     networks:
       - voiceping
     logging:

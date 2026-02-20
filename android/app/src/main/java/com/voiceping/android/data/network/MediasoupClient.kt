@@ -136,7 +136,12 @@ class MediasoupClient @Inject constructor(
         if (iceServers.isEmpty()) return null
 
         Log.d(TAG, "ICE servers configured: ${iceServers.size} (STUN/TURN)")
-        return PeerConnection.RTCConfiguration(iceServers)
+        return PeerConnection.RTCConfiguration(iceServers).apply {
+            // Force TURN relay to avoid CGNAT binding timeout on cellular networks.
+            // Without this, ICE prioritizes direct UDP which initially works through CGNAT
+            // but fails after ~2 min when the NAT binding for non-standard ports expires.
+            iceTransportsType = PeerConnection.IceTransportsType.RELAY
+        }
     }
 
     /**
