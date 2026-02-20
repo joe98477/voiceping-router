@@ -52,6 +52,7 @@ class SignalingClient @Inject constructor(
 ) {
     private val client = OkHttpClient.Builder()
         .readTimeout(0, TimeUnit.MILLISECONDS) // Infinite timeout for WebSocket
+        .pingInterval(20, TimeUnit.SECONDS) // WebSocket-level PING to keep NAT bindings alive
         .build()
 
     private var webSocket: WebSocket? = null
@@ -111,6 +112,20 @@ class SignalingClient @Inject constructor(
         // Reset reconnection state on fresh connect
         if (_connectionState.value != ConnectionState.RECONNECTING) {
             reconnectAttempt = 0
+        }
+
+        // Close existing WebSocket to prevent duplicate connections
+        webSocket?.let { oldWs ->
+            Log.d(TAG, "Closing existing WebSocket before reconnect")
+            // Use code 4000 (custom) to signal intentional replacement, not 1000 (normal close)
+            // This prevents the old socket's onClosing/onClosed from triggering reconnect logic
+            try {
+                oldWs.close(4000, "Replaced by new connection")
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to close old WebSocket gracefully, canceling", e)
+                oldWs.cancel()
+            }
+            webSocket = null
         }
 
         val wsUrl = serverUrl.trimEnd('/') + "/ws"
@@ -191,8 +206,9 @@ class SignalingClient @Inject constructor(
                 Log.d(TAG, "WebSocket closing: code=$code, reason=$reason")
                 heartbeatJob?.cancel()
 
-                // If close code is NOT 1000 (normal close), treat as unexpected disconnect
-                if (code != 1000 && !intentionalDisconnect) {
+                // If close code is NOT 1000 (normal close) AND NOT 4000 (replaced by new connection),
+                // treat as unexpected disconnect
+                if (code != 1000 && code != 4000 && !intentionalDisconnect) {
                     if (disconnectedAt == null) {
                         disconnectedAt = System.currentTimeMillis()
                     }
@@ -210,8 +226,9 @@ class SignalingClient @Inject constructor(
                 Log.d(TAG, "WebSocket closed: code=$code, reason=$reason")
                 heartbeatJob?.cancel()
 
-                // If close code is NOT 1000 (normal close), treat as unexpected disconnect
-                if (code != 1000 && !intentionalDisconnect) {
+                // If close code is NOT 1000 (normal close) AND NOT 4000 (replaced by new connection),
+                // treat as unexpected disconnect
+                if (code != 1000 && code != 4000 && !intentionalDisconnect) {
                     if (disconnectedAt == null) {
                         disconnectedAt = System.currentTimeMillis()
                     }
