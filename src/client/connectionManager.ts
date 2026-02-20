@@ -146,7 +146,7 @@ export class ConnectionManager {
       console.log('Connection restored, recovering session...');
       this.setConnectionState('connecting', 'Recovering session...');
 
-      if (!this.signalingClient || !this.device || !this.transportClient || !this.audioTrack) {
+      if (!this.signalingClient || !this.device || !this.transportClient) {
         throw new Error('Cannot recover session: components not initialized');
       }
 
@@ -173,6 +173,28 @@ export class ConnectionManager {
       console.log('Creating new transports...');
       await this.transportClient.createSendTransport(this.channelId);
       await this.transportClient.createRecvTransport(this.channelId);
+
+      // Step 4.5: Get fresh microphone track if current one ended
+      // When the WebSocket disconnects and transports are closed, the underlying
+      // MediaStreamTrack transitions to "ended" state. Attempting to produce with
+      // an ended track throws InvalidStateError: track ended.
+      if (!this.audioTrack || this.audioTrack.readyState !== 'live') {
+        console.log('Audio track ended, requesting fresh microphone access...');
+        try {
+          if (this.microphoneManager) {
+            // Release the old dead track first
+            this.microphoneManager.release();
+          }
+          this.microphoneManager = new MicrophoneManager();
+          this.audioTrack = await this.microphoneManager.getAudioTrack();
+          this.microphoneManager.muteTrack(); // Muted by default (PTT not pressed)
+          console.log('Fresh microphone track obtained for session recovery');
+        } catch (micError) {
+          throw new Error(
+            `Session recovery failed: cannot access microphone - ${micError instanceof Error ? micError.message : String(micError)}`,
+          );
+        }
+      }
 
       // Step 5: Re-produce audio on new send transport
       console.log('Re-producing audio...');
