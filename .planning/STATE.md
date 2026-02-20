@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-02-18)
 Phase: 26 of 26 (all phases complete)
 Plan: All complete
 Status: v5.0 Dispatch Map View SHIPPED
-Last activity: 2026-02-18 - Completed quick task 9: Fix audio PTT not working and location not showing on dispatch map
+Last activity: 2026-02-20 - Completed quick task 10: Fix unreliable Android audio (NAT keepalive, reconnect dedup, stale transport guard)
 
 Progress: [████████████████████████████████████████████████████████████████████████████████] 87/87 plans (100.0%)
 
@@ -58,11 +58,12 @@ None.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 9 | Fix audio PTT not working and location not showing on dispatch map | 2026-02-18 | 880da38 | [9-fix-audio-ptt-not-working-and-location-n](./quick/9-fix-audio-ptt-not-working-and-location-n/) |
+| 10 | Fix unreliable Android audio (NAT keepalive, reconnect dedup, stale transport guard) | 2026-02-20 | b653c9c | [10-fix-unreliable-android-audio-diagnose-fr](./quick/10-fix-unreliable-android-audio-diagnose-fr/) |
 
 ## Session Continuity
 
-Last session: 2026-02-18
-Stopped at: v5.0 milestone archived
+Last session: 2026-02-20
+Stopped at: Completed quick-10 (fix unreliable Android audio)
 
 **Next action:** Use `/gsd:new-milestone` to start next milestone (questioning → research → requirements → roadmap)
 
@@ -74,4 +75,4 @@ Stopped at: v5.0 milestone archived
 - v5.0 Dispatch Map View — SHIPPED 2026-02-17
 
 ---
-*Last updated: 2026-02-18 after v5.0 milestone completion*
+*Last updated: 2026-02-20 after quick task 10 completion*
