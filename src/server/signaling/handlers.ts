@@ -222,15 +222,24 @@ export class SignalingHandlers {
       // Get or create router for channel
       await this.routerManager.getOrCreateRouter(channelId);
 
-      // Subscribe to channel state events
-      await this.channelStateManager.subscribeToChannel(channelId, (state: ChannelState) => {
-        // Broadcast speaker change to all channel members
-        // NOTE: This Redis pub/sub callback broadcasts to ALL clients without excludeUserId.
-        // It may send SPEAKER_CHANGED messages without producerId (for Android PTT flow).
-        // The web client's handleSpeakerChanged now tolerates missing producerId when
-        // isBusy=true, preventing audio consumption cancellation. This broadcast is
-        // intentional for multi-server scenarios where pub/sub notifies other servers.
-        this.broadcastToChannel(channelId, createMessage(SignalingType.SPEAKER_CHANGED, state as any));
+      // Subscribe to channel state events (Redis pub/sub)
+      // NOTE: The callback is intentionally empty — we do NOT broadcast SPEAKER_CHANGED
+      // here. All SPEAKER_CHANGED events are broadcast explicitly by handlePttStart,
+      // handlePttStop, handleProduce, and handleDisconnect with the correct producerId
+      // and excludeUserId parameters.
+      //
+      // Broadcasting here caused duplicate SPEAKER_CHANGED events per PTT action:
+      //   1. This callback fired WITHOUT producerId and WITHOUT excludeUserId
+      //   2. The handler also fired WITH producerId and WITH excludeUserId
+      // Result: 2x events per PTT press; the pub/sub copy was missing producerId,
+      // confusing web clients observing Android PTT (appearing as "null null" state).
+      //
+      // For future multi-server support: forward pub/sub notifications only if the
+      // originating server differs from the local server (requires a serverId field
+      // in the pub/sub message payload).
+      await this.channelStateManager.subscribeToChannel(channelId, (_state: ChannelState) => {
+        // Intentionally empty: see comment above.
+        // Redis pub/sub state sync is handled; local broadcast is not needed here.
       });
 
       // Get current channel state
