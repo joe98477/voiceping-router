@@ -87,46 +87,8 @@ export class ConnectionManager {
       this.setConnectionState('connecting', 'Connecting to server...');
       await this.signalingClient.connect();
 
-      // Step 3: Join channel (creates mediasoup router on server)
-      this.setConnectionState('connecting', 'Joining channel...');
-      const joinResponse = await this.signalingClient.joinChannel(this.channelId);
-
-      // Extract initial channel state from join response
-      if (joinResponse.data && joinResponse.data.channelState) {
-        this.currentChannelState = joinResponse.data.channelState as ChannelState;
-        if (this.options.onChannelStateUpdate) {
-          this.options.onChannelStateUpdate(this.currentChannelState);
-        }
-      }
-
-      // Step 4: Create mediasoup device and load with server capabilities
-      this.setConnectionState('connecting', 'Loading device capabilities...');
-      this.device = new MediasoupDevice(this.signalingClient);
-      await this.device.load(this.channelId);
-
-      // Step 5: Request microphone access
-      this.setConnectionState('connecting', 'Requesting microphone access...');
-      this.microphoneManager = new MicrophoneManager();
-      this.audioTrack = await this.microphoneManager.getAudioTrack();
-
-      // Mute by default (PTT not pressed)
-      this.microphoneManager.muteTrack();
-
-      // Step 6: Create transport client
-      this.transportClient = new TransportClient(this.device, this.signalingClient);
-
-      // Step 7: Create WebRTC transports
-      this.setConnectionState('connecting', 'Creating WebRTC transports...');
-      await this.transportClient.createSendTransport(this.channelId);
-      await this.transportClient.createRecvTransport(this.channelId);
-
-      // Step 8: Produce audio
-      this.setConnectionState('connecting', 'Setting up audio stream...');
-      this.producerId = await this.transportClient.produceAudio(this.audioTrack, this.channelId);
-
-      // Step 9: Connection complete
-      this.setConnectionState('connected', 'Connected successfully');
-      console.log('PTT system fully initialized and ready');
+      // Steps 3-9: Initialize the mediasoup session
+      await this.initializeSession();
     } catch (error) {
       console.error('Connection failed:', error);
       this.setConnectionState('error', error instanceof Error ? error.message : 'Unknown error');
@@ -138,16 +100,92 @@ export class ConnectionManager {
   }
 
   /**
-   * Handle reconnection after network loss
-   * Restores full session: rejoins channel, recreates transports, restores audio
+   * Initialize mediasoup session (steps 3-9 of connect).
+   * Extracted so both initial connect() and handleReconnection() can share the logic.
+   * Assumes signalingClient is already connected when called.
+   */
+  private async initializeSession(): Promise<void> {
+    if (!this.signalingClient) {
+      throw new Error('Cannot initialize session: signalingClient not created');
+    }
+
+    // Step 3: Join channel (creates mediasoup router on server)
+    this.setConnectionState('connecting', 'Joining channel...');
+    const joinResponse = await this.signalingClient.joinChannel(this.channelId);
+
+    // Extract initial channel state from join response
+    if (joinResponse.data && joinResponse.data.channelState) {
+      this.currentChannelState = joinResponse.data.channelState as ChannelState;
+      if (this.options.onChannelStateUpdate) {
+        this.options.onChannelStateUpdate(this.currentChannelState);
+      }
+    }
+
+    // Step 4: Create mediasoup device and load with server capabilities
+    this.setConnectionState('connecting', 'Loading device capabilities...');
+    this.device = new MediasoupDevice(this.signalingClient);
+    await this.device.load(this.channelId);
+
+    // Step 5: Request microphone access
+    this.setConnectionState('connecting', 'Requesting microphone access...');
+    this.microphoneManager = new MicrophoneManager();
+    this.audioTrack = await this.microphoneManager.getAudioTrack();
+
+    // Mute by default (PTT not pressed)
+    this.microphoneManager.muteTrack();
+
+    // Step 6: Create transport client
+    this.transportClient = new TransportClient(this.device, this.signalingClient);
+
+    // Step 7: Create WebRTC transports
+    this.setConnectionState('connecting', 'Creating WebRTC transports...');
+    await this.transportClient.createSendTransport(this.channelId);
+    await this.transportClient.createRecvTransport(this.channelId);
+
+    // Step 8: Produce audio
+    this.setConnectionState('connecting', 'Setting up audio stream...');
+    this.producerId = await this.transportClient.produceAudio(this.audioTrack, this.channelId);
+
+    // Step 9: Connection complete
+    this.setConnectionState('connected', 'Connected successfully');
+    console.log('PTT system fully initialized and ready');
+  }
+
+  /**
+   * Handle reconnection after network loss.
+   *
+   * Two cases:
+   * 1. Initial connection never completed (e.g. device.load() failed) → transportClient is null
+   *    → Reset partial state and run initializeSession() fresh.
+   * 2. Full session was established but network dropped → recover existing session.
    */
   private async handleReconnection(): Promise<void> {
     try {
       console.log('Connection restored, recovering session...');
       this.setConnectionState('connecting', 'Recovering session...');
 
-      if (!this.signalingClient || !this.device || !this.transportClient) {
-        throw new Error('Cannot recover session: components not initialized');
+      if (!this.signalingClient) {
+        throw new Error('Cannot recover session: signalingClient missing');
+      }
+
+      // Case 1: Initial connection never fully completed (transportClient was never created).
+      // Instead of throwing "components not initialized" (which causes an infinite error loop),
+      // reset any partial state and do a clean full session init.
+      if (!this.device || !this.transportClient || !this.microphoneManager) {
+        console.log('Initial session was incomplete — performing fresh initialization...');
+
+        // Clean up any partial state from the failed initial connection
+        if (this.microphoneManager) {
+          this.microphoneManager.release();
+        }
+        this.device = null;
+        this.transportClient = null;
+        this.microphoneManager = null;
+        this.audioTrack = null;
+        this.producerId = null;
+
+        await this.initializeSession();
+        return;
       }
 
       // Step 1: Re-join channel (server may have lost session)
