@@ -27,6 +27,58 @@ const mediaCodecs = [
 ];
 
 /**
+ * Detect the container's primary non-loopback IPv4 address.
+ *
+ * When running inside Docker, this returns the container's bridge IP (e.g. 172.18.0.6).
+ * This is used as a SECONDARY mediasoup ICE candidate so that the co-located coturn
+ * container can reach mediasoup directly via Docker bridge networking — without needing
+ * the TURN relay traffic to hairpin through the public router.
+ *
+ * Why this matters: coturn (TURN server) needs to forward relay packets to mediasoup's
+ * ICE candidate. If mediasoup only announces the PUBLIC IP (e.g. 203.40.59.18), coturn
+ * must route packets through the internet gateway (hairpin NAT), requiring port 40000-40099
+ * to be forwarded on the router. By ALSO announcing the Docker-internal IP, coturn can
+ * forward packets directly across the Docker bridge — no additional router config needed.
+ *
+ * The env var MEDIASOUP_CONTAINER_IP overrides auto-detection (useful for static IP setups).
+ */
+function detectContainerIP(): string | undefined {
+  const override = process.env.MEDIASOUP_CONTAINER_IP;
+  if (override) return override;
+
+  const interfaces = os.networkInterfaces();
+  for (const [name, addrs] of Object.entries(interfaces)) {
+    if (name === 'lo') continue;
+    for (const addr of addrs ?? []) {
+      if (addr.family === 'IPv4' && !addr.internal) {
+        return addr.address;
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Build mediasoup listenIps with optional Docker-internal secondary candidate.
+ */
+function buildListenIps(): Array<{ ip: string; announcedIp?: string }> {
+  const listenIp = process.env.MEDIASOUP_LISTEN_IP || '0.0.0.0';
+  const announcedIp = process.env.MEDIASOUP_ANNOUNCED_IP || undefined;
+
+  const ips: Array<{ ip: string; announcedIp?: string }> = [{ ip: listenIp, announcedIp }];
+
+  // Secondary candidate: Docker-internal IP for coturn → mediasoup relay path.
+  // Skip if it equals the announced public IP (no point duplicating).
+  const containerIp = detectContainerIP();
+  if (containerIp && containerIp !== announcedIp) {
+    console.log(`[config] Adding Docker-internal ICE candidate: ${containerIp} (enables coturn relay without hairpin NAT)`);
+    ips.push({ ip: containerIp, announcedIp: undefined });
+  }
+
+  return ips;
+}
+
+/**
  * Parse STUN server configuration
  */
 function parseStunServer(url: string | undefined): { host: string; port: number } | null {
@@ -91,12 +143,7 @@ export const config = {
   },
 
   webrtc: {
-    listenIps: [
-      {
-        ip: process.env.MEDIASOUP_LISTEN_IP || '0.0.0.0',
-        announcedIp: process.env.MEDIASOUP_ANNOUNCED_IP || undefined,
-      },
-    ],
+    listenIps: buildListenIps(),
     enableUdp: true,
     enableTcp: true,
     preferUdp: true,

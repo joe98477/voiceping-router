@@ -141,6 +141,11 @@ services:
       - --no-cli
       - --no-tlsv1
       - --no-tlsv1_1
+      # Allow coturn to relay to the Docker bridge subnet (172.18.0.0/16).
+      # By default coturn blocks RFC1918 ranges as relay peers (SSRF prevention).
+      # We explicitly allow our Docker network so coturn can forward TURN relay
+      # packets directly to mediasoup's Docker-internal IP without hairpin NAT.
+      - --allowed-peer-ip=172.18.0.0-172.18.255.255
     ports:
       - 3478:3478/udp
       - 3478:3478/tcp
