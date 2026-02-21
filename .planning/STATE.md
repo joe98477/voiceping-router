@@ -75,9 +75,9 @@ Then assess Android audio over cellular (confirm TURN works after port forward).
 | # | Description | Status |
 |---|-------------|--------|
 | 12 | Fix web reconnect loop (components not initialized) | ✅ Complete — 2026-02-21 commit 2ceb75b |
-| 13 | Fix ADMIN LOCATION_QUERY permission denied | 🔴 Ready |
-| 14 | Fix Android sending undefined message type | 🔴 Ready |
-| 15 | Fix rate limiter "undefinedms" log message | 🔴 Ready |
+| 13 | Fix ADMIN LOCATION_QUERY permission denied | ✅ Complete — 2026-02-21 commit d829ed9 |
+| 14 | Fix Android sending undefined message type | ✅ Complete — 2026-02-21 commit d829ed9 |
+| 15 | Fix rate limiter "undefinedms" log message | ✅ Complete — 2026-02-21 commit d829ed9 |
 
 **All Milestones:**
 - v1.0 WebRTC Audio Rebuild + Web UI — SHIPPED 2026-02-07
