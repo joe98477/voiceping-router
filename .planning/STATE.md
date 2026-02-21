@@ -63,10 +63,21 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-20
-Stopped at: Completed quick-11 (fix web session recovery and SPEAKER_CHANGED duplication)
+Last session: 2026-02-21
+Stopped at: Diagnosed and fixed web reconnect loop (quick-12). Identified 3 further bugs.
+TURN port forwards now set up on production router (ports 3478 + 49152-49252).
 
-**Next action:** Use `/gsd:new-milestone` to start next milestone (questioning → research → requirements → roadmap)
+**Next action:** Complete quick tasks 13→14→15 (admin permissions, Android undefined type, rate limiter log)
+Then assess Android audio over cellular (confirm TURN works after port forward).
+
+## Active Quick Tasks
+
+| # | Description | Status |
+|---|-------------|--------|
+| 12 | Fix web reconnect loop (components not initialized) | ✅ Complete — 2026-02-21 commit 2ceb75b |
+| 13 | Fix ADMIN LOCATION_QUERY permission denied | 🔴 Ready |
+| 14 | Fix Android sending undefined message type | 🔴 Ready |
+| 15 | Fix rate limiter "undefinedms" log message | 🔴 Ready |
 
 **All Milestones:**
 - v1.0 WebRTC Audio Rebuild + Web UI — SHIPPED 2026-02-07
