@@ -743,8 +743,8 @@ export class SignalingHandlers {
    */
   async handlePriorityPttStart(ctx: ClientContext, message: SignalingMessage): Promise<void> {
     // Validate role
-    if (ctx.role !== UserRole.DISPATCH) {
-      logger.warn(`PRIORITY_PTT_START denied for ${ctx.userId}: not a Dispatch user`);
+    if (ctx.role !== UserRole.DISPATCH && ctx.role !== UserRole.ADMIN) {
+      logger.warn(`PRIORITY_PTT_START denied for ${ctx.userId}: not a Dispatch or Admin user`);
 
       this.auditLogger.log({
         action: AuditAction.PERMISSION_DENIED,
@@ -757,7 +757,7 @@ export class SignalingHandlers {
         },
       });
 
-      this.sendError(ctx, message.id, 'Permission denied: Priority PTT is only available to Dispatch users');
+      this.sendError(ctx, message.id, 'Permission denied: Priority PTT is only available to Dispatch and Admin users');
       return;
     }
 
@@ -777,8 +777,8 @@ export class SignalingHandlers {
    */
   async handlePriorityPttStop(ctx: ClientContext, message: SignalingMessage): Promise<void> {
     // Validate role
-    if (ctx.role !== UserRole.DISPATCH) {
-      logger.warn(`PRIORITY_PTT_STOP denied for ${ctx.userId}: not a Dispatch user`);
+    if (ctx.role !== UserRole.DISPATCH && ctx.role !== UserRole.ADMIN) {
+      logger.warn(`PRIORITY_PTT_STOP denied for ${ctx.userId}: not a Dispatch or Admin user`);
 
       this.auditLogger.log({
         action: AuditAction.PERMISSION_DENIED,
@@ -791,7 +791,7 @@ export class SignalingHandlers {
         },
       });
 
-      this.sendError(ctx, message.id, 'Permission denied: Priority PTT is only available to Dispatch users');
+      this.sendError(ctx, message.id, 'Permission denied: Priority PTT is only available to Dispatch and Admin users');
       return;
     }
 
@@ -811,8 +811,8 @@ export class SignalingHandlers {
    */
   async handleEmergencyBroadcastStart(ctx: ClientContext, message: SignalingMessage): Promise<void> {
     // Validate role
-    if (ctx.role !== UserRole.DISPATCH) {
-      logger.warn(`EMERGENCY_BROADCAST_START denied for ${ctx.userId}: not a Dispatch user`);
+    if (ctx.role !== UserRole.DISPATCH && ctx.role !== UserRole.ADMIN) {
+      logger.warn(`EMERGENCY_BROADCAST_START denied for ${ctx.userId}: not a Dispatch or Admin user`);
 
       this.auditLogger.log({
         action: AuditAction.PERMISSION_DENIED,
@@ -825,7 +825,11 @@ export class SignalingHandlers {
         },
       });
 
-      this.sendError(ctx, message.id, 'Permission denied: Emergency broadcast is only available to Dispatch users');
+      this.sendError(
+        ctx,
+        message.id,
+        'Permission denied: Emergency broadcast is only available to Dispatch and Admin users',
+      );
       return;
     }
 
@@ -845,8 +849,8 @@ export class SignalingHandlers {
    */
   async handleEmergencyBroadcastStop(ctx: ClientContext, message: SignalingMessage): Promise<void> {
     // Validate role
-    if (ctx.role !== UserRole.DISPATCH) {
-      logger.warn(`EMERGENCY_BROADCAST_STOP denied for ${ctx.userId}: not a Dispatch user`);
+    if (ctx.role !== UserRole.DISPATCH && ctx.role !== UserRole.ADMIN) {
+      logger.warn(`EMERGENCY_BROADCAST_STOP denied for ${ctx.userId}: not a Dispatch or Admin user`);
 
       this.auditLogger.log({
         action: AuditAction.PERMISSION_DENIED,
@@ -859,7 +863,11 @@ export class SignalingHandlers {
         },
       });
 
-      this.sendError(ctx, message.id, 'Permission denied: Emergency broadcast is only available to Dispatch users');
+      this.sendError(
+        ctx,
+        message.id,
+        'Permission denied: Emergency broadcast is only available to Dispatch and Admin users',
+      );
       return;
     }
 
@@ -1196,9 +1204,13 @@ export class SignalingHandlers {
       }
 
       // Check if user has DISPATCH role
-      if (ctx.role !== UserRole.DISPATCH) {
-        logger.warn(`LOCATION_QUERY denied for ${ctx.userId}: not a Dispatch user`);
-        this.sendError(ctx, message.id, 'Permission denied: Location queries are only available to Dispatch users');
+      if (ctx.role !== UserRole.DISPATCH && ctx.role !== UserRole.ADMIN) {
+        logger.warn(`LOCATION_QUERY denied for ${ctx.userId}: not a Dispatch or Admin user`);
+        this.sendError(
+          ctx,
+          message.id,
+          'Permission denied: Location queries are only available to Dispatch and Admin users',
+        );
         return;
       }
 

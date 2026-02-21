@@ -183,7 +183,9 @@ export class SignalingServer {
     // Check auth rate limit with progressive slowdown
     const authLimit = await rateLimiter.consumeAuth(ip);
     if (!authLimit.allowed) {
-      logger.warn(`Auth rate limit exceeded for IP ${ip}, slowdown: ${authLimit.penalty}ms`);
+      logger.warn(
+        `Auth rate limit exceeded for IP ${ip}, retry after: ${authLimit.retryAfterMs ?? authLimit.penalty ?? 'unknown'}ms`,
+      );
       callback(false, 429, `Too many authentication attempts, retry after ${authLimit.retryAfterMs}ms`);
       return;
     }
@@ -245,85 +247,87 @@ export class SignalingServer {
    */
   private async handleConnection(socket: ws.WebSocket, req: http.IncomingMessage): Promise<void> {
     try {
-    const userId = (req as any).userId;
-    const userName = (req as any).userName;
-    const eventId = (req as any).eventId;
-    const role = (req as any).role as UserRole;
-    const channelIds = (req as any).channelIds as string[];
-    const globalRole = (req as any).globalRole;
-    const connectionId = `${userId}:${Date.now()}`;
+      const userId = (req as any).userId;
+      const userName = (req as any).userName;
+      const eventId = (req as any).eventId;
+      const role = (req as any).role as UserRole;
+      const channelIds = (req as any).channelIds as string[];
+      const globalRole = (req as any).globalRole;
+      const connectionId = `${userId}:${Date.now()}`;
 
-    // Evict existing connections for the same userId (prevent duplicates after reconnect)
-    for (const [existingConnId, existingCtx] of this.clients.entries()) {
-      if (existingCtx.userId === userId) {
-        logger.warn(`Evicting stale connection ${existingConnId} for user ${userId} (new connection: ${connectionId})`);
-        // Clean up the old connection's channels/transports via disconnect handler
-        await this.handlers.handleDisconnect(existingCtx);
-        existingCtx.ws.close(4001, 'Replaced by new connection');
-        this.clients.delete(existingConnId);
+      // Evict existing connections for the same userId (prevent duplicates after reconnect)
+      for (const [existingConnId, existingCtx] of this.clients.entries()) {
+        if (existingCtx.userId === userId) {
+          logger.warn(
+            `Evicting stale connection ${existingConnId} for user ${userId} (new connection: ${connectionId})`,
+          );
+          // Clean up the old connection's channels/transports via disconnect handler
+          await this.handlers.handleDisconnect(existingCtx);
+          existingCtx.ws.close(4001, 'Replaced by new connection');
+          this.clients.delete(existingConnId);
+        }
       }
-    }
 
-    const clientContext: ClientContext = {
-      ws: socket,
-      userId,
-      userName,
-      channels: new Set(),
-      connectionId,
-      isAlive: true,
-      role,
-      eventId,
-      authorizedChannels: new Set(channelIds || []),
-      globalRole,
-    };
-
-    this.clients.set(connectionId, clientContext);
-
-    logger.info(`User ${userId} (${userName}) connected [${connectionId}] with role ${role}`);
-
-    // Audit log AUTH_LOGIN
-    this.auditLogger.log({
-      action: AuditAction.AUTH_LOGIN,
-      actorId: userId,
-      eventId,
-      metadata: {
+      const clientContext: ClientContext = {
+        ws: socket,
+        userId,
         userName,
+        channels: new Set(),
+        connectionId,
+        isAlive: true,
+        role,
+        eventId,
+        authorizedChannels: new Set(channelIds || []),
+        globalRole,
+      };
+
+      this.clients.set(connectionId, clientContext);
+
+      logger.info(`User ${userId} (${userName}) connected [${connectionId}] with role ${role}`);
+
+      // Audit log AUTH_LOGIN
+      this.auditLogger.log({
+        action: AuditAction.AUTH_LOGIN,
+        actorId: userId,
+        eventId,
+        metadata: {
+          userName,
+          role,
+          globalRole,
+          connectionId,
+          channelCount: channelIds.length,
+        },
+      });
+
+      // Send CHANNEL_LIST message with authorized channels and power config
+      const channelListMessage = createMessage(SignalingType.CHANNEL_LIST, {
+        channels: Array.from(clientContext.authorizedChannels),
         role,
         globalRole,
-        connectionId,
-        channelCount: channelIds.length,
-      },
-    });
+        wakeLockTimeoutSeconds: config.power.wakeLockTimeoutSeconds,
+      });
+      this.sendToClient(socket, channelListMessage);
 
-    // Send CHANNEL_LIST message with authorized channels and power config
-    const channelListMessage = createMessage(SignalingType.CHANNEL_LIST, {
-      channels: Array.from(clientContext.authorizedChannels),
-      role,
-      globalRole,
-      wakeLockTimeoutSeconds: config.power.wakeLockTimeoutSeconds,
-    });
-    this.sendToClient(socket, channelListMessage);
+      // Handle pong responses for heartbeat
+      socket.on('pong', () => {
+        clientContext.isAlive = true;
+      });
 
-    // Handle pong responses for heartbeat
-    socket.on('pong', () => {
-      clientContext.isAlive = true;
-    });
+      // Handle incoming messages
+      socket.on('message', (data: ws.RawData) => {
+        this.handleMessage(clientContext, data);
+      });
 
-    // Handle incoming messages
-    socket.on('message', (data: ws.RawData) => {
-      this.handleMessage(clientContext, data);
-    });
+      // Handle connection close
+      socket.on('close', () => {
+        this.handleDisconnect(clientContext);
+      });
 
-    // Handle connection close
-    socket.on('close', () => {
-      this.handleDisconnect(clientContext);
-    });
-
-    // Handle errors
-    socket.on('error', (error: Error) => {
-      logger.error(`WebSocket error for ${userId}: ${error.message}`);
-      socket.close();
-    });
+      // Handle errors
+      socket.on('error', (error: Error) => {
+        logger.error(`WebSocket error for ${userId}: ${error.message}`);
+        socket.close();
+      });
     } catch (err) {
       logger.error(`Error in handleConnection: ${err instanceof Error ? err.message : String(err)}`);
       socket.close(1011, 'Internal error');

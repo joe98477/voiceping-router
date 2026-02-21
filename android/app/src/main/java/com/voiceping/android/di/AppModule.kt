@@ -73,6 +73,7 @@ object AppModule {
             SignalingType.CREATE_TRANSPORT to "create-transport",
             SignalingType.CONNECT_TRANSPORT to "connect-transport",
             SignalingType.PRODUCE to "produce",
+            SignalingType.PRODUCER_ACK to "producer-ack",
             SignalingType.CONSUME to "consume",
             SignalingType.PTT_START to "ptt-start",
             SignalingType.PTT_STOP to "ptt-stop",
