@@ -206,9 +206,10 @@ class SignalingClient @Inject constructor(
                 Log.d(TAG, "WebSocket closing: code=$code, reason=$reason")
                 heartbeatJob?.cancel()
 
-                // If close code is NOT 1000 (normal close) AND NOT 4000 (replaced by new connection),
-                // treat as unexpected disconnect
-                if (code != 1000 && code != 4000 && !intentionalDisconnect) {
+                // If close code is NOT 1000 (normal close) AND NOT 4000/4001 (replaced by new connection —
+                // 4000 = client-initiated replacement, 4001 = server-evicted stale connection),
+                // treat as unexpected disconnect requiring reconnect.
+                if (code != 1000 && code != 4000 && code != 4001 && !intentionalDisconnect) {
                     if (disconnectedAt == null) {
                         disconnectedAt = System.currentTimeMillis()
                     }
@@ -226,9 +227,10 @@ class SignalingClient @Inject constructor(
                 Log.d(TAG, "WebSocket closed: code=$code, reason=$reason")
                 heartbeatJob?.cancel()
 
-                // If close code is NOT 1000 (normal close) AND NOT 4000 (replaced by new connection),
-                // treat as unexpected disconnect
-                if (code != 1000 && code != 4000 && !intentionalDisconnect) {
+                // If close code is NOT 1000 (normal close) AND NOT 4000/4001 (replaced by new connection —
+                // 4000 = client-initiated replacement, 4001 = server-evicted stale connection),
+                // treat as unexpected disconnect requiring reconnect.
+                if (code != 1000 && code != 4000 && code != 4001 && !intentionalDisconnect) {
                     if (disconnectedAt == null) {
                         disconnectedAt = System.currentTimeMillis()
                     }
